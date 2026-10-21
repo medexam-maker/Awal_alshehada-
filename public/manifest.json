@@ -1,0 +1,35 @@
+{
+  "id": "/",
+  "name": "أول الشهادة — محاكي امتحانات الشهادة الثانوية السودانية",
+  "short_name": "أول الشهادة",
+  "description": "منصة تعليمية لمحاكاة امتحانات الشهادة الثانوية السودانية (2000 - 2026) بتصحيح فوري وشرح منهجي بدون تحميل PDF.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F8FAFC",
+  "theme_color": "#1E3A8A",
+  "dir": "rtl",
+  "lang": "ar",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "48x48 72x72 96x96 128x128 256x256",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

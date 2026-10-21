@@ -1,0 +1,299 @@
+import React, { useState } from 'react';
+import { useExam } from '../context/ExamContext';
+import {
+  Award,
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  Printer,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  BookOpen,
+  HelpCircle,
+  ArrowRight,
+} from 'lucide-react';
+
+interface ResultViewProps {
+  onBackToDashboard: () => void;
+}
+
+export const ResultView: React.FC<ResultViewProps> = ({ onBackToDashboard }) => {
+  const { lastResult } = useExam();
+  const [filter, setFilter] = useState<'all' | 'correct' | 'incorrect'>('all');
+  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
+
+  if (!lastResult) {
+    return (
+      <div className="max-w-md mx-auto my-auto p-8 text-center bg-white rounded-3xl border border-slate-200 shadow-md space-y-4">
+        <Award className="w-12 h-12 text-slate-400 mx-auto" />
+        <h2 className="text-xl font-bold text-slate-800">لا توجد نتيجة لعرضها حالياً</h2>
+        <button
+          type="button"
+          onClick={onBackToDashboard}
+          className="px-6 py-2.5 bg-emerald-600 text-white rounded-xl font-bold cursor-pointer"
+        >
+          العودة للرئيسية
+        </button>
+      </div>
+    );
+  }
+
+  const { score, maxScore, percentage, passed, timeTakenSeconds, answers = [] } = lastResult;
+
+  const getGradeTitle = (pct: number) => {
+    if (pct >= 85) return { title: 'ممتاز مرتفع (مرتبة الشرف)', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+    if (pct >= 80) return { title: 'ممتاز', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+    if (pct >= 70) return { title: 'جيد جداً', color: 'text-blue-700 bg-blue-50 border-blue-200' };
+    if (pct >= 60) return { title: 'جيد', color: 'text-teal-700 bg-teal-50 border-teal-200' };
+    if (pct >= 50) return { title: 'مقبول', color: 'text-amber-700 bg-amber-50 border-amber-200' };
+    return { title: 'رسوب (يحتاج إلى تكثيف المذاكرة)', color: 'text-rose-700 bg-rose-50 border-rose-200' };
+  };
+
+  const gradeInfo = getGradeTitle(percentage);
+
+  const formatDuration = (seconds?: number) => {
+    if (!seconds) return 'غير محدد';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins} دقيقة و ${secs} ثانية`;
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedQuestions((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const filteredAnswers = answers.filter((a: any) => {
+    if (filter === 'correct') return a.isCorrect;
+    if (filter === 'incorrect') return !a.isCorrect;
+    return true;
+  });
+
+  return (
+    <div className="space-y-8 max-w-4xl mx-auto pb-12">
+      {/* Top Result Banner */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-6 border-b border-slate-100">
+          <div className="flex items-center gap-4 text-center sm:text-right">
+            <div
+              className={`w-16 h-16 rounded-3xl flex items-center justify-center shrink-0 shadow-md ${
+                passed ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+              }`}
+            >
+              <Award className="w-9 h-9" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                كشف تقرير الدرجات والتقييم النهائي
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900">
+                {passed ? 'تهانينا، لقد اجتزت الاختبار بنجاح!' : 'انتهى الاختبار'}
+              </h1>
+              <div className="inline-block mt-1 px-3 py-0.5 rounded-full text-xs font-bold border ${gradeInfo.color}">
+                {gradeInfo.title}
+              </div>
+            </div>
+          </div>
+
+          {/* Large Percentage Badge */}
+          <div className="text-center sm:text-left bg-slate-50 border border-slate-200 rounded-3xl p-5 min-w-36">
+            <div className={`text-4xl font-black ${passed ? 'text-emerald-700' : 'text-rose-700'}`}>
+              %{percentage}
+            </div>
+            <div className="text-xs font-extrabold text-slate-600 mt-1">
+              {score} من أصل {maxScore} درجة
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Exam Metrics Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-1">
+            <div className="text-xs text-slate-500 font-medium">النتيجة النهائية</div>
+            <div className={`text-base font-extrabold ${passed ? 'text-emerald-700' : 'text-rose-700'}`}>
+              {passed ? 'ناجح' : 'راسب'}
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-1">
+            <div className="text-xs text-slate-500 font-medium">الزمن المستغرق</div>
+            <div className="text-sm font-bold text-slate-800 flex items-center justify-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span>{formatDuration(timeTakenSeconds)}</span>
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-1">
+            <div className="text-xs text-slate-500 font-medium">إجمالي الأسئلة</div>
+            <div className="text-base font-extrabold text-slate-800">
+              {answers.length || '—'}
+            </div>
+          </div>
+
+          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center space-y-1">
+            <div className="text-xs text-slate-500 font-medium">صلاحية التقييم</div>
+            <div className="text-xs font-bold text-emerald-800 bg-emerald-100/60 py-1 rounded-md">
+              معتمد (C5 Grader)
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onBackToDashboard}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>اختبار جديد في مادة أخرى</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>طباعة كشف النتيجة والدرجات</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Detailed Question Review Section */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div>
+            <h2 className="text-xl font-black text-slate-900">مراجعة الأسئلة والإجابات النموذجية</h2>
+            <p className="text-xs text-slate-500 font-medium">قارن إجاباتك مع الحلول والشروحات النموذجية المعتمدة</p>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-bold text-slate-600">
+            <button
+              type="button"
+              onClick={() => setFilter('all')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                filter === 'all' ? 'bg-white text-emerald-900 shadow-xs' : ''
+              }`}
+            >
+              الكل ({answers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter('correct')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                filter === 'correct' ? 'bg-white text-emerald-900 shadow-xs' : ''
+              }`}
+            >
+              الصحيحة ({answers.filter((a: any) => a.isCorrect).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter('incorrect')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                filter === 'incorrect' ? 'bg-white text-emerald-900 shadow-xs' : ''
+              }`}
+            >
+              الخاطئة ({answers.filter((a: any) => !a.isCorrect).length})
+            </button>
+          </div>
+        </div>
+
+        {/* Question Cards List */}
+        <div className="space-y-4">
+          {filteredAnswers.map((item: any, idx: number) => {
+            const isExpanded = expandedQuestions[item.questionId] !== false; // expanded by default
+            return (
+              <div
+                key={item.questionId || idx}
+                className={`bg-white rounded-3xl border p-5 md:p-6 shadow-xs space-y-4 transition-all ${
+                  item.isCorrect ? 'border-emerald-200' : 'border-rose-200'
+                }`}
+              >
+                <div
+                  className="flex items-center justify-between gap-3 cursor-pointer"
+                  onClick={() => toggleExpand(item.questionId)}
+                >
+                  <div className="flex items-center gap-3">
+                    {item.isCorrect ? (
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-6 h-6 text-rose-600 shrink-0" />
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sm text-slate-900">
+                          السؤال {idx + 1}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${
+                            item.isCorrect
+                              ? 'bg-emerald-50 text-emerald-800'
+                              : 'bg-rose-50 text-rose-800'
+                          }`}
+                        >
+                          {item.awardedPoints} / {item.maxPoints} درجة
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700 font-medium line-clamp-1 mt-0.5">
+                        {item.prompt}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button type="button" className="text-slate-400 p-1">
+                    {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
+
+                {isExpanded && (
+                  <div className="pt-4 border-t border-slate-100 space-y-4 text-xs md:text-sm">
+                    {/* Prompt detail */}
+                    <div className="p-4 bg-slate-50 rounded-2xl text-slate-900 font-semibold leading-relaxed">
+                      {item.prompt}
+                    </div>
+
+                    {/* Answers Comparison */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+                        <div className="text-xs font-bold text-slate-500">إجابتك المسجلة:</div>
+                        <div className="font-medium text-slate-800">
+                          {typeof item.studentAnswer === 'object'
+                            ? JSON.stringify(item.studentAnswer)
+                            : item.studentAnswer
+                            ? String(item.studentAnswer)
+                            : 'لم تتم الإجابة'}
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-1">
+                        <div className="text-xs font-bold text-emerald-800">الإجابة المعتمدة / النموذجية:</div>
+                        <div className="font-medium text-emerald-950">
+                          {typeof item.correctAnswer === 'object'
+                            ? JSON.stringify(item.correctAnswer)
+                            : String(item.correctAnswer || 'وفق المعايير المنهجية')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pedagogical Explanation */}
+                    {item.explanationAr && (
+                      <div className="p-4 bg-teal-50/70 border border-teal-200/80 rounded-2xl text-teal-950 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5 text-teal-900 text-xs">
+                          <HelpCircle className="w-4 h-4 text-teal-700" />
+                          <span>الشرح والتوجيه المنهجي:</span>
+                        </div>
+                        <p className="leading-relaxed text-xs md:text-sm">{item.explanationAr}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};

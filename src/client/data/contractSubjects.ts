@@ -1,0 +1,133 @@
+export interface ContractSubject {
+  index: number;
+  name_ar: string;
+  name_en: string;
+  slug: string;
+  category: 'common' | 'scientific' | 'literary';
+  description_ar: string;
+  iconName: string;
+  defaultDurationMinutes: number;
+}
+
+export const TWELVE_CONTRACT_SUBJECTS: ContractSubject[] = [
+  {
+    index: 1,
+    name_ar: 'التربية الإسلامية',
+    name_en: 'Islamic Studies',
+    slug: 'islamic-studies',
+    category: 'common',
+    description_ar: 'القرآن الكريم، علوم القرآن، العقيدة الإسلامية، الفقه، والسيرة النبوية.',
+    iconName: 'BookOpen',
+    defaultDurationMinutes: 150,
+  },
+  {
+    index: 2,
+    name_ar: 'التربية المسيحية',
+    name_en: 'Christian Studies',
+    slug: 'christian-studies',
+    category: 'common',
+    description_ar: 'العهد القديم والجديد، العقيدة المسيحية، والأخلاق والتعاليم الروحية.',
+    iconName: 'Cross',
+    defaultDurationMinutes: 150,
+  },
+  {
+    index: 3,
+    name_ar: 'اللغة العربية',
+    name_en: 'Arabic Language',
+    slug: 'arabic-language',
+    category: 'common',
+    description_ar: 'النحو والصرف، البلاغة، الأدب، النصوص المقررة، وقواعد الإملاء والإنشاء.',
+    iconName: 'Feather',
+    defaultDurationMinutes: 180,
+  },
+  {
+    index: 4,
+    name_ar: 'اللغة الإنجليزية',
+    name_en: 'English Language',
+    slug: 'english-language',
+    category: 'common',
+    description_ar: 'Sudan English Secondary Curriculum: Reading, grammar, composition, and literature.',
+    iconName: 'Globe',
+    defaultDurationMinutes: 150,
+  },
+  {
+    index: 5,
+    name_ar: 'الرياضيات الأساسية',
+    name_en: 'Basic Mathematics',
+    slug: 'basic-mathematics',
+    category: 'literary',
+    description_ar: 'الجبر الأساسي، مبادئ الإحصاء والاحتمالات، وحساب المثلثات للقسم الأدبي.',
+    iconName: 'Divide',
+    defaultDurationMinutes: 150,
+  },
+  {
+    index: 6,
+    name_ar: 'الرياضيات المتخصصة',
+    name_en: 'Specialized Mathematics',
+    slug: 'specialized-mathematics',
+    category: 'scientific',
+    description_ar: 'التفاضل والتكامل المتقدم، الهندسة التحليلية والمستوية، والمصفوفات والمتجهات.',
+    iconName: 'Calculator',
+    defaultDurationMinutes: 180,
+  },
+  {
+    index: 7,
+    name_ar: 'الكيمياء',
+    name_en: 'Chemistry',
+    slug: 'chemistry',
+    category: 'scientific',
+    description_ar: 'الكيمياء العامة والعضوية، التوازن الكيميائي، الديناميكا الحرارية، والكيمياء التحليلية.',
+    iconName: 'FlaskConical',
+    defaultDurationMinutes: 180,
+  },
+  {
+    index: 8,
+    name_ar: 'الفيزياء',
+    name_en: 'Physics',
+    slug: 'physics',
+    category: 'scientific',
+    description_ar: 'الميكانيكا والحركة، الكهرباء الساكنة والتيارية، المغناطيسية، والفيزياء الذرية والنووية.',
+    iconName: 'Zap',
+    defaultDurationMinutes: 180,
+  },
+  {
+    index: 9,
+    name_ar: 'الجغرافيا',
+    name_en: 'Geography',
+    slug: 'geography',
+    category: 'literary',
+    description_ar: 'جغرافية السودان الطبيعية والبشرية، قراءة وتفسير الخرائط الكنتورية، والدراسات البيئية.',
+    iconName: 'Compass',
+    defaultDurationMinutes: 150,
+  },
+  {
+    index: 10,
+    name_ar: 'التاريخ',
+    name_en: 'History',
+    slug: 'history',
+    category: 'literary',
+    description_ar: 'تاريخ السودان الحديث والمعاصر، الثورة المهدية، والحركات الوطنية والإفريقية.',
+    iconName: 'Landmark',
+    defaultDurationMinutes: 150,
+  },
+  {
+    index: 11,
+    name_ar: 'الأحياء',
+    name_en: 'Biology',
+    slug: 'biology',
+    category: 'scientific',
+    description_ar: 'علم الخلية، وظائف الأعضاء، التكاثر، الوراثة والتطور، وعلم البيئة.',
+    iconName: 'Dna',
+    defaultDurationMinutes: 180,
+  },
+  {
+    index: 12,
+    name_ar: 'علوم الحاسوب',
+    name_en: 'Computer Science',
+    slug: 'computer-science',
+    category: 'scientific',
+    description_ar: 'مبادئ البرمجة وتصميم الخوارزميات، نظم التشغيل، شبكات الحاسوب، وأمن المعلومات.',
+    iconName: 'Cpu',
+    defaultDurationMinutes: 150,
+  },
+];

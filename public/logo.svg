@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E40AF" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background container -->
+  <rect width="500" height="500" rx="36" fill="#FFFFFF" />
+
+  <!-- Graduation Cap (Mortarboard) -->
+  <g transform="translate(250, 140)">
+    <!-- Cap Top Diamond -->
+    <polygon points="0,-75 160,-20 0,35 -160,-20" fill="#1E3A8A" stroke="#172554" stroke-width="3" stroke-linejoin="round" />
+    <!-- Cap Under Skullcap -->
+    <path d="M -75, -5 C -75, 45 75, 45 75, -5 L 75, 5 C 75, 55 -75, 55 -75, 5 Z" fill="#1D4ED8" />
+    <!-- Cap Button -->
+    <ellipse cx="0" cy="-20" rx="8" ry="5" fill="#172554" />
+    <!-- Tassel String and Hanging Brush -->
+    <path d="M 0,-20 Q 80,-15 135,20" fill="none" stroke="#1E3A8A" stroke-width="4" stroke-linecap="round" />
+    <polygon points="135,20 142,50 128,50" fill="#1E3A8A" />
+  </g>
+
+  <!-- Open Book Base & Wings -->
+  <g transform="translate(250, 260)">
+    <!-- Blue Book Outer Wings -->
+    <path d="M 0, -25 Q -100, -70 -205, -20 Q -215, 60 0, 75 Q 215, 60 205, -20 Q 100, -70 0, -25 Z" fill="url(#blueGrad)" />
+
+    <!-- Golden Ribbon / Lower Pages -->
+    <path d="M 0, -18 Q -95, -58 -195, -12 Q -185, 30 0, 48 Q 185, 30 195, -12 Q 95, -58 0, -18 Z" fill="url(#goldGrad)" />
+
+    <!-- Upper Pages with Sudan Flag Tricolor Bands -->
+    <!-- White / Base Central Page -->
+    <path d="M 0, -12 Q -85, -48 -180, -6 Q -172, 18 0, 32 Q 172, 18 180, -6 Q 85, -48 0, -12 Z" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
+
+    <!-- Red Flag Band (Top) -->
+    <path d="M 15, -17 Q 80, -42 165, -8 L 160, 4 Q 80, -28 15, -5 Z" fill="#DC2626" />
+    <!-- White Flag Band (Middle) -->
+    <path d="M 12, -4 Q 80, -27 160, 5 L 155, 17 Q 80, -14 12, 8 Z" fill="#FFFFFF" />
+    <!-- Black Flag Band (Bottom) -->
+    <path d="M 10, 9 Q 80, -13 155, 18 L 150, 28 Q 80, 0 10, 20 Z" fill="#111827" />
+
+    <!-- Green Flag Chevron (Left of flag band) -->
+    <polygon points="10,-20 65,5 10,24" fill="#16A34A" />
+
+    <!-- Book Spine Center Fold -->
+    <path d="M 0, -25 L 0, 75" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" />
+  </g>
+
+  <!-- Typography: أول الشهادة -->
+  <text x="250" y="425" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif" font-size="64" font-weight="900" fill="#1E3A8A" letter-spacing="-1">
+    أول الشهادة
+  </text>
+  <text x="250" y="465" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif" font-size="18" font-weight="700" fill="#059669">
+    محاكي امتحانات الشهادة الثانوية السودانية
+  </text>
+</svg>
