@@ -8,7 +8,7 @@ import subjectRoutes from './src/server/routes/subjectRoutes';
 import adminRoutes from './src/server/routes/adminRoutes';
 
 const app = express();
-const PORT = Number(process.env.EXPRESS_PORT || (process.env.NODE_ENV === 'production' ? process.env.PORT : undefined)) || 3001;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -50,9 +50,32 @@ const isDirectExecution = (() => {
   }
 })();
 
-if (isDirectExecution && process.env.NODE_ENV !== 'test') {
+async function startServer() {
+  if (!isDirectExecution || process.env.NODE_ENV === 'test') {
+    return;
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    // Mount Vite middleware in development as required by the framework constitution
+    const { createServer } = await import('vite');
+    const vite = await createServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    app.use(express.static(path.resolve(process.cwd(), 'dist')));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.resolve(process.cwd(), 'dist/index.html'));
+    });
+  }
+
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
+
+startServer().catch((err) => {
+  console.error('[server] Startup error:', err);
+});
 
