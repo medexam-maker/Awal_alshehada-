@@ -23,6 +23,10 @@ import {
   ArrowRight,
   Sliders,
   RefreshCw,
+  AlertTriangle,
+  XCircle,
+  FileCode,
+  Check,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -47,9 +51,105 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   [QuestionType.READING_COMPREHENSION]: 'قطعة وفهم واستيعاب (Reading Comprehension)',
 };
 
+const EXAMPLE_JSON_BULK = `[
+  {
+    "questionType": "fill_blank",
+    "prompt": "أكمل الفراغات في الجملة التاريخية التالية:",
+    "content": {
+      "textWithBlanks": "عاصمة السودان هي [blank_1] وتقع عند ملتقى [blank_2]",
+      "blanks": [
+        {
+          "id": "blank_1",
+          "correctValue": "الخرطوم",
+          "choices": ["الخرطوم", "أم درمان", "بحري"]
+        },
+        {
+          "id": "blank_2",
+          "correctValue": "النيلين",
+          "choices": ["النيلين", "البحر الأحمر", "نهر عطبرة"]
+        }
+      ]
+    },
+    "correctAnswer": {
+      "answers": {
+        "blank_1": "الخرطوم",
+        "blank_2": "النيلين"
+      }
+    },
+    "allocatedMarks": 5,
+    "explanationAr": "تقع الخرطوم عند ملتقى النيل الأزرق والنيل الأبيض."
+  },
+  {
+    "questionType": "multiple_choice",
+    "prompt": "ما هي وحدة قياس القوة في النظام الدولي للوحدات؟",
+    "content": {
+      "options": [
+        { "id": "opt1", "text": "نيوتن" },
+        { "id": "opt2", "text": "جول" },
+        { "id": "opt3", "text": "واط" },
+        { "id": "opt4", "text": "أمبير" }
+      ]
+    },
+    "correctAnswer": {
+      "selectedOptionId": "opt1"
+    },
+    "allocatedMarks": 5
+  },
+  {
+    "questionType": "true_false",
+    "prompt": "تتحرك الكواكب حول الشمس في مدارات إهليلجية.",
+    "content": {
+      "statement": "تتحرك الكواكب حول الشمس في مدارات إهليلجية."
+    },
+    "correctAnswer": {
+      "value": true
+    },
+    "allocatedMarks": 5
+  }
+]`;
+
+interface BulkValidationData {
+  total: number;
+  valid: number;
+  invalid: number;
+  duplicateWarnings: Array<{
+    index: number;
+    questionPrompt: string;
+    existingQuestionId: string;
+    existingPrompt: string;
+    status: string;
+  }>;
+  errors: Array<{
+    index: number;
+    questionType: string;
+    errors: string[];
+  }>;
+  summary: {
+    toImport: number;
+    duplicates: number;
+    invalid: number;
+  };
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentView }) => {
   const [selectedSubjectSlug, setSelectedSubjectSlug] = useState<string>(TWELVE_CONTRACT_SUBJECTS[0].slug);
-  const [activeTab, setActiveTab] = useState<'blueprint' | 'authoring' | 'bank'>('blueprint');
+  const [activeTab, setActiveTab] = useState<'blueprint' | 'authoring' | 'bank' | 'bulk'>('blueprint');
+
+  // Bulk Import States
+  const [bulkJsonText, setBulkJsonText] = useState<string>('');
+  const [bulkScope, setBulkScope] = useState<'both' | 'yearly_exam' | 'curriculum_review'>('both');
+  const [bulkYear, setBulkYear] = useState<number>(2024);
+  const [isValidating, setIsValidating] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [jsonParseError, setJsonParseError] = useState<string | null>(null);
+  const [validationResult, setValidationResult] = useState<BulkValidationData | null>(null);
+  const [duplicateDecisions, setDuplicateDecisions] = useState<Record<number, 'import' | 'skip'>>({});
+  const [parsedQuestionsCache, setParsedQuestionsCache] = useState<any[] | null>(null);
+  const [importSummaryResult, setImportSummaryResult] = useState<{
+    imported: number;
+    skipped: number;
+    byDecision: { skipped: number; imported: number; new: number };
+  } | null>(null);
 
   const selectedSubject = TWELVE_CONTRACT_SUBJECTS.find((s) => s.slug === selectedSubjectSlug) || TWELVE_CONTRACT_SUBJECTS[0];
   const [blueprint, setBlueprint] = useState<SubjectExamBlueprint>(() => curriculumStorage.getSubjectBlueprint(selectedSubjectSlug));
@@ -116,6 +216,98 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
     setQuestionsList(curriculumStorage.getQuestionsBySubject(slug));
     if (activeTab === 'bank') {
       fetchServerQuestions(slug);
+    }
+  };
+
+  const handleValidateBulkJson = async () => {
+    setJsonParseError(null);
+    setValidationResult(null);
+    setImportSummaryResult(null);
+
+    const trimmed = bulkJsonText.trim();
+    if (!trimmed) {
+      setJsonParseError('يرجى لصق بيانات JSON في الحقل أدناه أولاً.');
+      return;
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch (err: any) {
+      setJsonParseError(`JSON غير صالح: ${err.message || 'خطأ في تنسيق النص'}`);
+      return;
+    }
+
+    const questionsArray = Array.isArray(parsed) ? parsed : parsed.questions;
+    if (!Array.isArray(questionsArray) || questionsArray.length === 0) {
+      setJsonParseError('يجب أن يحتوي ملف JSON على مصفوفة من الأسئلة أو كائن يتضمن الحقل "questions".');
+      return;
+    }
+
+    setParsedQuestionsCache(questionsArray);
+    setIsValidating(true);
+
+    try {
+      const res = await apiClient.request<BulkValidationData>('/api/admin/questions/bulk-validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          subjectSlug: selectedSubjectSlug,
+          bankType: bulkScope === 'curriculum_review' ? 'comprehensive' : 'training',
+          examYear: bulkScope === 'curriculum_review' ? undefined : bulkYear,
+          questions: questionsArray,
+        }),
+      });
+
+      if (res?.data) {
+        setValidationResult(res.data);
+        const initialDecisions: Record<number, 'import' | 'skip'> = {};
+        res.data.duplicateWarnings.forEach((w) => {
+          initialDecisions[w.index] = 'skip';
+        });
+        setDuplicateDecisions(initialDecisions);
+      } else {
+        throw new Error(res?.error?.message || 'فشل التحقق من الأسئلة');
+      }
+    } catch (err: any) {
+      setJsonParseError(err.message || 'حدث خطأ أثناء فحص البيانات من الخادم.');
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleConfirmBulkImport = async () => {
+    if (!parsedQuestionsCache || !validationResult) return;
+    setIsImporting(true);
+    setImportSummaryResult(null);
+
+    try {
+      const res = await apiClient.request<{
+        imported: number;
+        skipped: number;
+        byDecision: { skipped: number; imported: number; new: number };
+      }>('/api/admin/questions/bulk-import', {
+        method: 'POST',
+        body: JSON.stringify({
+          subjectSlug: selectedSubjectSlug,
+          bankType: bulkScope === 'curriculum_review' ? 'comprehensive' : 'training',
+          examYear: bulkScope === 'curriculum_review' ? undefined : bulkYear,
+          questions: parsedQuestionsCache,
+          duplicateDecisions,
+        }),
+      });
+
+      if (res?.data) {
+        setImportSummaryResult(res.data);
+        showNotification(`تم استيراد ${res.data.imported} سؤال بنجاح إلى قاعدة البيانات!`, 'success');
+        // Refresh question bank
+        fetchServerQuestions(selectedSubjectSlug);
+      } else {
+        throw new Error(res?.error?.message || 'فشل الاستيراد في قاعدة البيانات');
+      }
+    } catch (err: any) {
+      showNotification(`فشل الاستيراد: ${err.message}`, 'info');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -223,6 +415,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   ]);
   const [mcqCorrectIndex, setMcqCorrectIndex] = useState<number>(0);
   const [blankAnswer, setBlankAnswer] = useState<string>('');
+  const [fillTextWithBlanks, setFillTextWithBlanks] = useState<string>('');
+  const [fillBlanks, setFillBlanks] = useState<
+    Array<{ id: string; correctValue: string; choices: [string, string, string] }>
+  >([{ id: 'blank_1', correctValue: '', choices: ['', '', ''] }]);
+
+  const handleAddBlank = () => {
+    const nextIdx = fillBlanks.length + 1;
+    setFillBlanks((prev) => [...prev, { id: `blank_${nextIdx}`, correctValue: '', choices: ['', '', ''] }]);
+  };
+
+  const handleRemoveBlank = (index: number) => {
+    if (fillBlanks.length <= 1) return;
+    setFillBlanks((prev) => {
+      const filtered = prev.filter((_, idx) => idx !== index);
+      return filtered.map((b, i) => ({ ...b, id: `blank_${i + 1}` }));
+    });
+  };
+
+  const handleUpdateBlankCorrect = (index: number, val: string) => {
+    setFillBlanks((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], correctValue: val };
+      return updated;
+    });
+  };
+
+  const handleUpdateBlankChoice = (blankIndex: number, choiceIndex: number, val: string) => {
+    setFillBlanks((prev) => {
+      const updated = [...prev];
+      const newChoices = [...updated[blankIndex].choices] as [string, string, string];
+      newChoices[choiceIndex] = val;
+      updated[blankIndex] = { ...updated[blankIndex], choices: newChoices };
+      return updated;
+    });
+  };
+
   const [grammarWord, setGrammarWord] = useState<string>('');
   const [grammarAnswer, setGrammarAnswer] = useState<string>('');
   const [oddWords, setOddWords] = useState<string>('كلمة 1، كلمة 2، كلمة 3، كلمة شاذة');
@@ -267,8 +495,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       };
       correctAnswer = { selectedOptionId: `opt${mcqCorrectIndex + 1}` };
     } else if (questionType === QuestionType.FILL_BLANK) {
-      content = { textWithBlanks: questionPrompt };
-      correctAnswer = { blank1: blankAnswer };
+      if (fillBlanks.some((b) => !b.correctValue.trim())) {
+        showNotification('يرجى تحديد الإجابة الصحيحة لكل فراغ مضاف في السؤال.', 'info');
+        return;
+      }
+      const answersRecord: Record<string, string> = {};
+      const formattedBlanks = fillBlanks.map((b) => {
+        answersRecord[b.id] = b.correctValue.trim();
+        return {
+          id: b.id,
+          correctValue: b.correctValue.trim(),
+          choices: b.choices.map((c) => c.trim()).filter(Boolean),
+        };
+      });
+      content = {
+        prompt: questionPrompt.trim(),
+        textWithBlanks: fillTextWithBlanks.trim() || questionPrompt.trim(),
+        blanks: formattedBlanks,
+      };
+      correctAnswer = { answers: answersRecord };
     } else if (questionType === QuestionType.ARABIC_GRAMMAR) {
       content = { targetWord: grammarWord, fullSentence: questionPrompt };
       correctAnswer = grammarAnswer;
@@ -479,6 +724,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
         >
           <BookOpen className="w-4 h-4" />
           <span>3. بنك الأسئلة المعتمد ({questionsList.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('bulk')}
+          className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+            activeTab === 'bulk'
+              ? 'border-emerald-600 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FileCode className="w-4 h-4" />
+          <span>4. استيراد جماعي (JSON)</span>
         </button>
       </div>
 
@@ -844,6 +1102,95 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 </div>
               )}
 
+              {questionType === QuestionType.FILL_BLANK && (
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      نص الجملة مع الإشارة إلى معرفات الفراغات:
+                    </label>
+                    <input
+                      type="text"
+                      value={fillTextWithBlanks}
+                      onChange={(e) => setFillTextWithBlanks(e.target.value)}
+                      placeholder="مثال: عاصمة السودان هي [blank_1] وتقع على ملتقى [blank_2]"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      اكتب معرف الفراغ بين قوسين مربعين مثل <code className="bg-slate-100 px-1 py-0.5 rounded text-emerald-700 font-mono">[blank_1]</code>
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-800">
+                        الفراغات المحددة ({fillBlanks.length}):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddBlank}
+                        className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>+ إضافة فراغ</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {fillBlanks.map((blank, bIdx) => (
+                        <div key={blank.id} className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-3 shadow-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono font-black text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                              المعرف: [{blank.id}]
+                            </span>
+                            {fillBlanks.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveBlank(bIdx)}
+                                className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1 rounded hover:bg-rose-50 transition-colors cursor-pointer flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>حذف</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 block">
+                              الإجابة النموذجية الصحيحة للفراغ:
+                            </label>
+                            <input
+                              type="text"
+                              value={blank.correctValue}
+                              onChange={(e) => handleUpdateBlankCorrect(bIdx, e.target.value)}
+                              placeholder="مثلاً: الخرطوم"
+                              className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                            <label className="text-xs font-bold text-slate-600 block">
+                              خيارات وضع التدريب (3 خيارات لنمط tap_reveal_3 - تشمل الإجابة وخيارات مموهة):
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {blank.choices.map((choice, cIdx) => (
+                                <input
+                                  key={cIdx}
+                                  type="text"
+                                  value={choice}
+                                  onChange={(e) => handleUpdateBlankChoice(bIdx, cIdx, e.target.value)}
+                                  placeholder={`خيار ${cIdx + 1}`}
+                                  className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-800 focus:outline-none"
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {questionType === QuestionType.ARABIC_GRAMMAR && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
@@ -917,9 +1264,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 </div>
               )}
 
-              {/* Fallback text answer for Fill Blank, Essays, Explain, etc. */}
+              {/* Fallback text answer for Essays, Explain, etc. */}
               {questionType !== QuestionType.TRUE_FALSE &&
                 questionType !== QuestionType.MULTIPLE_CHOICE &&
+                questionType !== QuestionType.FILL_BLANK &&
                 questionType !== QuestionType.ARABIC_GRAMMAR &&
                 questionType !== QuestionType.ODD_ONE_OUT &&
                 questionType !== QuestionType.CALCULATION && (
@@ -1076,6 +1424,314 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 4: BULK QUESTION IMPORTER (JSON COPY-PASTE)           */}
+      {/* ========================================================= */}
+      {activeTab === 'bulk' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5">
+            <div>
+              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <FileCode className="w-5 h-5 text-emerald-600" />
+                <span>استيراد جماعي للأسئلة لمادة ({blueprint.name_ar}) عبر JSON</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                الصق كود JSON مباشرة للتحقق منه ومعاينته بدقة قبل إدراجه في قاعدة البيانات. يتم التحقق وفق نظام (الكل أو لا شيء).
+              </p>
+            </div>
+
+            {/* Scope & Year Selector */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-700 block">نطاق الأسئلة المستوردة:</label>
+                <select
+                  value={bulkScope}
+                  onChange={(e) => setBulkScope(e.target.value as any)}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="both">عام (امتحانات تدريب ومراجعة معاً)</option>
+                  <option value="yearly_exam">امتحان دورة سنة محددة (Past Exam)</option>
+                  <option value="curriculum_review">بنك مراجعة شاملة للمقرر فقط</option>
+                </select>
+              </div>
+
+              {bulkScope !== 'curriculum_review' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-700 block">
+                    سنة دورة الامتحان (2000 - 2026):
+                  </label>
+                  <select
+                    value={bulkYear}
+                    onChange={(e) => setBulkYear(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    {curriculumStorage.getAllSupportedYears().map((yr) => (
+                      <option key={yr} value={yr}>
+                        دورة عام {yr}م
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Example JSON Details */}
+            <details className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs group">
+              <summary className="font-black text-slate-800 cursor-pointer flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>عرض مثال لهيكل ملف JSON المقبول للأنماط الـ 15 (اضغط للعرض)</span>
+                </span>
+                <span className="text-[11px] text-slate-400 group-open:hidden">إظهار</span>
+                <span className="text-[11px] text-slate-400 hidden group-open:inline">إخفاء</span>
+              </summary>
+              <pre
+                className="mt-3 p-4 bg-slate-900 text-emerald-400 font-mono text-[11px] rounded-xl overflow-x-auto leading-relaxed border border-slate-800 text-left"
+                dir="ltr"
+              >
+                {EXAMPLE_JSON_BULK}
+              </pre>
+            </details>
+
+            {/* Textarea for JSON input */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-slate-700 block">
+                  محتوى كود JSON (انسخ والصق الكود هنا):
+                </label>
+                {bulkJsonText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkJsonText('');
+                      setValidationResult(null);
+                      setJsonParseError(null);
+                      setImportSummaryResult(null);
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-rose-600 font-bold transition-colors cursor-pointer"
+                  >
+                    مسح النص
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                rows={15}
+                value={bulkJsonText}
+                onChange={(e) => {
+                  setBulkJsonText(e.target.value);
+                  setJsonParseError(null);
+                }}
+                placeholder="الصق بيانات JSON هنا..."
+                dir="ltr"
+                className="w-full bg-slate-950 text-slate-100 font-mono text-xs p-4 rounded-2xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 leading-relaxed text-left placeholder:text-slate-600"
+              />
+            </div>
+
+            {/* Validate Button */}
+            <div>
+              <button
+                type="button"
+                onClick={handleValidateBulkJson}
+                disabled={!bulkJsonText.trim() || isValidating}
+                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+              >
+                {isValidating ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>جارٍ فحص وتحقق البيانات من الخادم...</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4" />
+                    <span>معاينة وتحقق من صحة البيانات</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* JSON Parse Error Alert */}
+            {jsonParseError && (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900 text-xs">
+                <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-black">خطأ في التحقق من البيانات:</p>
+                  <p className="font-mono text-[11px] text-rose-700">{jsonParseError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Validation Results Display */}
+            {validationResult && (
+              <div className="space-y-5 pt-4 border-t border-slate-200">
+                <h3 className="text-sm font-black text-slate-900">نتائج الفحص والتحقق الأولي:</h3>
+
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                    <span className="text-[11px] text-slate-500 font-bold block">إجمالي الأسئلة</span>
+                    <span className="text-base font-black text-slate-900">{validationResult.total}</span>
+                  </div>
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                    <span className="text-[11px] text-emerald-700 font-bold block">أسئلة صالحة</span>
+                    <span className="text-base font-black text-emerald-800">{validationResult.valid}</span>
+                  </div>
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-center">
+                    <span className="text-[11px] text-rose-700 font-bold block">أسئلة بها أخطاء</span>
+                    <span className="text-base font-black text-rose-800">{validationResult.invalid}</span>
+                  </div>
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                    <span className="text-[11px] text-amber-700 font-bold block">تحذيرات تكرار</span>
+                    <span className="text-base font-black text-amber-800">
+                      {validationResult.duplicateWarnings.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Validation Errors List (All-or-Nothing block) */}
+                {validationResult.invalid > 0 && (
+                  <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl space-y-3">
+                    <div className="flex items-center gap-2 text-rose-900 font-black text-xs">
+                      <AlertTriangle className="w-4 h-4 text-rose-600" />
+                      <span>
+                        تم العثور على ({validationResult.invalid}) سؤال به أخطاء في البنية (All-or-Nothing Invariant):
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-rose-700">
+                      وفق سياسة النظام، لا يمكن إدراج أي سؤال حتى يتم تصحيح كافة الأخطاء المبينة أدناه وإعادة التحقق:
+                    </p>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {validationResult.errors.map((err, eIdx) => (
+                        <div
+                          key={eIdx}
+                          className="p-2.5 bg-white border border-rose-200 rounded-xl text-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between font-bold text-rose-900">
+                            <span>السؤال رقم #{err.index + 1}</span>
+                            <span className="font-mono text-[11px] text-slate-500">[{err.questionType}]</span>
+                          </div>
+                          <ul className="list-disc list-inside text-[11px] text-rose-700 space-y-0.5">
+                            {err.errors.map((msg, mIdx) => (
+                              <li key={mIdx}>{msg}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Duplicate Warnings with Interactive Skip/Import Choice */}
+                {validationResult.duplicateWarnings.length > 0 && (
+                  <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl space-y-3">
+                    <div className="flex items-center gap-2 text-amber-950 font-black text-xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600" />
+                      <span>
+                        تنبيه: تم العثور على ({validationResult.duplicateWarnings.length}) سؤال مكرر مسبقاً في قاعدة البيانات:
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      حدد قرارك لكل سؤال مكرر: هل ترغب في تخطيه أم إعادة استيراده كنسخة إضافية؟
+                    </p>
+
+                    <div className="space-y-2.5 max-h-64 overflow-y-auto">
+                      {validationResult.duplicateWarnings.map((dup) => {
+                        const currentDecision = duplicateDecisions[dup.index] || 'skip';
+                        return (
+                          <div
+                            key={dup.index}
+                            className="p-3 bg-white border border-amber-200 rounded-xl space-y-2 text-xs"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-slate-900">
+                                السؤال #{dup.index + 1}: {dup.questionPrompt}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDuplicateDecisions((prev) => ({ ...prev, [dup.index]: 'skip' }))
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    currentDecision === 'skip'
+                                      ? 'bg-amber-600 text-white shadow-xs'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  تخطي (Skip)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDuplicateDecisions((prev) => ({ ...prev, [dup.index]: 'import' }))
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    currentDecision === 'import'
+                                      ? 'bg-emerald-600 text-white shadow-xs'
+                                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  استيراد (Import)
+                                </button>
+                              </div>
+                            </div>
+                            <div className="text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg font-mono">
+                              موجود مسبقاً بالمعرف: {dup.existingQuestionId} (الحالة: {dup.status})
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Final Confirmation Button */}
+                {validationResult.invalid === 0 && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleConfirmBulkImport}
+                      disabled={isImporting}
+                      className="w-full sm:w-auto px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                    >
+                      {isImporting ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>جارٍ تنفيذ معاملة الاستيراد في قاعدة البيانات...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>
+                            تأكيد الاستيراد الفعلي (إدراج {validationResult.valid - (Object.values(duplicateDecisions).filter((d) => d === 'skip').length)} سؤال)
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Import Summary Result Banner */}
+                {importSummaryResult && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-2xl flex items-start gap-3 text-emerald-950 text-xs">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-black text-sm">اكتمل الاستيراد الجماعي بنجاح!</p>
+                      <p className="text-emerald-800">
+                        تم إدراج <strong>{importSummaryResult.imported}</strong> سؤال في قاعدة البيانات
+                        {importSummaryResult.skipped > 0 && (
+                          <span> (تم تخطي {importSummaryResult.skipped} سؤال مكرر بناءً على قرارك)</span>
+                        )}.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

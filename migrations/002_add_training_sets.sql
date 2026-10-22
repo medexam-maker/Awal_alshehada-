@@ -5,14 +5,14 @@ CREATE TABLE training_exam_sets (
   name_ar TEXT NOT NULL,
   name_en TEXT,
   description TEXT,
-  exam_category TEXT NOT NULL DEFAULT 'general' CHECK (exam_category IN ('general', 'year')),
+  exam_category TEXT NOT NULL DEFAULT 'general' CHECK (exam_category IN ('general', 'year', 'weekly')),
   exam_year INT,
   status TEXT NOT NULL DEFAULT 'active',
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT check_exam_year CHECK (
-    (exam_category = 'general' AND exam_year IS NULL) OR
+    ((exam_category IN ('general', 'weekly')) AND exam_year IS NULL) OR
     (exam_category = 'year' AND exam_year IS NOT NULL)
   )
 );

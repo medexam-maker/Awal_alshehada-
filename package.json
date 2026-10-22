@@ -4,8 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
-    "dev:server": "tsx server.ts",
+    "dev": "tsx server.ts",
     "build": "vite build && tsx scripts/prerender.tsx && tsx scripts/generateSitemap.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

@@ -28,9 +28,11 @@ export async function startExam(
         await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
 
         const activeCheck = await client.query(
-            `SELECT id, exam_mode, bank_type, started_at, expires_at, total_marks 
-             FROM exam_attempts 
-             WHERE user_id = $1 AND subject_id = $2 AND status = 'active'`,
+            `SELECT ea.id, ea.exam_mode, ea.bank_type, ea.training_set_id, ea.started_at, ea.expires_at, ea.total_marks,
+                    (tes.exam_category = 'weekly') AS is_weekly
+             FROM exam_attempts ea
+             LEFT JOIN training_exam_sets tes ON tes.id = ea.training_set_id
+             WHERE ea.user_id = $1 AND ea.subject_id = $2 AND ea.status = 'active'`,
             [userId, subjectId]
         );
         if (activeCheck.rows.length > 0) {
@@ -53,11 +55,12 @@ export async function startExam(
                      ORDER BY position ASC`,
                     [existing.id]
                 );
+                const isWeeklySimulation = Boolean(existing.is_weekly && existing.exam_mode === ExamMode.SIMULATOR);
                 const clientQuestions = eaqRes.rows.map(row => {
                     const snap = typeof row.question_snapshot === 'string'
                         ? JSON.parse(row.question_snapshot)
                         : row.question_snapshot;
-                    return createClientSnapshot(snap, existing.exam_mode as ExamMode, row.position);
+                    return createClientSnapshot(snap, existing.exam_mode as ExamMode, row.position, isWeeklySimulation);
                 });
 
                 await client.query('COMMIT');
@@ -75,6 +78,18 @@ export async function startExam(
                 };
             }
         }
+
+        let isWeeklySet = false;
+        if (trainingSetId) {
+            const setRes = await client.query<{ exam_category: string }>(
+                `SELECT exam_category FROM training_exam_sets WHERE id = $1`,
+                [trainingSetId]
+            );
+            if (setRes.rows.length > 0 && setRes.rows[0].exam_category === 'weekly') {
+                isWeeklySet = true;
+            }
+        }
+        const isWeeklySimulation = Boolean(isWeeklySet && examMode === ExamMode.SIMULATOR);
 
         const questions = await selectQuestions(client, userId, subjectId, bankType, examMode, 40, trainingSetId);
         if (questions.length === 0) {
@@ -109,7 +124,7 @@ export async function startExam(
             for (let i = 0; i < questions.length; i++) {
                 const q = questions[i];
                 const dbSnapshot = createDbSnapshot(q);
-                const clientSnapshot = createClientSnapshot(q, examMode, i + 1);
+                const clientSnapshot = createClientSnapshot(q, examMode, i + 1, isWeeklySimulation);
 
                 eaqValues.push(attemptId, q.id, i + 1, q.marks, JSON.stringify(dbSnapshot));
                 const eaqOffset = eaqValues.length - 5;

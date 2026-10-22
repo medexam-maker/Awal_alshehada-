@@ -1,6 +1,6 @@
 import { QuestionType, GradingStrategy } from './constants';
 import { QuestionTypeRegistryEntry } from './types';
-import { ContentSchemas, AnswerSchemas } from './validation/schemas';
+import { ContentSchemas, AnswerSchemas, validateFillBlankAnswer } from './validation/schemas';
 
 export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEntry> = {
   [QuestionType.TRUE_FALSE]: {
@@ -37,7 +37,9 @@ export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEn
     validationRules: [
       { field: 'textWithBlanks', required: true, type: 'string' },
       { field: 'blanks', required: true, type: 'array' }
-    ]
+    ],
+    customValidator: (content, correctAnswer, examMode) =>
+      validateFillBlankAnswer(correctAnswer, content, examMode),
   },
   [QuestionType.MULTIPLE_CHOICE]: {
     type: QuestionType.MULTIPLE_CHOICE,

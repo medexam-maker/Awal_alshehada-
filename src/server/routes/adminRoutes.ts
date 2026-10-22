@@ -2,7 +2,8 @@ import { Router, Response, NextFunction } from 'express';
 import { pool } from '../db/index';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { QuestionType, BankType, QuestionStatus } from '../../shared/constants';
-import { validateQuestionContent, validateMcqAnswer, validateTrueFalseAnswer, ContentSchemas } from '../../shared/validation/schemas';
+import { validateQuestionContent, validateQuestionAnswer, validateMcqAnswer, validateTrueFalseAnswer, ContentSchemas, AnswerSchemas } from '../../shared/validation/schemas';
+import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
 
 const router = Router();
 
@@ -129,8 +130,31 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
 
   // 2. Validate Question Answers
   let normalizedCorrectAnswer = correctAnswer;
+  if (questionType === QuestionType.TRUE_FALSE && typeof correctAnswer === 'boolean') {
+    normalizedCorrectAnswer = { value: correctAnswer };
+  }
 
-  if (questionType === QuestionType.MULTIPLE_CHOICE) {
+  const registryEntry = QUESTION_TYPE_REGISTRY[questionType as QuestionType];
+
+  if (registryEntry?.customValidator) {
+    const customResult = registryEntry.customValidator(
+      fullContent,
+      normalizedCorrectAnswer,
+      bankType === 'training' ? 'training' : 'simulator'
+    );
+    if (!customResult.valid) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Invalid ${questionType} answer`,
+          details: customResult.errors,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+  } else if (questionType === QuestionType.MULTIPLE_CHOICE) {
     const mcqValidation = validateMcqAnswer(correctAnswer, fullContent);
     if (!mcqValidation.valid) {
       res.status(400).json({
@@ -145,9 +169,6 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
       return;
     }
   } else if (questionType === QuestionType.TRUE_FALSE) {
-    if (typeof correctAnswer === 'boolean') {
-      normalizedCorrectAnswer = { value: correctAnswer };
-    }
     const tfValidation = validateTrueFalseAnswer(normalizedCorrectAnswer);
     if (!tfValidation.valid) {
       res.status(400).json({
@@ -156,6 +177,20 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
           code: 'VALIDATION_ERROR',
           message: 'Invalid canonical True/False answer shape; must be { value: boolean }',
           details: tfValidation.errors,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+  } else {
+    const ansValidation = validateQuestionAnswer(questionType as keyof typeof AnswerSchemas, normalizedCorrectAnswer);
+    if (!ansValidation.valid) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Invalid ${questionType} answer`,
+          details: ansValidation.errors,
         },
         timestamp: new Date().toISOString(),
       });
@@ -341,6 +376,429 @@ router.delete('/questions/:id', async (req: AuthenticatedRequest, res: Response)
     res.status(500).json({
       success: false,
       error: { code: 'DATABASE_ERROR', message: 'Failed to delete question', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Helper: Validate a single question payload for individual or bulk import
+function validateSingleQuestionPayload(q: any, bankType: string = 'comprehensive') {
+  const errors: string[] = [];
+  if (!q || typeof q !== 'object') {
+    return { valid: false, errors: ['Question must be an object'], prompt: '', questionType: '' };
+  }
+  const questionType = q.questionType || q.question_type;
+  if (!questionType) {
+    return { valid: false, errors: ['Missing required field: questionType'], prompt: '', questionType: '' };
+  }
+
+  const rawContent = typeof q.content === 'object' && q.content !== null ? q.content : {};
+  const prompt =
+    q.prompt ||
+    rawContent.prompt ||
+    rawContent.textWithBlanks ||
+    rawContent.statement ||
+    '';
+
+  const fullContent: Record<string, any> = {
+    prompt: prompt || (rawContent.textWithBlanks || ''),
+    ...rawContent,
+  };
+  if (questionType === QuestionType.TRUE_FALSE && !fullContent.statement) {
+    fullContent.statement = prompt;
+  }
+  if (questionType === QuestionType.FILL_BLANK && !fullContent.textWithBlanks) {
+    fullContent.textWithBlanks = prompt;
+  }
+
+  // 1. Content Schema Validation
+  const contentVal = validateQuestionContent(questionType as keyof typeof ContentSchemas, fullContent);
+  if (!contentVal.valid) {
+    const errMsgs = Array.isArray(contentVal.errors)
+      ? contentVal.errors.map((e: any) => (typeof e === 'string' ? e : `${e.instancePath || ''} ${e.message || 'خطأ في بنية السؤال'}`))
+      : ['Invalid question content schema'];
+    errors.push(...errMsgs);
+  }
+
+  // 2. Answer Schema Validation
+  const correctAnswer = q.correctAnswer !== undefined ? q.correctAnswer : q.correct_answer;
+  if (correctAnswer === undefined) {
+    errors.push('Missing required field: correctAnswer');
+    return {
+      valid: false,
+      errors,
+      fullContent,
+      normalizedCorrectAnswer: null,
+      prompt: fullContent.prompt || prompt,
+      questionType,
+      allocatedMarks: q.allocatedMarks || q.marks || 5,
+      explanationAr: q.explanationAr || q.explanation || null,
+      status: q.status || QuestionStatus.APPROVED,
+      primaryInteractionMode: q.primaryInteractionMode || q.primary_interaction_mode || 'large_cards',
+    };
+  }
+
+  let normalizedCorrectAnswer = correctAnswer;
+  if (questionType === QuestionType.TRUE_FALSE && typeof correctAnswer === 'boolean') {
+    normalizedCorrectAnswer = { value: correctAnswer };
+  }
+
+  const registryEntry = QUESTION_TYPE_REGISTRY[questionType as QuestionType];
+  if (registryEntry?.customValidator) {
+    const customResult = registryEntry.customValidator(
+      fullContent,
+      normalizedCorrectAnswer,
+      bankType === 'training' ? 'training' : 'simulator'
+    );
+    if (!customResult.valid) {
+      const errMsgs = Array.isArray(customResult.errors)
+        ? customResult.errors.map((e: any) => (typeof e === 'string' ? e : e.message || 'Custom validation failed'))
+        : ['Custom validation error'];
+      errors.push(...errMsgs);
+    }
+  } else if (questionType === QuestionType.MULTIPLE_CHOICE) {
+    const mcqVal = validateMcqAnswer(correctAnswer, fullContent);
+    if (!mcqVal.valid) {
+      const errMsgs = Array.isArray(mcqVal.errors)
+        ? mcqVal.errors.map((e: any) => (typeof e === 'string' ? e : e.message || 'MCQ validation failed'))
+        : ['Invalid canonical MCQ answer'];
+      errors.push(...errMsgs);
+    }
+  } else if (questionType === QuestionType.TRUE_FALSE) {
+    const tfVal = validateTrueFalseAnswer(normalizedCorrectAnswer);
+    if (!tfVal.valid) {
+      const errMsgs = Array.isArray(tfVal.errors)
+        ? tfVal.errors.map((e: any) => (typeof e === 'string' ? e : e.message || 'True/False validation failed'))
+        : ['Invalid canonical True/False answer shape'];
+      errors.push(...errMsgs);
+    }
+  } else {
+    const ansVal = validateQuestionAnswer(questionType as keyof typeof AnswerSchemas, normalizedCorrectAnswer);
+    if (!ansVal.valid) {
+      const errMsgs = Array.isArray(ansVal.errors)
+        ? ansVal.errors.map((e: any) => (typeof e === 'string' ? e : `${e.instancePath || ''} ${e.message || 'خطأ في بنية الإجابة'}`))
+        : ['Answer schema validation failed'];
+      errors.push(...errMsgs);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    fullContent,
+    normalizedCorrectAnswer,
+    prompt: fullContent.prompt || prompt,
+    questionType,
+    allocatedMarks: q.allocatedMarks || q.marks || 5,
+    explanationAr: q.explanationAr || q.explanation || null,
+    status: q.status || QuestionStatus.APPROVED,
+    primaryInteractionMode: q.primaryInteractionMode || q.primary_interaction_mode || 'large_cards',
+  };
+}
+
+// Helper: Check duplicate prompt using prompt_hash column with fallback
+async function checkDuplicatePrompt(clientOrPool: any, subjectId: string, promptText: string) {
+  if (!promptText || !promptText.trim()) return null;
+  try {
+    const res = await clientOrPool.query(
+      `SELECT id, content->>'prompt' as prompt, status
+       FROM question_bank
+       WHERE subject_id = $1
+       AND prompt_hash = md5(lower(trim($2)))
+       LIMIT 1`,
+      [subjectId, promptText]
+    );
+    return res.rows[0] || null;
+  } catch (err: any) {
+    // If prompt_hash column doesn't exist in dev/unmigrated DB, fallback to direct md5 expression
+    if (err.code === '42703') {
+      const fallbackRes = await clientOrPool.query(
+        `SELECT id, content->>'prompt' as prompt, status
+         FROM question_bank
+         WHERE subject_id = $1
+         AND md5(lower(trim(COALESCE(content->>'prompt', '')))) = md5(lower(trim($2)))
+         LIMIT 1`,
+        [subjectId, promptText]
+      );
+      return fallbackRes.rows[0] || null;
+    }
+    throw err;
+  }
+}
+
+/**
+ * POST /api/admin/questions/bulk-validate
+ * Dry-run validation & duplicate detection without writing to the database.
+ */
+router.post('/questions/bulk-validate', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { subjectSlug, bankType = BankType.COMPREHENSIVE, questions } = req.body;
+
+  if (!subjectSlug || !Array.isArray(questions)) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Missing required fields: subjectSlug and questions array',
+        details: {},
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  if (questions.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Questions array is empty',
+        details: {},
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    // 1. Resolve Subject ID
+    const subRes = await pool.query('SELECT id FROM subjects WHERE slug = $1', [subjectSlug]);
+    const subjectId = subRes.rows[0]?.id || null;
+
+    const errors: Array<{ index: number; questionType: string; errors: string[] }> = [];
+    const duplicateWarnings: Array<{
+      index: number;
+      questionPrompt: string;
+      existingQuestionId: string;
+      existingPrompt: string;
+      status: string;
+    }> = [];
+
+    // 2. Validate all questions
+    for (let i = 0; i < questions.length; i++) {
+      const item = questions[i];
+      const valResult = validateSingleQuestionPayload(item, bankType);
+
+      if (!valResult.valid) {
+        errors.push({
+          index: i,
+          questionType: valResult.questionType || 'unknown',
+          errors: valResult.errors,
+        });
+      } else if (subjectId && valResult.prompt) {
+        // Check for duplicates
+        const dup = await checkDuplicatePrompt(pool, subjectId, valResult.prompt);
+        if (dup) {
+          duplicateWarnings.push({
+            index: i,
+            questionPrompt: valResult.prompt,
+            existingQuestionId: dup.id,
+            existingPrompt: dup.prompt || '',
+            status: dup.status || 'approved',
+          });
+        }
+      }
+    }
+
+    const total = questions.length;
+    const invalid = errors.length;
+    const valid = total - invalid;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        total,
+        valid,
+        invalid,
+        duplicateWarnings,
+        errors,
+        summary: {
+          toImport: valid,
+          duplicates: duplicateWarnings.length,
+          invalid,
+        },
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/questions/bulk-validate:POST] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to validate questions batch', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * POST /api/admin/questions/bulk-import
+ * All-or-nothing transactional bulk import with per-duplicate skip/import decisions.
+ */
+router.post('/questions/bulk-import', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const {
+    subjectSlug,
+    bankType = BankType.COMPREHENSIVE,
+    examYear,
+    questions,
+    duplicateDecisions = {},
+  } = req.body;
+
+  if (!subjectSlug || !Array.isArray(questions) || questions.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Missing required fields: subjectSlug and non-empty questions array',
+        details: {},
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  // 1. All-or-Nothing strict schema pre-validation
+  const validatedList: Array<ReturnType<typeof validateSingleQuestionPayload>> = [];
+  const validationErrors: Array<{ index: number; questionType: string; errors: string[] }> = [];
+
+  for (let i = 0; i < questions.length; i++) {
+    const valResult = validateSingleQuestionPayload(questions[i], bankType);
+    if (!valResult.valid) {
+      validationErrors.push({
+        index: i,
+        questionType: valResult.questionType || 'unknown',
+        errors: valResult.errors,
+      });
+    } else {
+      validatedList.push(valResult);
+    }
+  }
+
+  if (validationErrors.length > 0) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'ALL_OR_NOTHING_VALIDATION_FAILED',
+        message: 'فشل التحقق من صحة الأسئلة: تم رفض حزمة الاستيراد بالكامل دون إدراج أي سؤال وفق مبدأ (الكل أو لا شيء).',
+        details: validationErrors,
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  // 2. Open DB Transaction
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Resolve or insert subject
+    let subjectRes = await client.query('SELECT id, name_ar FROM subjects WHERE slug = $1', [subjectSlug]);
+    if (subjectRes.rows.length === 0) {
+      const defaultName = subjectSlug.replace(/-/g, ' ');
+      const newSub = await client.query(
+        `INSERT INTO subjects (name_ar, name_en, slug, is_active)
+         VALUES ($1, $2, $3, true) RETURNING id, name_ar`,
+        [defaultName, subjectSlug, subjectSlug]
+      );
+      subjectRes = newSub;
+    }
+    const subjectId = subjectRes.rows[0].id;
+
+    // Lock training set if examYear specified
+    let trainingSetId: string | null = null;
+    let currentPosition = 0;
+
+    if (examYear) {
+      const setRes = await client.query(
+        `SELECT id FROM training_exam_sets 
+         WHERE subject_id = $1 AND exam_year = $2
+         FOR UPDATE`,
+        [subjectId, examYear]
+      );
+      if (setRes.rows.length > 0) {
+        trainingSetId = setRes.rows[0].id;
+        const posRes = await client.query(
+          `SELECT COALESCE(MAX(position), 0) AS max_pos FROM training_set_questions WHERE training_set_id = $1`,
+          [trainingSetId]
+        );
+        currentPosition = Number(posRes.rows[0].max_pos) || 0;
+      }
+    }
+
+    let importedCount = 0;
+    let skippedCount = 0;
+    const byDecision = { skipped: 0, imported: 0, new: 0 };
+
+    // 3. Process each question
+    for (let i = 0; i < validatedList.length; i++) {
+      const item = validatedList[i];
+      const dup = await checkDuplicatePrompt(client, subjectId, item.prompt);
+
+      if (dup) {
+        const decision = duplicateDecisions[i] || duplicateDecisions[String(i)] || 'skip';
+        if (decision === 'skip') {
+          skippedCount++;
+          byDecision.skipped++;
+          continue;
+        } else {
+          byDecision.imported++;
+        }
+      } else {
+        byDecision.new++;
+      }
+
+      const insertRes = await client.query(
+        `INSERT INTO question_bank
+         (subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id`,
+        [
+          subjectId,
+          item.questionType,
+          JSON.stringify(item.fullContent),
+          JSON.stringify(item.normalizedCorrectAnswer),
+          item.primaryInteractionMode,
+          item.allocatedMarks,
+          bankType,
+          item.status,
+          item.explanationAr,
+          req.user?.id || 'admin',
+        ]
+      );
+      const newQuestionId = insertRes.rows[0].id;
+
+      if (trainingSetId) {
+        currentPosition++;
+        await client.query(
+          `INSERT INTO training_set_questions (training_set_id, question_id, position)
+           VALUES ($1, $2, $3)`,
+          [trainingSetId, newQuestionId, currentPosition]
+        );
+      }
+
+      importedCount++;
+    }
+
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      data: {
+        imported: importedCount,
+        skipped: skippedCount,
+        byDecision,
+        transaction: 'committed',
+      },
+      message: `تم استيراد ${importedCount} سؤال بنجاح (تخطي ${skippedCount} مكرر)`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[admin/questions/bulk-import:POST] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to execute bulk import transaction', details: {} },
       timestamp: new Date().toISOString(),
     });
   } finally {

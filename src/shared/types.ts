@@ -1,4 +1,5 @@
 import { QuestionType, GradingStrategy } from './constants';
+import type { ValidationResult } from './validation/schemas';
 
 export interface MediaReference {
   url: string;
@@ -346,6 +347,11 @@ export interface QuestionTypeRegistryEntry {
   manualGradingSupport: boolean;
   mediaRequired: boolean;
   validationRules: ValidationRule[];
+  customValidator?: (
+    content: unknown,
+    correctAnswer: unknown,
+    examMode?: string
+  ) => ValidationResult;
 }
 
 export interface ExamSnapshotQuestion {

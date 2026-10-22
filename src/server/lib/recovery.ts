@@ -4,8 +4,10 @@ import { ExamMode } from '../../shared/constants';
 
 export async function getActiveAttempt(userId: string, subjectId: string) {
     const attemptRes = await pool.query(
-        `SELECT * FROM exam_attempts
-         WHERE user_id = $1 AND subject_id = $2 AND status = 'active'`,
+        `SELECT ea.*, (tes.exam_category = 'weekly') AS is_weekly
+         FROM exam_attempts ea
+         LEFT JOIN training_exam_sets tes ON tes.id = ea.training_set_id
+         WHERE ea.user_id = $1 AND ea.subject_id = $2 AND ea.status = 'active'`,
         [userId, subjectId]
     );
 
@@ -40,9 +42,13 @@ export async function getActiveAttempt(userId: string, subjectId: string) {
     // to hydrate the answers back into the UI.
     const savedAnswers: Record<string, unknown> = {};
 
-    const clientQuestions = questionsRes.rows.map(q =>
-        createClientSnapshot(q.question_snapshot, attempt.exam_mode as ExamMode, q.position)
-    );
+    const isWeeklySimulation = Boolean(attempt.is_weekly && attempt.exam_mode === ExamMode.SIMULATOR);
+    const clientQuestions = questionsRes.rows.map(q => {
+        const snap = typeof q.question_snapshot === 'string'
+            ? JSON.parse(q.question_snapshot)
+            : q.question_snapshot;
+        return createClientSnapshot(snap, attempt.exam_mode as ExamMode, q.position, isWeeklySimulation);
+    });
 
     return {
         attemptId: attempt.id,

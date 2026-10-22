@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { QuestionType, ExamMode, GradingStatus } from '../src/shared/constants';
+import { QuestionType, ExamMode, BankType, GradingStatus } from '../src/shared/constants';
 import {
   validateQuestionContent,
   validateQuestionAnswer,
@@ -11,6 +11,9 @@ import { autoGrade } from '../src/server/lib/scoringEngine';
 import { createClientSnapshot, createDbSnapshot } from '../src/server/lib/snapshot';
 import { generateInitialQuestions } from '../src/client/storage/defaultCurriculumData';
 import { SAMPLE_QUESTIONS_POOL } from '../src/client/data/demoCurriculum';
+import { startExam } from '../src/server/lib/attemptManager';
+import { getActiveAttempt } from '../src/server/lib/recovery';
+import { pool } from '../src/server/db/index';
 
 async function runFillBlankVerification() {
   console.log('=================================================================');
@@ -33,6 +36,20 @@ async function runFillBlankVerification() {
       throw err;
     }
   }
+
+  async function runTestAsync(name: string, fn: () => Promise<void>) {
+    totalTests++;
+    try {
+      await fn();
+      console.log(`✅ [PASS] ${name}`);
+      passedTests++;
+    } catch (err: any) {
+      console.error(`❌ [FAIL] ${name}`);
+      console.error('   Error:', err?.message || err);
+      throw err;
+    }
+  }
+
 
   const sampleFillBlankContent = {
     textWithBlanks: 'ينبع النيل الأزرق من بحيرة {1} في إثيوبيا، بينما ينبع النيل الأبيض من بحيرة {2}.',
@@ -499,6 +516,310 @@ async function runFillBlankVerification() {
     );
     assert.strictEqual(noBadge, false, 'Standard MCQ question must not show تقييم ذاتي badge');
   });
+
+  // =================================================================
+  // مسار 7: اختبار المسار الحقيقي الكامل عبر attemptManager و recovery
+  // Full Real Path Integration: DB-level 'weekly' category -> startExam -> snapshots
+  // =================================================================
+  console.log('\n--- [المسار 7]: اختبار المسار الحقيقي الكامل عبر attemptManager و recovery (Real End-to-End Flow) ---');
+
+  // Setup isolated in-memory test database for attemptManager & recovery testing
+  const testDb = {
+    training_exam_sets: [
+      {
+        id: 'ts-weekly-set-01',
+        subject_id: 'sub-geo-1',
+        name_ar: 'المجموعة التدريبية الأسبوعية الأولى (مُعلَّمة أسبوعية)',
+        exam_category: 'weekly',
+        exam_year: null,
+        status: 'active',
+      },
+      {
+        id: 'ts-general-set-02',
+        subject_id: 'sub-geo-1',
+        name_ar: 'مجموعة تدريب عامة (غير أسبوعية)',
+        exam_category: 'general',
+        exam_year: null,
+        status: 'active',
+      },
+    ],
+    question_bank: [
+      {
+        id: 'q-fb-1',
+        subject_id: 'sub-geo-1',
+        bank_type: BankType.TRAINING,
+        question_type: QuestionType.FILL_BLANK,
+        status: 'approved',
+        content: sampleFillBlankContent,
+        correct_answer: sampleCorrectAnswer,
+        marks: 10,
+        explanation: 'ينبع النيل الأزرق من تانا والأبيض من فيكتوريا.',
+        primary_interaction_mode: 'tap_reveal_3',
+      },
+      {
+        id: 'q-mcq-2',
+        subject_id: 'sub-geo-1',
+        bank_type: BankType.TRAINING,
+        question_type: QuestionType.MULTIPLE_CHOICE,
+        status: 'approved',
+        content: {
+          prompt: 'ما عاصمة السودان؟',
+          options: [
+            { id: 'opt1', text: 'الخرطوم' },
+            { id: 'opt2', text: 'أم درمان' },
+          ],
+        },
+        correct_answer: { selectedOptionId: 'opt1' },
+        marks: 5,
+        explanation: 'الخرطوم هي العاصمة القومية.',
+        primary_interaction_mode: 'large_cards',
+      },
+      {
+        id: 'q-tf-3',
+        subject_id: 'sub-geo-1',
+        bank_type: BankType.TRAINING,
+        question_type: QuestionType.TRUE_FALSE,
+        status: 'approved',
+        content: {
+          prompt: 'حدد صحة العبارة التالية:',
+          statement: 'نهر النيل هو أطول أنهار العالم.',
+        },
+        correct_answer: { value: true },
+        marks: 5,
+        explanation: 'نهر النيل أطول أنهار العالم بطول 6650 كم.',
+        primary_interaction_mode: 'toggle_cards',
+      },
+    ],
+    training_set_questions: [
+      { training_set_id: 'ts-weekly-set-01', question_id: 'q-fb-1', position: 1, marks_override: null },
+      { training_set_id: 'ts-weekly-set-01', question_id: 'q-mcq-2', position: 2, marks_override: null },
+      { training_set_id: 'ts-weekly-set-01', question_id: 'q-tf-3', position: 3, marks_override: null },
+      { training_set_id: 'ts-general-set-02', question_id: 'q-fb-1', position: 1, marks_override: null },
+      { training_set_id: 'ts-general-set-02', question_id: 'q-mcq-2', position: 2, marks_override: null },
+      { training_set_id: 'ts-general-set-02', question_id: 'q-tf-3', position: 3, marks_override: null },
+    ],
+    exam_attempts: [] as any[],
+    exam_attempt_questions: [] as any[],
+    exam_question_history: [] as any[],
+  };
+
+  // Mock SQL execution routing
+  const mockExecuteQuery = async (queryText: string, params: any[] = []): Promise<{ rows: any[] }> => {
+    const q = queryText.trim().replace(/\s+/g, ' ');
+
+    if (q.startsWith('BEGIN') || q.startsWith('COMMIT') || q.startsWith('ROLLBACK')) {
+      return { rows: [] };
+    }
+
+    if (q.includes('SELECT id FROM users WHERE id = $1 FOR UPDATE')) {
+      return { rows: [{ id: params[0] }] };
+    }
+
+    if (q.includes('FROM exam_attempts ea') && q.includes('status = \'active\'')) {
+      const found = testDb.exam_attempts.find(
+        (a) => a.user_id === params[0] && a.subject_id === params[1] && a.status === 'active'
+      );
+      if (!found) return { rows: [] };
+      const set = testDb.training_exam_sets.find((s) => s.id === found.training_set_id);
+      return {
+        rows: [
+          {
+            ...found,
+            is_weekly: set?.exam_category === 'weekly',
+          },
+        ],
+      };
+    }
+
+    if (q.includes('SELECT exam_category FROM training_exam_sets WHERE id = $1')) {
+      const set = testDb.training_exam_sets.find((s) => s.id === params[0]);
+      return { rows: set ? [{ exam_category: set.exam_category }] : [] };
+    }
+
+    if (q.includes('SELECT q.*, tsq.marks_override FROM question_bank q JOIN training_set_questions tsq ON q.id = tsq.question_id WHERE tsq.training_set_id = $1')) {
+      const setId = params[0];
+      const links = testDb.training_set_questions
+        .filter((l) => l.training_set_id === setId)
+        .sort((a, b) => a.position - b.position);
+      const rows = links.map((l) => {
+        const question = testDb.question_bank.find((qb) => qb.id === l.question_id)!;
+        return {
+          ...question,
+          marks_override: l.marks_override,
+        };
+      });
+      return { rows };
+    }
+
+    if (q.includes('INSERT INTO exam_attempts') && q.includes('RETURNING id, started_at')) {
+      const newAttempt = {
+        id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        user_id: params[0],
+        subject_id: params[1],
+        bank_type: params[2],
+        exam_mode: params[3],
+        training_set_id: params[4],
+        status: 'active',
+        expires_at: params[5],
+        total_marks: params[6],
+        started_at: new Date().toISOString(),
+      };
+      testDb.exam_attempts.push(newAttempt);
+      return { rows: [{ id: newAttempt.id, started_at: newAttempt.started_at }] };
+    }
+
+    if (q.includes('INSERT INTO exam_attempt_questions')) {
+      // Parse insert batch: 5 parameters per question: (attemptId, questionId, position, marks, snapshot)
+      for (let i = 0; i < params.length; i += 5) {
+        testDb.exam_attempt_questions.push({
+          id: `eaq-${Date.now()}-${i}`,
+          attempt_id: params[i],
+          question_id: params[i + 1],
+          position: params[i + 2],
+          marks: params[i + 3],
+          question_snapshot: params[i + 4],
+        });
+      }
+      return { rows: [] };
+    }
+
+    if (q.includes('INSERT INTO exam_question_history')) {
+      for (let i = 0; i < params.length; i += 3) {
+        testDb.exam_question_history.push({
+          user_id: params[i],
+          question_id: params[i + 1],
+          attempt_id: params[i + 2],
+        });
+      }
+      return { rows: [] };
+    }
+
+    if (q.includes('SELECT position, marks, question_snapshot FROM exam_attempt_questions WHERE attempt_id = $1 ORDER BY position ASC')) {
+      const rows = testDb.exam_attempt_questions
+        .filter((eaq) => eaq.attempt_id === params[0])
+        .sort((a, b) => a.position - b.position);
+      return { rows };
+    }
+
+    if (q.includes('SELECT * FROM exam_attempt_questions WHERE attempt_id = $1 ORDER BY position ASC')) {
+      const rows = testDb.exam_attempt_questions
+        .filter((eaq) => eaq.attempt_id === params[0])
+        .sort((a, b) => a.position - b.position);
+      return { rows };
+    }
+
+    return { rows: [] };
+  };
+
+  const mockClient = {
+    query: mockExecuteQuery,
+    release: () => {},
+  };
+
+  // Temporarily hook pool.connect and pool.query
+  const originalConnect = pool.connect.bind(pool);
+  const originalQuery = pool.query.bind(pool);
+  (pool as any).connect = async () => mockClient;
+  (pool as any).query = mockExecuteQuery;
+
+  try {
+    await runTestAsync('7.1 REAL PATH: startExam() for set tagged "weekly" in DB sets isWeeklySimulation=true', async () => {
+      const res = await startExam(
+        'usr-weekly-1',
+        'sub-geo-1',
+        BankType.TRAINING,
+        ExamMode.SIMULATOR,
+        'ts-weekly-set-01'
+      );
+
+      assert.strictEqual(res.status, 'active');
+      assert.strictEqual(res.questions.length, 3, 'Must return all 3 questions in set');
+
+      // 1. Question 1 (fill_blank): MUST have referenceAnswers
+      const fbQ = res.questions.find((q: any) => q.questionType === QuestionType.FILL_BLANK);
+      assert(fbQ, 'Fill blank question must exist in weekly simulator attempt');
+      assert.strictEqual(fbQ.correctAnswer, undefined, 'Top-level correctAnswer scrubbed');
+      assert.strictEqual(fbQ.explanation, undefined, 'Top-level explanation scrubbed');
+      const fbContent = fbQ.content as any;
+      assert(fbContent.referenceAnswers, 'referenceAnswers MUST be provided for weekly self-assessed fill_blank');
+      assert.strictEqual(fbContent.referenceAnswers['1'], 'تانا');
+      assert.strictEqual(fbContent.referenceAnswers['2'], 'فيكتوريا');
+
+      // 2. Question 2 (multiple_choice): IN SAME ATTEMPT, MUST HIDE answers
+      const mcqQ = res.questions.find((q: any) => q.questionType === QuestionType.MULTIPLE_CHOICE);
+      assert(mcqQ, 'MCQ question must exist in attempt');
+      assert.strictEqual(mcqQ.correctAnswer, undefined, 'MCQ correctAnswer strictly hidden in weekly simulation');
+      assert.strictEqual((mcqQ.content as any).referenceAnswers, undefined, 'MCQ must NEVER have referenceAnswers');
+
+      // 3. Question 3 (true_false): IN SAME ATTEMPT, MUST HIDE answers
+      const tfQ = res.questions.find((q: any) => q.questionType === QuestionType.TRUE_FALSE);
+      assert(tfQ, 'True/False question must exist in attempt');
+      assert.strictEqual(tfQ.correctAnswer, undefined, 'True/False correctAnswer strictly hidden in weekly simulation');
+      assert.strictEqual((tfQ.content as any).referenceAnswers, undefined, 'True/False must NEVER have referenceAnswers');
+    });
+
+    await runTestAsync('7.2 REAL PATH: startExam() for set tagged "general" in DB STRICTLY BLOCKS referenceAnswers', async () => {
+      const res = await startExam(
+        'usr-general-2',
+        'sub-geo-1',
+        BankType.TRAINING,
+        ExamMode.SIMULATOR,
+        'ts-general-set-02'
+      );
+
+      assert.strictEqual(res.status, 'active');
+      assert.strictEqual(res.questions.length, 3);
+
+      // Question 1 (fill_blank) in NON-WEEKLY simulation MUST NOT have referenceAnswers
+      const fbQ = res.questions.find((q: any) => q.questionType === QuestionType.FILL_BLANK);
+      assert(fbQ, 'Fill blank question exists');
+      assert.strictEqual(fbQ.correctAnswer, undefined);
+      assert.strictEqual(fbQ.explanation, undefined);
+      const fbContent = fbQ.content as any;
+      assert.strictEqual(
+        fbContent.referenceAnswers,
+        undefined,
+        'General simulation MUST NEVER expose referenceAnswers (Anti-Cheating Invariant)'
+      );
+    });
+
+    await runTestAsync('7.3 REAL PATH: Resuming active weekly attempt preserves isWeeklySimulation and referenceAnswers', async () => {
+      // Call startExam again with the same user and subject (hits activeCheck path)
+      const res = await startExam(
+        'usr-weekly-1',
+        'sub-geo-1',
+        BankType.TRAINING,
+        ExamMode.SIMULATOR,
+        'ts-weekly-set-01'
+      );
+
+      assert.strictEqual(res.resumed, true, 'Must resume existing active attempt');
+      const fbQ = res.questions.find((q: any) => q.questionType === QuestionType.FILL_BLANK);
+      assert(fbQ, 'Resumed questions must contain fill_blank');
+      const fbContent = fbQ.content as any;
+      assert(fbContent.referenceAnswers, 'Resumed weekly simulation must retain referenceAnswers');
+      assert.strictEqual(fbContent.referenceAnswers['1'], 'تانا');
+    });
+
+    await runTestAsync('7.4 REAL PATH: getActiveAttempt() in recovery.ts joins DB and populates referenceAnswers', async () => {
+      const recovered = await getActiveAttempt('usr-weekly-1', 'sub-geo-1');
+      assert(recovered, 'Must recover active attempt');
+      assert.strictEqual(recovered.status, 'active');
+
+      const fbQ = recovered.questions.find((q: any) => q.questionType === QuestionType.FILL_BLANK);
+      assert(fbQ, 'Recovered questions must include fill_blank');
+      const fbContent = fbQ.content as any;
+      assert(fbContent.referenceAnswers, 'recovery.ts must populate referenceAnswers for weekly simulation');
+      assert.strictEqual(fbContent.referenceAnswers['1'], 'تانا');
+
+      const mcqQ = recovered.questions.find((q: any) => q.questionType === QuestionType.MULTIPLE_CHOICE);
+      assert.strictEqual((mcqQ.content as any).referenceAnswers, undefined, 'recovery.ts must NOT expose referenceAnswers for MCQ');
+    });
+  } finally {
+    // Restore original pool methods
+    (pool as any).connect = originalConnect;
+    (pool as any).query = originalQuery;
+  }
 
   console.log('\n-----------------------------------------------------------------');
   console.log(`Summary: ${passedTests}/${totalTests} tests passed successfully.`);
