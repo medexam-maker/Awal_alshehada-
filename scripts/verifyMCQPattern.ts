@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { QuestionType, BankType, GradingStatus } from '../src/shared/constants';
-import { validateQuestionAnswer, validateMcqAnswer } from '../src/shared/validation/schemas';
+import { validateQuestionContent, validateQuestionAnswer, validateMcqAnswer } from '../src/shared/validation/schemas';
 import { autoGrade } from '../src/server/lib/scoringEngine';
 import { createClientSnapshot, createDbSnapshot } from '../src/server/lib/snapshot';
 import { generateInitialQuestions } from '../src/client/storage/defaultCurriculumData';
@@ -209,6 +209,58 @@ async function runMCQVerification() {
       5
     );
     assert.strictEqual(tfIncorrect.obtainedMarks, 0, 'True/False incorrect must award 0 marks');
+  });
+
+  // 11. MCQ content validation enforces minimum 2 options and array type
+  runTest('11. MCQ content validation enforces minimum 2 options and array type', () => {
+    // 0 options
+    const emptyOptions = { prompt: 'سؤال', options: [] };
+    assert.strictEqual(validateQuestionContent('multiple_choice', emptyOptions).valid, false, 'Empty options must fail');
+
+    // 1 option
+    const oneOption = { prompt: 'سؤال', options: [{ id: 'opt1', text: 'وحيد' }] };
+    assert.strictEqual(validateQuestionContent('multiple_choice', oneOption).valid, false, 'Single option must fail (min 2 required)');
+
+    // Non-array options
+    const stringOptions = { prompt: 'سؤال', options: 'opt1, opt2' };
+    assert.strictEqual(validateQuestionContent('multiple_choice', stringOptions).valid, false, 'String options must fail');
+  });
+
+  // 12. MCQ content validation enforces option structure (id and text required)
+  runTest('12. MCQ content validation enforces option structure (id and text required)', () => {
+    // Missing text
+    const missingText = { prompt: 'سؤال', options: [{ id: 'opt1' }, { id: 'opt2', text: 'ب' }] };
+    assert.strictEqual(validateQuestionContent('multiple_choice', missingText).valid, false, 'Missing text must fail');
+
+    // Missing id
+    const missingId = { prompt: 'سؤال', options: [{ text: 'أ' }, { id: 'opt2', text: 'ب' }] };
+    assert.strictEqual(validateQuestionContent('multiple_choice', missingId).valid, false, 'Missing id must fail');
+  });
+
+  // 13. MCQ content validation rejects duplicate option IDs
+  runTest('13. MCQ content validation rejects duplicate option IDs', () => {
+    const duplicateIds = {
+      prompt: 'سؤال',
+      options: [
+        { id: 'opt1', text: 'الخيار الأول' },
+        { id: 'opt1', text: 'الخيار المكرر' },
+      ],
+    };
+    const res = validateQuestionContent('multiple_choice', duplicateIds);
+    assert.strictEqual(res.valid, false, 'Duplicate option IDs must be rejected');
+    assert(res.errors.some((e: any) => String(e).includes('Duplicate option ID')), 'Error must mention duplicate ID');
+  });
+
+  // 14. validateMcqAnswer rejects student or reference answers referencing nonexistent options or malformed content
+  runTest('14. validateMcqAnswer rejects answers referencing nonexistent options or malformed content', () => {
+    // Nonexistent option
+    const nonExistent = validateMcqAnswer({ selectedOptionId: 'opt99' }, sampleMcqContent);
+    assert.strictEqual(nonExistent.valid, false, 'Nonexistent option must fail validateMcqAnswer');
+
+    // Malformed content options
+    const malformedContent = { prompt: 'سؤال', options: 'not-an-array' };
+    const malformedRes = validateMcqAnswer({ selectedOptionId: 'opt1' }, malformedContent);
+    assert.strictEqual(malformedRes.valid, false, 'Malformed content options must fail validateMcqAnswer');
   });
 
   console.log('\n-----------------------------------------------------------------');

@@ -61,17 +61,23 @@ export function autoGrade(
 
   if (questionType === QuestionType.TRUE_FALSE) {
     // Canonical True/False answer shape is { value: boolean }
-    // Backward compatibility: Historical snapshots may contain bare boolean (true/false)
-    const caVal =
-      typeof correctAnswer === 'object' && correctAnswer !== null && typeof (correctAnswer as any).value === 'boolean'
-        ? (correctAnswer as any).value
-        : typeof correctAnswer === 'boolean'
-          ? correctAnswer
-          : undefined;
+    // Backward compatibility: Historical snapshots or alternative student clients may contain bare boolean (true/false)
+    const caObj = correctAnswer !== null && typeof correctAnswer === 'object'
+      ? (correctAnswer as { value?: unknown })
+      : undefined;
+    const caVal = typeof caObj?.value === 'boolean'
+      ? caObj.value
+      : typeof correctAnswer === 'boolean'
+        ? correctAnswer
+        : undefined;
 
-    const saVal =
-      typeof studentAnswer === 'object' && studentAnswer !== null && typeof (studentAnswer as any).value === 'boolean'
-        ? (studentAnswer as any).value
+    const saObj = studentAnswer !== null && typeof studentAnswer === 'object'
+      ? (studentAnswer as { value?: unknown })
+      : undefined;
+    const saVal = typeof saObj?.value === 'boolean'
+      ? saObj.value
+      : typeof studentAnswer === 'boolean'
+        ? studentAnswer
         : undefined;
 
     isCorrect = typeof caVal === 'boolean' && typeof saVal === 'boolean' && caVal === saVal;

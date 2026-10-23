@@ -24,7 +24,7 @@ for (let y = 2026; y >= 2000; y--) {
   YEARS.push(y);
 }
 
-const BASE_URL = 'https://awalshehada.netlify.app';
+const BASE_URL = 'https://awalalshehada.netlify.app';
 const OG_IMAGE_URL = `${BASE_URL}/og-image.png`;
 
 const SUBJECT_QUESTION_COUNTS: Record<string, number> = {

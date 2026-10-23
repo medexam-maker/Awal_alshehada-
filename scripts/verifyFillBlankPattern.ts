@@ -379,6 +379,38 @@ async function runFillBlankVerification() {
     assert.strictEqual(trainSnapshot.explanation, 'شرح منهجي جغرافي');
   });
 
+  runTest('4.4 Nested referenceAnswer, reference_answer, referenceAnswers, and reference_answers are scrubbed in standard simulator', () => {
+    const rawRowWithNestedRef = {
+      id: 'fb-104',
+      subject_id: 'geography',
+      question_type: QuestionType.FILL_BLANK,
+      content: {
+        textWithBlanks: 'نص {1}',
+        blanks: [
+          { id: '1', referenceAnswer: 'سري_1', reference_answer: 'سري_2' }
+        ],
+        referenceAnswers: { '1': 'سري_3' },
+        reference_answers: { '1': 'سري_4' }
+      },
+      correct_answer: { answers: { '1': 'سري_1' } },
+      primary_interaction_mode: 'free_text_blank',
+      marks: 5,
+      explanation: 'شرح'
+    };
+
+    const stdSim = createClientSnapshot(rawRowWithNestedRef, ExamMode.SIMULATOR, 1, false);
+    const snapContent = stdSim.content as any;
+    assert.strictEqual(snapContent.referenceAnswers, undefined);
+    assert.strictEqual(snapContent.reference_answers, undefined);
+    assert.strictEqual(snapContent.blanks[0].referenceAnswer, undefined);
+    assert.strictEqual(snapContent.blanks[0].reference_answer, undefined);
+
+    // But in weekly simulation, referenceAnswers is reconstructed specifically for self-assessment
+    const weeklySim = createClientSnapshot(rawRowWithNestedRef, ExamMode.SIMULATOR, 1, true);
+    const weeklyContent = weeklySim.content as any;
+    assert.strictEqual(weeklyContent.referenceAnswers['1'], 'سري_1');
+  });
+
   // =================================================================
   // مسار 5: عدم تأثر الأنماط السابقة (Non-Regression Suite)
   // =================================================================

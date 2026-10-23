@@ -103,8 +103,8 @@ export const ExamLandingPage: React.FC<ExamLandingPageProps> = ({
 
   const pageTitle = `امتحان ${subject.name_ar} ${year} - محاكي امتحان الشهادة السودانية | أول الشهادة`;
   const pageDescription = `خش جرب امتحان ${subject.name_ar} ${year} محاكي تجربة الامتحان الحقيقي، بتصحيح فوري وإجابة نموذجية بعد كل سؤال وشرح منهجي بدون تحميل PDF.`;
-  const canonicalUrl = `https://awalshehada.netlify.app/exams/${subject.slug}/${year}`;
-  const ogImageUrl = `https://awalshehada.netlify.app/og-image.png`;
+  const canonicalUrl = `https://awalalshehada.netlify.app/exams/${subject.slug}/${year}`;
+  const ogImageUrl = `https://awalalshehada.netlify.app/og-image.png`;
 
   // WhatsApp and Telegram share links
   const whatsappText = `لقيت محاكي امتحان ${subject.name_ar} ${year} بتصحيح فوري وإجابات نموذجية بدون تحميل PDF: ${canonicalUrl}`;
@@ -130,7 +130,7 @@ export const ExamLandingPage: React.FC<ExamLandingPageProps> = ({
     provider: {
       '@type': 'EducationalOrganization',
       name: 'أول الشهادة',
-      url: 'https://awalshehada.netlify.app',
+      url: 'https://awalalshehada.netlify.app',
     },
   };
 
@@ -142,13 +142,13 @@ export const ExamLandingPage: React.FC<ExamLandingPageProps> = ({
         '@type': 'ListItem',
         position: 1,
         name: 'الرئيسية',
-        item: 'https://awalshehada.netlify.app/',
+        item: 'https://awalalshehada.netlify.app/',
       },
       {
         '@type': 'ListItem',
         position: 2,
         name: subject.name_ar,
-        item: `https://awalshehada.netlify.app/exams/${subject.slug}`,
+        item: `https://awalalshehada.netlify.app/exams/${subject.slug}`,
       },
       {
         '@type': 'ListItem',

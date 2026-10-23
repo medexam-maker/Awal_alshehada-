@@ -24,11 +24,12 @@ export const MultipleChoiceRenderer: React.FC<MultipleChoiceProps> = ({
   isReadonly = false,
 }) => {
   const selectedId = answer?.selectedOptionId;
+  const options = Array.isArray(content?.options) ? content.options : [];
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3">
-        {content.options.map((option, idx) => {
+        {options.map((option, idx) => {
           const isSelected = selectedId === option.id;
           const letter = ARABIC_LETTERS[idx] || String(idx + 1);
 

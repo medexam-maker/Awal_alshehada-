@@ -22,7 +22,11 @@ const FORBIDDEN_KEYS = new Set([
     'canonicalAnswer',
     'canonical_answer',
     'isCorrect',
-    'is_correct'
+    'is_correct',
+    'referenceAnswer',
+    'reference_answer',
+    'referenceAnswers',
+    'reference_answers'
 ]);
 
 function deepScrubCorrectAnswers(obj: unknown): unknown {
@@ -60,11 +64,20 @@ export function createClientSnapshot(
     position: number,
     isWeeklySimulation: boolean = false
 ): Record<string, unknown> {
+    const rawContentObj = (row.content && typeof row.content === 'object') ? (row.content as Record<string, unknown>) : {};
+    const promptText = (typeof rawContentObj.prompt === 'string' && rawContentObj.prompt)
+        || (typeof rawContentObj.statement === 'string' && rawContentObj.statement)
+        || (typeof rawContentObj.textWithBlanks === 'string' && rawContentObj.textWithBlanks)
+        || '';
+
     const snap: Record<string, unknown> = {
         id: row.id,
+        type: row.question_type,
         questionType: row.question_type,
         primaryInteractionMode: row.primary_interaction_mode,
         marks: row.marks,
+        points: Number(row.marks),
+        prompt: promptText,
         position: position
     };
 
@@ -72,26 +85,39 @@ export function createClientSnapshot(
         snap.content = row.content;
         snap.correctAnswer = row.correct_answer;
         snap.explanation = row.explanation;
+        snap.explanationAr = row.explanation;
     } else {
         snap.content = deepScrubCorrectAnswers(row.content);
         // CRITICAL BOUNDARY: ONLY for FILL_BLANK in confirmed Weekly Simulation mode (Self-Assessment)
         // General simulations and other exam modes MUST NEVER expose reference answers
         if (row.question_type === 'fill_blank' && isWeeklySimulation) {
-            const rawContent = row.content as any;
-            const rawCa = row.correct_answer as any;
+            const rawContent = (row.content && typeof row.content === 'object') ? (row.content as Record<string, unknown>) : undefined;
+            const rawCa = (row.correct_answer && typeof row.correct_answer === 'object') ? (row.correct_answer as Record<string, unknown>) : undefined;
             const refMap: Record<string, string> = {};
             if (rawContent?.blanks && Array.isArray(rawContent.blanks)) {
                 for (const b of rawContent.blanks) {
-                    if (b.id && (b.correctValue || b.referenceAnswer)) {
-                        refMap[b.id] = b.correctValue || b.referenceAnswer;
+                    if (b && typeof b === 'object') {
+                        const item = b as Record<string, unknown>;
+                        const blankId = typeof item.id === 'string' ? item.id : undefined;
+                        const val = typeof item.correctValue === 'string' ? item.correctValue
+                            : typeof item.referenceAnswer === 'string' ? item.referenceAnswer
+                            : typeof item.reference_answer === 'string' ? item.reference_answer
+                            : undefined;
+                        if (blankId && val) {
+                            refMap[blankId] = val;
+                        }
                     }
                 }
             }
             if (rawCa?.answers && typeof rawCa.answers === 'object') {
-                Object.assign(refMap, rawCa.answers);
+                for (const [k, v] of Object.entries(rawCa.answers as Record<string, unknown>)) {
+                    if (typeof v === 'string') refMap[k] = v;
+                }
             }
             if (rawCa?.blanks && typeof rawCa.blanks === 'object') {
-                Object.assign(refMap, rawCa.blanks);
+                for (const [k, v] of Object.entries(rawCa.blanks as Record<string, unknown>)) {
+                    if (typeof v === 'string') refMap[k] = v;
+                }
             }
             if (typeof rawCa === 'object' && rawCa !== null && !rawCa.answers && !rawCa.blanks) {
                 for (const [k, v] of Object.entries(rawCa)) {
@@ -99,7 +125,7 @@ export function createClientSnapshot(
                 }
             }
             if (snap.content && typeof snap.content === 'object') {
-                (snap.content as any).referenceAnswers = refMap;
+                (snap.content as Record<string, unknown>).referenceAnswers = refMap;
             }
         }
     }

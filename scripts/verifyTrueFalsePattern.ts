@@ -281,6 +281,80 @@ async function runTrueFalseVerification() {
     assert.strictEqual(mcqWrong.obtainedMarks, 0);
   });
 
+  // =================================================================
+  // مسار 6: اختبارات القبول الشاملة لتوحيد عقد True/False
+  // =================================================================
+  console.log('\n--- [المسار 6]: اختبارات القبول الشاملة لتوحيد عقد True/False ---');
+
+  runTest('6.1 الإجابة المرجعية true وإجابة الطالب true تحتسب كاملة', () => {
+    // Both canonical object
+    const res1 = autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, { value: true }, 5);
+    assert.strictEqual(res1.obtainedMarks, 5);
+
+    // Bare boolean student answer supported
+    const res2 = autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, true, 5);
+    assert.strictEqual(res2.obtainedMarks, 5);
+  });
+
+  runTest('6.2 الإجابة المرجعية false وإجابة الطالب false تحتسب كاملة', () => {
+    // Both canonical object
+    const res1 = autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: false }, { value: false }, 5);
+    assert.strictEqual(res1.obtainedMarks, 5);
+
+    // Bare boolean student answer supported
+    const res2 = autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: false }, false, 5);
+    assert.strictEqual(res2.obtainedMarks, 5);
+  });
+
+  runTest('6.3 الإجابة المعاكسة للإجابة المرجعية تحتسب 0 درجات', () => {
+    const res1 = autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, { value: false }, 5);
+    assert.strictEqual(res1.obtainedMarks, 0);
+
+    const res2 = autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: false }, { value: true }, 5);
+    assert.strictEqual(res2.obtainedMarks, 0);
+  });
+
+  runTest('6.4 الإجابة الفارغة (null/undefined/empty) تحتسب 0 درجات بدقة', () => {
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, null, 5).obtainedMarks, 0);
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, undefined, 5).obtainedMarks, 0);
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, {}, 5).obtainedMarks, 0);
+  });
+
+  runTest('6.5 قيمة من نوع غير صحيح تحتسب 0 درجات بدقة', () => {
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, 'true', 5).obtainedMarks, 0);
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, 1, 5).obtainedMarks, 0);
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { value: true }, [true], 5).obtainedMarks, 0);
+  });
+
+  runTest('6.6 إجابة مرجعية مشوّهة لا تؤدي إلى احتساب درجات عن طريق الخطأ', () => {
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, { malformed: true }, { value: true }, 5).obtainedMarks, 0);
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, 'invalid', { value: true }, 5).obtainedMarks, 0);
+    assert.strictEqual(autoGrade(QuestionType.TRUE_FALSE, sampleTfContent, null, { value: true }, 5).obtainedMarks, 0);
+  });
+
+  runTest('6.7 تطبيع الإدخال الفردي والجماعي إلى { value: boolean } وتوافق Snapshot مع الواجهة', () => {
+    const rawSingleInput = true;
+    const normalizedSingle = typeof rawSingleInput === 'boolean' ? { value: rawSingleInput } : rawSingleInput;
+    assert.deepStrictEqual(normalizedSingle, { value: true });
+    assert.strictEqual(validateTrueFalseAnswer(normalizedSingle).valid, true);
+
+    const rawRow = {
+      id: 'tf-1',
+      question_type: QuestionType.TRUE_FALSE,
+      content: sampleTfContent,
+      correct_answer: normalizedSingle,
+      primary_interaction_mode: 'toggle_cards',
+      marks: 5,
+      explanation: 'توضيح',
+    };
+    const snap = createClientSnapshot(rawRow, 'simulator' as any, 1);
+    assert.strictEqual(snap.type, 'true_false');
+    assert.strictEqual(snap.questionType, 'true_false');
+    assert.strictEqual(snap.marks, 5);
+    assert.strictEqual(snap.points, 5);
+    assert.strictEqual(snap.prompt, sampleTfContent.prompt);
+  });
+
   console.log('\n-----------------------------------------------------------------');
   console.log(`Summary: ${passedTests}/${totalTests} tests passed successfully.`);
   console.log('True/False Pattern 02 verification completed with 100% pass rate.');

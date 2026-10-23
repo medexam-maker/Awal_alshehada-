@@ -13,7 +13,25 @@ export const ContentSchemas = {
     },
   },
   fill_blank: { type: 'object', required: ['textWithBlanks', 'blanks'] },
-  multiple_choice: { type: 'object', required: ['prompt', 'options'] },
+  multiple_choice: {
+    type: 'object',
+    required: ['prompt', 'options'],
+    properties: {
+      prompt: { type: 'string', minLength: 1 },
+      options: {
+        type: 'array',
+        minItems: 2,
+        items: {
+          type: 'object',
+          required: ['id', 'text'],
+          properties: {
+            id: { type: 'string', minLength: 1 },
+            text: { type: 'string', minLength: 1 },
+          },
+        },
+      },
+    },
+  },
   matching: { type: 'object', required: ['prompt', 'listA', 'listB'] },
   short_essay: { type: 'object', required: ['prompt'] },
   long_essay: { type: 'object', required: ['prompt'] },
@@ -76,6 +94,26 @@ export function validateQuestionContent(type: keyof typeof ContentSchemas, conte
   if (!valid) {
     return { valid: false, errors: validate.errors || [] };
   }
+
+  // Deep validation for multiple choice options: unique option IDs
+  if (type === 'multiple_choice' && content && typeof content === 'object') {
+    const rawContent = content as { options?: Array<{ id?: unknown }> };
+    if (Array.isArray(rawContent.options)) {
+      const seenIds = new Set<string>();
+      for (const opt of rawContent.options) {
+        if (opt && typeof opt.id === 'string') {
+          if (seenIds.has(opt.id)) {
+            return {
+              valid: false,
+              errors: [`Duplicate option ID '${opt.id}' in multiple choice options`],
+            };
+          }
+          seenIds.add(opt.id);
+        }
+      }
+    }
+  }
+
   return { valid: true, errors: [] };
 }
 
@@ -101,17 +139,24 @@ export function validateMcqAnswer(answer: unknown, content?: unknown): Validatio
   if (!baseValidation.valid) {
     return baseValidation;
   }
-  if (content && typeof content === 'object') {
-    const rawContent = content as { options?: Array<{ id: string }> };
-    if (Array.isArray(rawContent.options)) {
-      const selectedId = (answer as { selectedOptionId: string }).selectedOptionId;
-      const exists = rawContent.options.some((opt) => opt && opt.id === selectedId);
-      if (!exists) {
-        return {
-          valid: false,
-          errors: [`Referenced option ID '${selectedId}' does not exist in question options`],
-        };
-      }
+  if (content !== undefined && content !== null) {
+    if (typeof content !== 'object') {
+      return { valid: false, errors: ['MCQ question content must be an object'] };
+    }
+    const rawContent = content as { options?: Array<{ id?: string }> };
+    if (!Array.isArray(rawContent.options) || rawContent.options.length < 2) {
+      return {
+        valid: false,
+        errors: ['MCQ question content must contain an options array with at least 2 choices'],
+      };
+    }
+    const selectedId = (answer as { selectedOptionId: string }).selectedOptionId;
+    const exists = rawContent.options.some((opt) => opt && opt.id === selectedId);
+    if (!exists) {
+      return {
+        valid: false,
+        errors: [`Referenced option ID '${selectedId}' does not exist in question options`],
+      };
     }
   }
   return { valid: true, errors: [] };

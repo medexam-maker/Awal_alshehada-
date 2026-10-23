@@ -5,4 +5,4 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /exam_attempt
 
-Sitemap: https://awalshehada.netlify.app/sitemap.xml
+Sitemap: https://awalalshehada.netlify.app/sitemap.xml

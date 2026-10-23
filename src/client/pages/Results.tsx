@@ -296,7 +296,7 @@ export const Results: React.FC<ResultsProps> = ({
                                 : 'bg-rose-50 text-rose-800'
                             }`}
                           >
-                            {item.awardedPoints} / {item.maxPoints} درجة
+                            {item.awardedPoints ?? item.obtainedMarks ?? 0} / {item.maxPoints ?? item.maxMarks} درجة
                           </span>
                           {Boolean(item.selfEvaluated || item.isSelfAssessed || item.studentAnswer?.selfEvaluations || (item.selfEvaluations && Object.keys(item.selfEvaluations).length > 0)) && (
                             <span className="text-[10px] bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold">
@@ -305,7 +305,7 @@ export const Results: React.FC<ResultsProps> = ({
                           )}
                         </div>
                         <p className="text-sm text-slate-700 font-medium line-clamp-1 mt-0.5">
-                          {item.prompt}
+                          {item.prompt || item.text || item.statement || 'نص السؤال'}
                         </p>
                       </div>
                     </div>
@@ -318,7 +318,7 @@ export const Results: React.FC<ResultsProps> = ({
                   {isExpanded && (
                     <div className="pt-4 border-t border-slate-100 space-y-4 text-xs md:text-sm">
                       <div className="p-4 bg-slate-50 rounded-2xl text-slate-900 font-semibold leading-relaxed">
-                        {item.prompt}
+                        {item.prompt || item.text || item.statement || 'نص السؤال'}
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -337,13 +337,13 @@ export const Results: React.FC<ResultsProps> = ({
                         </div>
                       </div>
 
-                      {item.explanationAr && (
+                      {(item.explanationAr || item.explanation) && (
                         <div className="p-4 bg-teal-50/70 border border-teal-200/80 rounded-2xl text-teal-950 space-y-1">
                           <div className="font-bold flex items-center gap-1.5 text-teal-900 text-xs">
                             <HelpCircle className="w-4 h-4 text-teal-700" />
                             <span>الشرح والتوجيه المنهجي:</span>
                           </div>
-                          <p className="leading-relaxed text-xs md:text-sm">{item.explanationAr}</p>
+                          <p className="leading-relaxed text-xs md:text-sm">{item.explanationAr || item.explanation}</p>
                         </div>
                       )}
                     </div>

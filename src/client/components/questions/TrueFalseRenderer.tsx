@@ -28,11 +28,13 @@ export const TrueFalseRenderer: React.FC<TrueFalseProps> = ({
         ? answer.value
         : undefined;
 
-  const statementText = content?.statement || content?.prompt || '';
-  const promptInstruction =
-    content?.prompt && content?.statement && content.prompt !== content.statement
-      ? content.prompt
-      : null;
+  // Prevent duplicate text rendering: parent ExamAttempt/ExamView already renders question.prompt
+  const statementText =
+    content?.statement && content.statement !== content?.prompt
+      ? content.statement
+      : !content?.prompt
+        ? content?.statement || ''
+        : '';
 
   const handleSelect = (val: boolean) => {
     if (isReadonly) return;
@@ -44,12 +46,6 @@ export const TrueFalseRenderer: React.FC<TrueFalseProps> = ({
 
   return (
     <div className="space-y-6">
-      {promptInstruction && (
-        <div className="text-sm font-semibold text-slate-700 leading-relaxed">
-          {promptInstruction}
-        </div>
-      )}
-
       {statementText && (
         <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-lg leading-relaxed font-semibold shadow-xs">
           {statementText}

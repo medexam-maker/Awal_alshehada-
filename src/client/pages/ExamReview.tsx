@@ -319,13 +319,13 @@ export const ExamReview: React.FC<ExamReviewProps> = ({
                   </div>
 
                   {/* Pedagogical Explanation - only show if grading is finalized */}
-                  {!pending && item.explanationAr && (
+                  {!pending && (item.explanationAr || item.explanation) && (
                     <div className="p-4 bg-teal-50/70 border border-teal-200/80 rounded-2xl text-teal-950 space-y-1">
                       <div className="font-bold flex items-center gap-1.5 text-teal-900 text-xs">
                         <HelpCircle className="w-4 h-4 text-teal-700" />
                         <span>الشرح والتوجيه المنهجي:</span>
                       </div>
-                      <p className="leading-relaxed text-xs md:text-sm">{item.explanationAr}</p>
+                      <p className="leading-relaxed text-xs md:text-sm">{item.explanationAr || item.explanation}</p>
                     </div>
                   )}
                 </div>

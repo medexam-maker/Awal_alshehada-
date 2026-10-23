@@ -38,11 +38,14 @@ export {
 export interface QuestionDispatcherProps {
   question: {
     id: string;
-    type: string;
-    points: number;
-    prompt: string;
+    type?: string;
+    questionType?: string;
+    points?: number;
+    marks?: number;
+    prompt?: string;
     content: any;
     correctAnswer?: any;
+    explanation?: string;
     explanationAr?: string;
   };
   answer: any;
@@ -63,8 +66,9 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
   isWeeklySimulation = false,
 }) => {
   const content = question.content || {};
+  const qType = question.questionType || question.type || '';
 
-  switch (question.type) {
+  switch (qType) {
     case QuestionType.TRUE_FALSE:
       return <TrueFalseRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
 
@@ -124,7 +128,7 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
     default:
       return (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-sm">
-          نوع السؤال غير معروف ({question.type}). يرجى كتابة الإجابة في الحقل أدناه:
+          نوع السؤال غير معروف ({qType}). يرجى كتابة الإجابة في الحقل أدناه:
           <textarea
             value={typeof answer === 'string' ? answer : JSON.stringify(answer || '')}
             onChange={(e) => onChange(e.target.value)}
