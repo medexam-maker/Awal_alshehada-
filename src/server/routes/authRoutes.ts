@@ -15,10 +15,57 @@ import {
   validateRefreshPayload,
   validateChangePasswordPayload,
   validateRecoverPasswordChangePayload,
+  validateForgotPasswordPayload,
+  validateResetPasswordPayload,
 } from '../../shared/validation/apiSchemas';
 import { userRepository, UserEmailConflictError } from '../repositories/userRepository';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { pool } from '../db';
+import {
+  sendPasswordResetEmail,
+  isSmtpConfigured,
+  maskEmail,
+} from '../lib/emailService';
+
+// In-memory rate limiting map for forgot-password: max 5 requests per 15 minutes per IP/email
+interface RateLimitRecord {
+  timestamps: number[];
+}
+const forgotPasswordRateLimitMap = new Map<string, RateLimitRecord>();
+
+function checkForgotPasswordRateLimit(key: string): boolean {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const limit = 5;
+
+  const record = forgotPasswordRateLimitMap.get(key) || { timestamps: [] };
+  record.timestamps = record.timestamps.filter((ts) => now - ts < windowMs);
+
+  if (record.timestamps.length >= limit) {
+    return false;
+  }
+
+  record.timestamps.push(now);
+  forgotPasswordRateLimitMap.set(key, record);
+  return true;
+}
+
+// In-memory brute-force attempt tracker for password reset codes (max 5 failed attempts per user)
+const failedResetAttemptsMap = new Map<string, number>();
+
+function getFailedResetAttempts(userId: string): number {
+  return failedResetAttemptsMap.get(userId) || 0;
+}
+
+function recordFailedResetAttempt(userId: string): number {
+  const current = (failedResetAttemptsMap.get(userId) || 0) + 1;
+  failedResetAttemptsMap.set(userId, current);
+  return current;
+}
+
+function clearFailedResetAttempts(userId: string): void {
+  failedResetAttemptsMap.delete(userId);
+}
 
 const router = Router();
 
@@ -267,10 +314,18 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       data: {
         accessToken,
         refreshToken: rotated.newRefreshToken,
+        user: {
+          id: rotated.userId,
+          email: rotated.userEmail,
+          fullName: rotated.userFullName || null,
+          role: rotated.userRole,
+          status: 'active',
+        },
       },
       message: 'Tokens refreshed successfully',
       timestamp: new Date().toISOString(),
     });
+
   } catch (error: unknown) {
     if (error instanceof Error && error.message.startsWith('ACCOUNT_')) {
       res.status(403).json({
@@ -611,4 +666,319 @@ router.post('/change-password/recover', async (req: Request, res: Response): Pro
   }
 });
 
+/**
+ * GET /api/auth/me
+ * Returns the currently authenticated user's profile verified by server.
+ */
+router.get('/me', requireAuth, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const user = await userRepository.findById(req.user!.id);
+    if (!user || user.status !== 'active') {
+      res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'User not found or inactive', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    res.status(200).json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          role: user.role,
+          status: user.status,
+        },
+      },
+      message: '',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[auth/me] Internal error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password
+ * Initiates secure password recovery.
+ * Generates high-entropy 6-digit recovery code and logs/stores in auth_operation_log (15m expiry).
+ * Sends password reset email via Gmail SMTP (awalalshehada2027@gmail.com).
+ * Enforces rate limiting and prevents account enumeration (C7 §4.4, §19).
+ */
+router.post('/forgot-password', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const validation = validateForgotPasswordPayload(req.body);
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid payload', details: validation.errors },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const { email } = req.body;
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+
+    // Rate limiting: 5 requests per 15 minutes per IP + normalized email
+    const rateLimitKey = `${clientIp}:${normalizedEmail}`;
+    if (!checkForgotPasswordRateLimit(rateLimitKey)) {
+      res.status(429).json({
+        success: false,
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: 'تم تجاوز عدد المحاولات المسموح بها. يرجى الانتظار بضع دقائق قبل المحاولة مجدداً.',
+          details: {},
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const user = await userRepository.findByEmail(normalizedEmail);
+    let devCode: string | undefined;
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (user && user.status === 'active') {
+      const resetCode = crypto.randomInt(100000, 999999).toString();
+      const codeHash = hashToken(resetCode);
+
+      await pool.query(
+        `INSERT INTO auth_operation_log (
+           user_id, operation_id, operation_type, recovery_secret_hash, status, expires_at, created_at
+         ) VALUES ($1, 'PASSWORD_RESET', 'PASSWORD_RESET', $2, 'PENDING', NOW() + INTERVAL '15 minutes', NOW())
+         ON CONFLICT (user_id, operation_id)
+         DO UPDATE SET recovery_secret_hash = $2, status = 'PENDING', expires_at = NOW() + INTERVAL '15 minutes', created_at = NOW()`,
+        [user.id, codeHash]
+      );
+
+      // Reset any failed attempts counter on fresh code generation
+      clearFailedResetAttempts(user.id);
+
+      // Attempt sending email via Gmail SMTP
+      const emailResult = await sendPasswordResetEmail({
+        toEmail: user.email,
+        resetCode,
+        recipientName: user.fullName,
+      });
+
+      // Strict production privacy invariant: NEVER return resetCode in production responses or production logs
+      if (!isProduction && !emailResult.sent) {
+        devCode = resetCode;
+      }
+    }
+
+    // Generic response prevents account enumeration (C7 §4.4, §19)
+    res.status(200).json({
+      success: true,
+      data: {
+        devCode,
+        emailConfigured: isSmtpConfigured(),
+      },
+      message: 'إذا كان البريد الإلكتروني مسجلاً لدينا، فستصلك رسالة تحتوي على رمز استعادة كلمة المرور.',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: unknown) {
+    console.error('[auth/forgot-password] Internal error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Completes password reset with verification code, updates password (Argon2id),
+ * increments token_version (revoking all active sessions), and marks operation committed.
+ * Includes brute-force protection (max 5 failed attempts before code revocation).
+ */
+router.post('/reset-password', async (req: Request, res: Response): Promise<void> => {
+  const client = await pool.connect();
+  try {
+    const validation = validateResetPasswordPayload(req.body);
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid payload', details: validation.errors },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const { email, resetCode, newPassword } = req.body;
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    await client.query('BEGIN');
+
+    const userRes = await client.query<{ id: string; status: string }>(
+      `SELECT id, status FROM users WHERE email = $1 FOR UPDATE`,
+      [normalizedEmail]
+    );
+
+    if (userRes.rows.length === 0 || userRes.rows[0].status !== 'active') {
+      await client.query('ROLLBACK');
+      res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'رمز التحقق غير صالح أو منتهي الصلاحية.', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const userId = userRes.rows[0].id;
+
+    // Check brute-force attempts on this user's current code
+    const currentFailedAttempts = getFailedResetAttempts(userId);
+    if (currentFailedAttempts >= 5) {
+      await client.query(
+        `UPDATE auth_operation_log SET status = 'REVOKED'
+         WHERE user_id = $1 AND operation_id = 'PASSWORD_RESET' AND status = 'PENDING'`,
+        [userId]
+      );
+      await client.query('COMMIT');
+      res.status(401).json({
+        success: false,
+        error: {
+          code: 'TOO_MANY_FAILED_ATTEMPTS',
+          message: 'تم تجاوز الحد الأقصى للمحاولات الخاطئة (5 محاولات). تم إبطال الرمز لأسباب أمنية، يرجى طلب رمز جديد.',
+          details: {},
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const opRes = await client.query<{ id: string; recovery_secret_hash: string; expires_at: Date | string; status: string }>(
+      `SELECT id, recovery_secret_hash, expires_at, status
+       FROM auth_operation_log
+       WHERE user_id = $1 AND operation_id = 'PASSWORD_RESET' AND operation_type = 'PASSWORD_RESET'
+       FOR UPDATE`,
+      [userId]
+    );
+
+    if (opRes.rows.length === 0 || opRes.rows[0].status !== 'PENDING') {
+      await client.query('ROLLBACK');
+      res.status(401).json({
+        success: false,
+        error: { code: 'AUTH_REQUIRED', message: 'رمز التحقق غير صالح أو تم استخدامه مسبقاً.', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const opRecord = opRes.rows[0];
+
+    // Expiration check (15 minutes window)
+    if (new Date(opRecord.expires_at) <= new Date()) {
+      await client.query(`UPDATE auth_operation_log SET status = 'EXPIRED' WHERE id = $1`, [opRecord.id]);
+      await client.query('COMMIT');
+      clearFailedResetAttempts(userId);
+      res.status(410).json({
+        success: false,
+        error: { code: 'RECOVERY_EXPIRED', message: 'انتهت صلاحية رمز الاستعادة (15 دقيقة). يرجى طلب رمز جديد.', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const providedHash = hashToken(String(resetCode).trim());
+    const expectedHashBuf = Buffer.from(opRecord.recovery_secret_hash, 'utf8');
+    const providedHashBuf = Buffer.from(providedHash, 'utf8');
+
+    const isMatch =
+      expectedHashBuf.length === providedHashBuf.length &&
+      crypto.timingSafeEqual(expectedHashBuf, providedHashBuf);
+
+    if (!isMatch) {
+      const attempts = recordFailedResetAttempt(userId);
+      if (attempts >= 5) {
+        await client.query(`UPDATE auth_operation_log SET status = 'REVOKED' WHERE id = $1`, [opRecord.id]);
+        await client.query('COMMIT');
+        res.status(401).json({
+          success: false,
+          error: {
+            code: 'TOO_MANY_FAILED_ATTEMPTS',
+            message: 'تم تجاوز الحد الأقصى للمحاولات الخاطئة (5 محاولات). تم إبطال رمز التحقق، يرجى طلب رمز جديد.',
+            details: {},
+          },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+      await client.query('ROLLBACK');
+      res.status(401).json({
+        success: false,
+        error: {
+          code: 'AUTH_REQUIRED',
+          message: `رمز التحقق غير صحيح. تبقى لك ${5 - attempts} محاولات.`,
+          details: { remainingAttempts: 5 - attempts },
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Success: Clear failed attempts
+    clearFailedResetAttempts(userId);
+
+    const newPasswordHash = await hashPassword(newPassword);
+
+    await client.query(
+      `UPDATE users
+       SET password_hash = $1,
+           token_version = COALESCE(token_version, 1) + 1,
+           updated_at = NOW()
+       WHERE id = $2`,
+      [newPasswordHash, userId]
+    );
+
+    await client.query(
+      `UPDATE refresh_tokens
+       SET revoked_at = NOW()
+       WHERE user_id = $1 AND revoked_at IS NULL`,
+      [userId]
+    );
+
+    await client.query(
+      `DELETE FROM refresh_replay_buffer WHERE user_id = $1`,
+      [userId]
+    );
+
+    await client.query(
+      `UPDATE auth_operation_log SET status = 'COMMITTED' WHERE id = $1`,
+      [opRecord.id]
+    );
+
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      data: { reset: true },
+      message: 'تم إعادة تعيين كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: unknown) {
+    await client.query('ROLLBACK');
+    console.error('[auth/reset-password] Internal error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
+

@@ -96,11 +96,33 @@ const recoverPasswordChangeSchema = {
   additionalProperties: false,
 };
 
+const forgotPasswordSchema = {
+  type: 'object',
+  required: ['email'],
+  properties: {
+    email: { type: 'string', pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
+  },
+  additionalProperties: false,
+};
+
+const resetPasswordSchema = {
+  type: 'object',
+  required: ['email', 'resetCode', 'newPassword'],
+  properties: {
+    email: { type: 'string', pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
+    resetCode: { type: 'string', pattern: '^[0-9]{6}$' },
+    newPassword: { type: 'string', minLength: 8 },
+  },
+  additionalProperties: false,
+};
+
 const validateRegister = ajv.compile(registerSchema);
 const validateLogin = ajv.compile(loginSchema);
 const validateRefresh = ajv.compile(refreshSchema);
 const validateChangePassword = ajv.compile(changePasswordSchema);
 const validateRecoverPasswordChange = ajv.compile(recoverPasswordChangeSchema);
+const validateForgotPassword = ajv.compile(forgotPasswordSchema);
+const validateResetPassword = ajv.compile(resetPasswordSchema);
 
 export function validateRegisterPayload(payload: unknown): ValidationResult {
   const valid = validateRegister(payload);
@@ -141,3 +163,20 @@ export function validateRecoverPasswordChangePayload(payload: unknown): Validati
   }
   return { valid: true, errors: [] };
 }
+
+export function validateForgotPasswordPayload(payload: unknown): ValidationResult {
+  const valid = validateForgotPassword(payload);
+  if (!valid) {
+    return { valid: false, errors: validateForgotPassword.errors || [] };
+  }
+  return { valid: true, errors: [] };
+}
+
+export function validateResetPasswordPayload(payload: unknown): ValidationResult {
+  const valid = validateResetPassword(payload);
+  if (!valid) {
+    return { valid: false, errors: validateResetPassword.errors || [] };
+  }
+  return { valid: true, errors: [] };
+}
+

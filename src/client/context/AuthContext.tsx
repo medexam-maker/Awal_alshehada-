@@ -10,6 +10,8 @@ interface AuthContextType {
   loginAsGuest: () => void;
   register: (payload: { email: string; password: string; fullName?: string; phone?: string }) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; message?: string; devCode?: string; emailConfigured?: boolean; error?: string }>;
+  resetPassword: (payload: { email: string; resetCode: string; newPassword: string }) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -29,27 +31,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Restore session silently on mount using refresh token or saved profile
+  // Restore session strictly through server validation (PD-003)
+  // NEVER trust localStorage or local files as proof of authentication
   useEffect(() => {
     let isMounted = true;
     async function restoreSession() {
       try {
-        const savedUser = localStorage.getItem('fc_user_profile');
-        if (savedUser) {
-          const parsed = JSON.parse(savedUser);
-          if (isMounted) setUser(parsed);
+        const refreshToken = apiClient.getRefreshToken();
+        if (!refreshToken) {
+          apiClient.clearAuth();
+          if (isMounted) setUser(null);
+          return;
         }
 
-        const refreshToken = apiClient.getRefreshToken();
-        if (refreshToken) {
-          try {
-            await apiClient.refreshToken();
-          } catch {
-            // ignore network/offline issues
+        const verifiedUser = await apiClient.validateSession();
+        if (isMounted) {
+          if (verifiedUser) {
+            setUser(verifiedUser);
+            try {
+              localStorage.setItem('fc_user_profile', JSON.stringify(verifiedUser));
+            } catch {
+              // ignore
+            }
+          } else {
+            apiClient.clearAuth();
+            setUser(null);
           }
         }
       } catch {
-        // Storage unreadable
+        apiClient.clearAuth();
+        if (isMounted) setUser(null);
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -68,11 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     setUser(DEMO_STUDENT);
-    try {
-      localStorage.setItem('fc_user_profile', JSON.stringify(DEMO_STUDENT));
-    } catch {
-      // ignore
-    }
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -86,11 +92,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: normalizedEmail, password }),
-      }).catch(() => null);
+      });
 
       if (res && res.success && res.data) {
         apiClient.setAccessToken(res.data.accessToken);
         apiClient.setRefreshToken(res.data.refreshToken);
+        apiClient.setVerifiedUser(res.data.user);
         setUser(res.data.user);
         try {
           localStorage.setItem('fc_user_profile', JSON.stringify(res.data.user));
@@ -100,36 +107,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: true };
       }
 
-      // Check locally registered accounts in preview/offline mode
-      try {
-        const localAccounts = JSON.parse(localStorage.getItem('fc_local_students') || '{}');
-        const account = localAccounts[normalizedEmail];
-        if (account && account.password === password) {
-          setUser(account.user);
-          localStorage.setItem('fc_user_profile', JSON.stringify(account.user));
-          return { success: true };
-        }
-      } catch {}
-
-      // If server explicitly rejected valid request with credentials error
-      if (res && !res.success && res.error?.code === 'INVALID_CREDENTIALS') {
-        return {
-          success: false,
-          error: 'كلمة المرور أو البريد الإلكتروني غير صحيح.',
-        };
-      }
-
-      // If backend was unreachable (e.g. database offline or proxy down in preview)
-      const offlineUser: UserProfile = {
-        id: `std_${Date.now()}`,
-        email: normalizedEmail,
-        fullName: 'طالب منصة أول الشهادة',
-        role: 'student',
-        status: 'active',
+      // Authoritative failure: never create mock/offline accounts on server errors
+      return {
+        success: false,
+        error: res?.error?.message || 'كلمة المرور أو البريد الإلكتروني غير صحيح.',
       };
-      setUser(offlineUser);
-      localStorage.setItem('fc_user_profile', JSON.stringify(offlineUser));
-      return { success: true };
     } catch {
       return {
         success: false,
@@ -151,12 +133,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           refreshToken: string;
         }>('/api/auth/register', {
           method: 'POST',
-          body: JSON.stringify(payload),
-        }).catch(() => null);
+          body: JSON.stringify({
+            ...payload,
+            email: normalizedEmail,
+          }),
+        });
 
         if (res && res.success && res.data) {
           apiClient.setAccessToken(res.data.accessToken);
           apiClient.setRefreshToken(res.data.refreshToken);
+          apiClient.setVerifiedUser(res.data.user);
           setUser(res.data.user);
           try {
             localStorage.setItem('fc_user_profile', JSON.stringify(res.data.user));
@@ -166,42 +152,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return { success: true };
         }
 
-        // Resilient Fallback for Development/Preview & Offline:
-        // If remote database is unavailable or proxy fails, create a valid local student profile
-        // so the student is never locked out of testing and using the platform
-        const localUser: UserProfile = {
-          id: `std_${Date.now()}`,
-          email: normalizedEmail,
-          fullName: payload.fullName?.trim() || 'طالب منصة أول الشهادة',
-          role: 'student',
-          status: 'active',
+        // Authoritative failure: never create mock/offline accounts on server errors
+        return {
+          success: false,
+          error: res?.error?.message || 'فشل إنشاء الحساب.',
         };
-        setUser(localUser);
-        try {
-          localStorage.setItem('fc_user_profile', JSON.stringify(localUser));
-          const localAccounts = JSON.parse(localStorage.getItem('fc_local_students') || '{}');
-          localAccounts[normalizedEmail] = {
-            user: localUser,
-            password: payload.password,
-          };
-          localStorage.setItem('fc_local_students', JSON.stringify(localAccounts));
-        } catch {
-          // ignore
-        }
-        return { success: true };
       } catch {
-        const fallbackUser: UserProfile = {
-          id: `std_${Date.now()}`,
-          email: normalizedEmail,
-          fullName: payload.fullName?.trim() || 'طالب جديد',
-          role: 'student',
-          status: 'active',
+        return {
+          success: false,
+          error: 'تعذر الاتصال بخادم المصادقة.',
         };
-        setUser(fallbackUser);
-        try {
-          localStorage.setItem('fc_user_profile', JSON.stringify(fallbackUser));
-        } catch {}
-        return { success: true };
       } finally {
         setIsLoading(false);
       }
@@ -221,15 +181,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } finally {
       apiClient.clearAuth();
-      try {
-        localStorage.removeItem('fc_user_profile');
-      } catch {
-        // ignore
-      }
       setUser(null);
       setIsLoading(false);
     }
   }, []);
+
+  const forgotPassword = useCallback(async (email: string) => {
+    try {
+      const res = await apiClient.request<{
+        devCode?: string;
+        emailConfigured: boolean;
+      }>('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      if (res && res.success) {
+        return {
+          success: true,
+          message: res.message || 'إذا كان البريد الإلكتروني مسجلاً لدينا، فقد تم تجهيز رمز استعادة كلمة المرور.',
+          devCode: res.data?.devCode,
+          emailConfigured: res.data?.emailConfigured,
+        };
+      }
+      return {
+        success: false,
+        error: res?.error?.message || 'فشل إرسال طلب استعادة كلمة المرور.',
+      };
+    } catch {
+      return {
+        success: false,
+        error: 'تعذر الاتصال بالخادم.',
+      };
+    }
+  }, []);
+
+  const resetPassword = useCallback(
+    async (payload: { email: string; resetCode: string; newPassword: string }) => {
+      try {
+        const res = await apiClient.request<{ reset: boolean }>('/api/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: payload.email.trim().toLowerCase(),
+            resetCode: payload.resetCode.trim(),
+            newPassword: payload.newPassword,
+          }),
+        });
+
+        if (res && res.success) {
+          return {
+            success: true,
+            message: res.message || 'تم إعادة تعيين كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.',
+          };
+        }
+        return {
+          success: false,
+          error: res?.error?.message || 'فشل إعادة تعيين كلمة المرور.',
+        };
+      } catch {
+        return {
+          success: false,
+          error: 'تعذر الاتصال بالخادم.',
+        };
+      }
+    },
+    []
+  );
 
   return (
     <AuthContext.Provider
@@ -242,6 +259,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginAsGuest,
         register,
         logout,
+        forgotPassword,
+        resetPassword,
       }}
     >
       {children}

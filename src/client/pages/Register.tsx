@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { GraduationCap, Lock, Mail, User, Phone, ArrowLeft, AlertCircle } from 'lucide-react';
+import { GraduationCap, Lock, Mail, User, Phone, ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 interface RegisterProps {
   onGoToLogin: () => void;
@@ -10,6 +10,7 @@ export const Register: React.FC<RegisterProps> = ({ onGoToLogin }) => {
   const { register, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -108,14 +109,22 @@ export const Register: React.FC<RegisterProps> = ({ onGoToLogin }) => {
             <div className="relative">
               <Lock className="w-5 h-5 text-slate-400 absolute right-3 top-3" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
                 minLength={8}
-                className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                className="absolute left-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 

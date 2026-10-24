@@ -172,8 +172,10 @@ export interface RotateResult {
   userId: string;
   userEmail: string;
   userRole: string;
+  userFullName?: string | null;
   userTokenVersion: number;
 }
+
 
 /**
  * Validates an existing refresh token, revokes it, and issues a new refresh token (token rotation).
@@ -208,12 +210,13 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
 
     // Step 2: HIERARCHICAL LOCK ORDER — Lock the `users` row FIRST
     const userRes = await client.query(
-      `SELECT id, status, token_version, email, role
+      `SELECT id, status, token_version, email, role, full_name
        FROM users
        WHERE id = $1
        FOR UPDATE`,
       [initialToken.user_id]
     );
+
 
     if (userRes.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -282,8 +285,10 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
               userId: userRow.id,
               userEmail: userRow.email,
               userRole: userRow.role,
+              userFullName: userRow.full_name,
               userTokenVersion: userRow.token_version ?? 1,
             };
+
           } catch (decErr) {
             console.error('[rotateRefreshToken] Replay buffer decryption failed (fail-closed):', decErr);
             await client.query('ROLLBACK');
@@ -388,8 +393,10 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
       userId: userRow.id,
       userEmail: userRow.email,
       userRole: userRow.role,
+      userFullName: userRow.full_name,
       userTokenVersion: userRow.token_version ?? 1,
     };
+
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

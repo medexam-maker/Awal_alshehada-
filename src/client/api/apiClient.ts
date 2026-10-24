@@ -27,6 +27,7 @@ export interface UserProfile {
 
 class ApiClient {
   private accessToken: string | null = null;
+  private lastVerifiedUser: UserProfile | null = null;
   private isRefreshing = false;
   private refreshPromise: Promise<string | null> | null = null;
 
@@ -65,7 +66,21 @@ class ApiClient {
 
   public clearAuth() {
     this.accessToken = null;
+    this.lastVerifiedUser = null;
     this.setRefreshToken(null);
+    try {
+      localStorage.removeItem('fc_user_profile');
+    } catch {
+      // ignore
+    }
+  }
+
+  public getVerifiedUser(): UserProfile | null {
+    return this.lastVerifiedUser;
+  }
+
+  public setVerifiedUser(user: UserProfile | null) {
+    this.lastVerifiedUser = user;
   }
 
   /**
@@ -92,11 +107,14 @@ class ApiClient {
           body: JSON.stringify({ refreshToken: currentRefreshToken }),
         });
 
-        const json: ApiResponse<{ accessToken: string; refreshToken: string }> = await response.json();
+        const json: ApiResponse<{ accessToken: string; refreshToken: string; user?: UserProfile }> = await response.json();
 
         if (response.ok && json.success && json.data) {
           this.setAccessToken(json.data.accessToken);
           this.setRefreshToken(json.data.refreshToken);
+          if (json.data.user) {
+            this.lastVerifiedUser = json.data.user;
+          }
           return json.data.accessToken;
         } else {
           this.clearAuth();
@@ -112,6 +130,31 @@ class ApiClient {
     })();
 
     return this.refreshPromise;
+  }
+
+  /**
+   * Authoritatively restores and validates the active session with the backend server.
+   * Never relies on localStorage alone as proof of authentication.
+   */
+  public async validateSession(): Promise<UserProfile | null> {
+    const token = await this.refreshToken();
+    if (!token) {
+      this.clearAuth();
+      return null;
+    }
+
+    if (this.lastVerifiedUser) {
+      return this.lastVerifiedUser;
+    }
+
+    const meRes = await this.request<{ user: UserProfile }>('/api/auth/me');
+    if (meRes.success && meRes.data?.user) {
+      this.lastVerifiedUser = meRes.data.user;
+      return meRes.data.user;
+    }
+
+    this.clearAuth();
+    return null;
   }
 
   /**
