@@ -58,13 +58,13 @@ async function runGmailSmtpVerification() {
   // Test 3: Arabic Email Template Construction
   // -------------------------------------------------------------
   console.log('[Test 3] Verifying Arabic HTML & Plaintext Email Construction...');
-  const sampleCode = '654321';
+  const sampleCode = '6543';
   const sampleName = 'أحمد عثمان';
 
   const html = buildResetEmailHtml(sampleCode, sampleName);
   assert(html.includes('dir="rtl"'), 'HTML must declare dir="rtl" for Arabic layout');
   assert(html.includes('أحمد عثمان'), 'HTML must include recipient name in greeting');
-  assert(html.includes(sampleCode), 'HTML must contain the 6-digit code');
+  assert(html.includes(sampleCode), 'HTML must contain the 4-digit code');
   assert(html.includes('صالح لمدة 15 دقيقة فقط'), 'HTML must indicate 15-minute expiration');
   assert(html.includes('لا تشارك هذا الرمز مطلقاً مع أي شخص'), 'HTML must include security warning');
   assert(html.includes('منصة أول الشهادة'), 'HTML must include platform branding');
@@ -88,7 +88,7 @@ async function runGmailSmtpVerification() {
 
   const dispatchResult = await sendPasswordResetEmail({
     toEmail: 'test-recipient@example.com',
-    resetCode: '112233',
+    resetCode: '1122',
   });
 
   assert.strictEqual(dispatchResult.sent, false, 'Dispatch must return sent: false when not configured');
@@ -104,7 +104,7 @@ async function runGmailSmtpVerification() {
   // Test 5: Brute-Force & Constant-Time Protection
   // -------------------------------------------------------------
   console.log('[Test 5] Verifying Brute-Force and Constant-Time Equality Simulation...');
-  const expectedCode = '482910';
+  const expectedCode = '4829';
   const expectedHash = hashToken(expectedCode);
 
   // Correct code
@@ -117,7 +117,7 @@ async function runGmailSmtpVerification() {
   let failedAttempts = 0;
   const maxAttempts = 5;
   for (let i = 1; i <= 6; i++) {
-    const wrongCode = `00000${i}`;
+    const wrongCode = `000${i}`;
     const wrongHash = hashToken(wrongCode);
     const bufWrong = Buffer.from(wrongHash, 'utf8');
     const matches = bufExpected.length === bufWrong.length && crypto.timingSafeEqual(bufExpected, bufWrong);
@@ -142,7 +142,7 @@ async function runGmailSmtpVerification() {
   let simulatedDevCode: string | undefined;
 
   if (simulatedProdEnv !== 'production' && !emailSent) {
-    simulatedDevCode = '123456';
+    simulatedDevCode = '1234';
   }
 
   assert.strictEqual(simulatedDevCode, undefined, 'devCode MUST be strictly undefined in production');
@@ -164,7 +164,7 @@ async function runGmailSmtpVerification() {
         console.log(`  Sending real test reset email to: ${maskEmail(process.env.TEST_RESET_EMAIL)}...`);
         const result = await sendPasswordResetEmail({
           toEmail: process.env.TEST_RESET_EMAIL,
-          resetCode: '789123',
+          resetCode: '7891',
           recipientName: 'حساب اختبار تجريبي',
         });
         if (result.sent) {

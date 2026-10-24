@@ -748,7 +748,7 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
     const isProduction = process.env.NODE_ENV === 'production';
 
     if (user && user.status === 'active') {
-      const resetCode = crypto.randomInt(100000, 999999).toString();
+      const resetCode = crypto.randomInt(1000, 10000).toString();
       const codeHash = hashToken(resetCode);
 
       await pool.query(

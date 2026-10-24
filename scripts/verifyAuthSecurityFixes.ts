@@ -35,28 +35,28 @@ async function runAuthSecurityFixesVerification() {
   // Reset password validations
   const validReset = validateResetPasswordPayload({
     email: 'student@example.sd',
-    resetCode: '123456',
+    resetCode: '1234',
     newPassword: 'NewSecurePassword2026!',
   });
   assert.strictEqual(validReset.valid, true, 'Valid reset payload must pass');
 
   const shortCodeReset = validateResetPasswordPayload({
     email: 'student@example.sd',
-    resetCode: '12345', // only 5 digits
+    resetCode: '123', // only 3 digits
     newPassword: 'NewSecurePassword2026!',
   });
-  assert.strictEqual(shortCodeReset.valid, false, 'Reset code with < 6 digits must fail');
+  assert.strictEqual(shortCodeReset.valid, false, 'Reset code with < 4 digits must fail');
 
   const nonNumericCodeReset = validateResetPasswordPayload({
     email: 'student@example.sd',
-    resetCode: '12345a',
+    resetCode: '123a',
     newPassword: 'NewSecurePassword2026!',
   });
   assert.strictEqual(nonNumericCodeReset.valid, false, 'Non-numeric reset code must fail');
 
   const shortPasswordReset = validateResetPasswordPayload({
     email: 'student@example.sd',
-    resetCode: '123456',
+    resetCode: '1234',
     newPassword: 'short', // < 8 characters
   });
   assert.strictEqual(shortPasswordReset.valid, false, 'Password shorter than 8 chars must fail');
@@ -68,18 +68,18 @@ async function runAuthSecurityFixesVerification() {
   // -------------------------------------------------------------
   console.log('[Test 2] Testing Reset Code Cryptographic Properties...');
 
-  const resetCode = '849201';
+  const resetCode = '8492';
   const hashedCode = hashToken(resetCode);
   assert.strictEqual(typeof hashedCode, 'string');
   assert.strictEqual(hashedCode.length, 64, 'SHA-256 hash must be 64 hex characters');
 
   // Timing safe equal check
-  const candidateHashCorrect = hashToken('849201');
+  const candidateHashCorrect = hashToken('8492');
   const bufExpected = Buffer.from(hashedCode, 'utf8');
   const bufCandidate = Buffer.from(candidateHashCorrect, 'utf8');
   assert(crypto.timingSafeEqual(bufExpected, bufCandidate), 'Identical code hashes must match');
 
-  const candidateHashWrong = hashToken('849202');
+  const candidateHashWrong = hashToken('8493');
   const bufWrong = Buffer.from(candidateHashWrong, 'utf8');
   assert(!crypto.timingSafeEqual(bufExpected, bufWrong), 'Different code hashes must not match');
 

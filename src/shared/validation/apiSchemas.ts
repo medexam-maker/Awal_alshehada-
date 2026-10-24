@@ -110,7 +110,7 @@ const resetPasswordSchema = {
   required: ['email', 'resetCode', 'newPassword'],
   properties: {
     email: { type: 'string', pattern: '^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$' },
-    resetCode: { type: 'string', pattern: '^[0-9]{6}$' },
+    resetCode: { type: 'string', pattern: '^[0-9]{4}$' },
     newPassword: { type: 'string', minLength: 8 },
   },
   additionalProperties: false,

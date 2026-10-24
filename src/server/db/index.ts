@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import { Pool, PoolConfig } from 'pg';
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -7,13 +9,27 @@ const hasSslInUrl = Boolean(
 );
 const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
-// Explicit SSL configuration to avoid Supabase/Node TLS verification failures in serverless environments
-const sslConfig = isProduction || hasSslInUrl || isServerless
+const isRemoteDb = Boolean(
+  process.env.DATABASE_URL?.includes('supabase.co') ||
+  process.env.DATABASE_URL?.includes('supabase.com') ||
+  process.env.DATABASE_URL?.includes('neon.tech') ||
+  hasSslInUrl ||
+  isProduction ||
+  isServerless
+);
+
+// Explicit SSL configuration to avoid Supabase/Node TLS verification failures in cloud/serverless environments
+const sslConfig = isRemoteDb
   ? { rejectUnauthorized: false }
   : undefined;
 
+// Strip conflicting sslmode query param so pg honors { rejectUnauthorized: false } for Supabase intermediate certs
+const cleanConnectionString = process.env.DATABASE_URL
+  ? process.env.DATABASE_URL.replace(/([?&])sslmode=[^&]+(&|$)/, '$1').replace(/[?&]$/, '')
+  : undefined;
+
 const config: PoolConfig = {
-  connectionString: process.env.DATABASE_URL,
+  connectionString: cleanConnectionString,
   ssl: sslConfig,
 };
 

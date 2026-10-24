@@ -153,7 +153,7 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
           <p className="text-sm text-slate-500 font-medium">
             {view === 'login' && 'أهلاً بك في منصة أول الشهادة'}
             {view === 'forgot' && 'أدخل بريدك الإلكتروني لتلقي رمز التحقق لإعادة تعيين كلمة المرور'}
-            {view === 'reset' && 'أدخل رمز التحقق المكون من 6 أرقام وكلمة المرور الجديدة'}
+            {view === 'reset' && 'أدخل رمز التحقق المكون من 4 أرقام وكلمة المرور الجديدة'}
           </p>
         </div>
 
@@ -320,7 +320,7 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
                   <span>تم إرسال رمز التحقق</span>
                 </div>
                 <p className="text-emerald-700 leading-relaxed">
-                  تم إرسال رمز التحقق (6 أرقام) إلى بريدك الإلكتروني من حساب المنصة (awalalshehada2027@gmail.com). يرجى التحقق من صندوق الوارد أو مجلد الرسائل غير المرغوب فيها (Spam).
+                  تم إرسال رمز التحقق (4 أرقام) إلى بريدك الإلكتروني من حساب المنصة (awalalshehada2027@gmail.com). يرجى التحقق من صندوق الوارد أو مجلد الرسائل غير المرغوب فيها (Spam).
                 </p>
               </div>
             ) : (
@@ -356,16 +356,16 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700 block">رمز التحقق (6 أرقام)</label>
+                <label className="text-xs font-bold text-slate-700 block">رمز التحقق (4 أرقام)</label>
                 <div className="relative">
                   <KeyRound className="w-5 h-5 text-slate-400 absolute right-3 top-3" />
                   <input
                     type="text"
                     value={resetCode}
-                    onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="123456"
+                    onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="1234"
                     required
-                    maxLength={6}
+                    maxLength={4}
                     className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono tracking-widest text-center font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 text-base"
                     dir="ltr"
                   />
