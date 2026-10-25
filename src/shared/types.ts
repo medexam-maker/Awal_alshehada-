@@ -31,6 +31,7 @@ export type InteractionMode =
   | 'numeric_with_work'
   | 'move_up_down_arrows'
   | 'select_from_preset_options'
+  | 'word_block_explain'
   | 'passage_with_questions_and_summary';
 
 // --- 1. True/False ---
@@ -134,13 +135,19 @@ export interface LongEssayAnswer {
 
 // --- 7. Explain/Justify ---
 export interface ExplainContent {
-  prompt: string;
+  prompt?: string;
+  text?: string;
+  targetPhenomenon?: string;
+  correctSequence?: string[];
+  distractorWords?: string[];
   validReasons?: string[];
   allowFreeText?: boolean;
   topicChoiceOptions?: TopicChoiceOption[];
 }
 export interface ExplainAnswer {
   text?: string;
+  words?: string[];
+  sequence?: string[];
   selectedReasonIds?: string[];
 }
 

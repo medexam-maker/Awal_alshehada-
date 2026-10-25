@@ -172,7 +172,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Full Exam Simulation: matches the blueprint layout
           const bankQuestions = curriculumStorage.getQuestionsBySubject(targetSlug);
           if (bankQuestions.length === 0) {
-            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
+            throw new Error('بنك الأسئلة لهذه المادة سيتوفر قريباً');
           }
           questionsToUse = bankQuestions.map((q, idx) => ({
             id: q.id,
@@ -190,7 +190,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Specific Year Exam (2000 - 2026)
           const yearlyQuestions = curriculumStorage.getQuestionsBySubject(targetSlug, { examYear });
           if (yearlyQuestions.length === 0) {
-            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
+            throw new Error('بنك الأسئلة لهذه المادة سيتوفر قريباً');
           }
           questionsToUse = yearlyQuestions.map((q, idx) => ({
             id: q.id,
@@ -210,7 +210,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const allSubjectQuestions = curriculumQuestions.length > 0 ? curriculumQuestions : curriculumStorage.getQuestionsBySubject(targetSlug);
 
           if (allSubjectQuestions.length === 0) {
-            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
+            throw new Error('بنك الأسئلة لهذه المادة سيتوفر قريباً');
           }
           questionsToUse = allSubjectQuestions.map((q, idx) => ({
             id: q.id,
@@ -259,7 +259,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err: any) {
         return {
           success: false,
-          error: err?.message || 'تعذر إعداد جلسة الاختبار.',
+          error: err?.message || 'بنك الأسئلة لهذه المادة سيتوفر قريباً',
         };
       } finally {
         setIsLoading(false);

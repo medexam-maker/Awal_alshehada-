@@ -78,9 +78,15 @@ export const ExamReview: React.FC<ExamReviewProps> = ({
     if (typeof answer === 'object' && answer !== null && (answer.answers || answer.blanks)) {
       const blanks = answer.answers || answer.blanks;
       const selfEvals = answer.selfEvaluations || {};
+      const easternDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
       const parts = Object.entries(blanks).map(([id, val]) => {
+        const cleaned = String(id).replace(/blank/gi, '').replace(/_/g, '').trim();
+        const num = parseInt(cleaned, 10);
+        const displayNum = !isNaN(num)
+          ? String(num).replace(/\d/g, (d) => easternDigits[parseInt(d, 10)])
+          : String(id).replace(/blank/gi, '').replace(/\d/g, (d) => easternDigits[parseInt(d, 10)]);
         const evalTag = selfEvals[id] !== undefined ? (selfEvals[id] ? ' (تقييمك: صحيحة ✓)' : ' (تقييمك: غير صحيحة ✗)') : '';
-        return `فراغ (${id}): «${val}»${evalTag}`;
+        return `الفراغ (${displayNum}): «${val}»${evalTag}`;
       });
       return parts.join(' | ');
     }

@@ -48,6 +48,8 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -58,16 +60,21 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
       return;
     }
 
-    const res = await login(email, password);
-    if (res.success) {
-      // حفظ أو حذف البريد الإلكتروني في التخزين المحلي بناءً على رغبة المستخدم
-      if (rememberEmail) {
-        localStorage.setItem('awal_remembered_email', email);
+    setIsSubmittingLogin(true);
+    try {
+      const res = await login(email, password);
+      if (res.success) {
+        // حفظ أو حذف البريد الإلكتروني في التخزين المحلي بناءً على رغبة المستخدم
+        if (rememberEmail) {
+          localStorage.setItem('awal_remembered_email', email);
+        } else {
+          localStorage.removeItem('awal_remembered_email');
+        }
       } else {
-        localStorage.removeItem('awal_remembered_email');
+        setError(res.error || 'فشل تسجيل الدخول');
       }
-    } else {
-      setError(res.error || 'فشل تسجيل الدخول');
+    } finally {
+      setIsSubmittingLogin(false);
     }
   };
 
@@ -257,10 +264,10 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isSubmittingLogin}
                 className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
               >
-                <span>{isLoading ? 'جاري التحقق...' : 'دخول'}</span>
+                <span>{isSubmittingLogin ? 'جاري التحقق...' : 'دخول'}</span>
                 <ArrowLeft className="w-4 h-4" />
               </button>
             </form>

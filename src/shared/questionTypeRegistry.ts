@@ -113,19 +113,19 @@ export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEn
   },
   [QuestionType.EXPLAIN]: {
     type: QuestionType.EXPLAIN,
-    labelAr: 'تعليل',
+    labelAr: 'علل / التفسير العلمي',
     labelEn: 'Explain / Justify',
     contentSchema: ContentSchemas.explain,
     answerSchema: AnswerSchemas.explain,
-    allowedModes: ['free_text_box', 'select_reason_from_list'],
-    defaultMode: 'free_text_box',
-    grading: GradingStrategy.MIXED,
+    allowedModes: ['word_block_explain', 'free_text_box', 'select_reason_from_list'],
+    defaultMode: 'word_block_explain',
+    grading: GradingStrategy.AUTO,
     trainingSupport: true,
     simulationSupport: true,
     manualGradingSupport: true,
     mediaRequired: false,
     validationRules: [
-      { field: 'prompt', required: true, type: 'string' }
+      { field: 'prompt', required: false, type: 'string' }
     ]
   },
   [QuestionType.COMPARISON_TABLE]: {

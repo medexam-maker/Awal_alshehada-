@@ -260,6 +260,39 @@ export function autoGrade(
       }
     }
     obtainedMarks = isCorrect ? maxMarks : 0;
+  } else if (questionType === QuestionType.EXPLAIN) {
+    const c = (content || {}) as Record<string, unknown>;
+    const ca = (correctAnswer || {}) as Record<string, unknown>;
+    const sa = studentAnswer as Record<string, unknown> | string[] | undefined;
+
+    const correctSeqRaw = ca?.correctSequence || c?.correctSequence || ca?.sequence || ca?.words || c?.words;
+    const correctSeq: string[] = Array.isArray(correctSeqRaw) ? correctSeqRaw.map(s => String(s)) : [];
+
+    let studentSeq: string[] = [];
+    if (Array.isArray(sa)) {
+      studentSeq = sa.map(s => String(s));
+    } else if (sa && typeof sa === 'object') {
+      const saRaw = sa.words || sa.sequence;
+      if (Array.isArray(saRaw)) {
+        studentSeq = saRaw.map(s => String(s));
+      } else if (typeof sa.text === 'string' && sa.text) {
+        studentSeq = sa.text.trim().split(/\s+/);
+      }
+    }
+
+    if (correctSeq.length > 0) {
+      if (studentSeq.length === correctSeq.length) {
+        isCorrect = correctSeq.every((word, idx) =>
+          normalizeText(word, { trimWhitespace: true, ignoreDiacritics: true }) ===
+          normalizeText(studentSeq[idx] || '', { trimWhitespace: true, ignoreDiacritics: true })
+        );
+      } else {
+        isCorrect = false;
+      }
+      obtainedMarks = isCorrect ? maxMarks : 0;
+    } else {
+      return { obtainedMarks: 0, gradingStatus: GradingStatus.MANUAL_PENDING };
+    }
   } else {
       // Fallback for unhandled types without explicit stringify, to avoid unintended assumptions.
       obtainedMarks = 0;

@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import crypto from 'crypto';
 import { pool } from '../db';
 
 export interface UserRecord {
@@ -124,19 +125,19 @@ export class PostgresUserRepository implements UserRepository {
     db: PoolClient | Pool = pool
   ): Promise<UserRecord> {
     try {
+      const newUserId = crypto.randomUUID();
       const result = await db.query<UserDbRow>(
-        `INSERT INTO users (email, password_hash, full_name, phone, role, status, token_version)
-         VALUES ($1, $2, $3, $4, 'student', 'active', 1)
+        `INSERT INTO users (id, email, password_hash, full_name, phone, role, status, token_version)
+         VALUES ($1, $2, $3, $4, $5, 'student', 'active', 1)
          RETURNING id, email, password_hash, full_name, phone, role, status,
                    token_version, last_login_at, created_at, updated_at`,
-        [payload.email, payload.passwordHash, payload.fullName, payload.phone]
+        [newUserId, payload.email, payload.passwordHash, payload.fullName, payload.phone]
       );
       return mapRowToUserRecord(result.rows[0]);
     } catch (error: unknown) {
       if (
         isDatabaseError(error) &&
-        error.code === '23505' &&
-        error.constraint === 'users_email_key'
+        error.code === '23505'
       ) {
         throw new UserEmailConflictError('Email already registered');
       }

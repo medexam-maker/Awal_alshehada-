@@ -7,6 +7,8 @@ const FORBIDDEN_KEYS = new Set([
     'correct_value',
     'correctOrder',
     'correct_order',
+    'correctSequence',
+    'correct_sequence',
     'isOdd',
     'is_odd',
     'pairId',

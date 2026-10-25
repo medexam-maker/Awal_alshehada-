@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useExam } from '../context/ExamContext';
 import { QuestionNavigator } from '../components/exam/QuestionNavigator';
 import { Timer } from '../components/exam/Timer';
@@ -7,6 +7,7 @@ import { QuestionDispatcher } from '../components/questions';
 import { useTimer } from '../hooks/useTimer';
 import { TWELVE_CONTRACT_SUBJECTS } from '../data/contractSubjects';
 import { QuestionType } from '../../shared/constants';
+import { SoundSettingsModal } from '../components/SoundSettingsModal';
 import {
   ArrowRight,
   ArrowLeft,
@@ -20,6 +21,7 @@ import {
   LogOut,
   Info,
   Clock,
+  Volume2,
 } from 'lucide-react';
 
 interface ExamAttemptProps {
@@ -43,9 +45,19 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
   } = useExam();
 
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [showTrainingHint, setShowTrainingHint] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Automatically scroll to the top of the page when changing questions
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
+  }, [currentIndex]);
 
   // Non-authoritative client timer (C6 §17)
   const { remainingSeconds } = useTimer({
@@ -201,14 +213,26 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
           <span>رجوع</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => setIsSubmitModalOpen(true)}
-          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-        >
-          <Send className="w-3.5 h-3.5" />
-          <span>تسليم الامتحان</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSoundSettingsOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+            title="إعدادات الأصوات والتعليق الرياضي"
+          >
+            <Volume2 className="w-4 h-4 text-emerald-600" />
+            <span className="hidden sm:inline">الأصوات ⚽</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsSubmitModalOpen(true)}
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>تسليم الامتحان</span>
+          </button>
+        </div>
       </div>
 
 
@@ -402,6 +426,11 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
           </div>
         </div>
       )}
+      {/* Sound Settings Modal */}
+      <SoundSettingsModal
+        isOpen={isSoundSettingsOpen}
+        onClose={() => setIsSoundSettingsOpen(false)}
+      />
     </div>
   );
 };

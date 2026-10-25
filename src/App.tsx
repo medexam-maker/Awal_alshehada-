@@ -17,7 +17,7 @@ import { ExamReview } from './client/pages/ExamReview';
 import { ExamLandingPage } from './client/pages/ExamLandingPage';
 import { AdminDashboard } from './client/pages/admin/AdminDashboard';
 import { ContractSubject, TWELVE_CONTRACT_SUBJECTS } from './client/data/contractSubjects';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, AlertCircle, X } from 'lucide-react';
 
 type AppView =
   | 'subjects'
@@ -107,7 +107,10 @@ function AppRouter() {
     subject: TWELVE_CONTRACT_SUBJECTS[0],
   });
 
+  const [bankError, setBankError] = useState<string | null>(null);
+
   const navigateTo = (view: AppView, path?: string) => {
+    setBankError(null);
     setCurrentView(view);
     if (typeof window !== 'undefined') {
       const urlMap: Record<AppView, string> = {
@@ -158,8 +161,28 @@ function AppRouter() {
   };
 
   const navigateHome = () => {
+    setBankError(null);
     setLandingParams(null);
     navigateTo('subjects', '/');
+  };
+
+  const renderBankErrorToast = () => {
+    if (!bankError) return null;
+    return (
+      <div className="fixed top-4 inset-x-4 max-w-md mx-auto z-50 p-4 bg-amber-600 text-white rounded-2xl shadow-xl flex items-center justify-between gap-3 animate-in slide-in-from-top-4 duration-200">
+        <div className="flex items-center gap-2.5 font-bold text-sm">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <span>{bankError}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setBankError(null)}
+          className="p-1 hover:bg-amber-700 rounded-lg cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
   };
 
   if (authLoading) {
@@ -220,7 +243,7 @@ function AppRouter() {
   }
 
   // Active exam in progress: ExamAttempt view
-  if (activeAttempt || currentView === 'exam_attempt') {
+  if (currentView === 'exam_attempt') {
     return (
       <Layout hideHeader>
         <ExamAttempt
@@ -376,6 +399,7 @@ function AppRouter() {
         onOpenAdmin={handleOpenAdmin}
         onOpenProfile={() => navigateTo('profile', '/profile')}
       >
+        {renderBankErrorToast()}
         <ComprehensivePage
           subject={selectedSubject.subject}
           onBack={goBack}
@@ -392,6 +416,8 @@ function AppRouter() {
             );
             if (res.success) {
               navigateTo('exam_attempt', '/exam/attempt');
+            } else {
+              setBankError(res.error || 'بنك الأسئلة لهذه المادة سيتوفر قريباً');
             }
           }}
         />
@@ -407,6 +433,7 @@ function AppRouter() {
         onOpenAdmin={handleOpenAdmin}
         onOpenProfile={() => navigateTo('profile', '/profile')}
       >
+        {renderBankErrorToast()}
         <YearsPage
           subject={selectedSubject.subject}
           onBack={goBack}
@@ -423,6 +450,8 @@ function AppRouter() {
             );
             if (res.success) {
               navigateTo('exam_attempt', '/exam/attempt');
+            } else {
+              setBankError(res.error || 'بنك الأسئلة لهذه المادة سيتوفر قريباً');
             }
           }}
         />
@@ -438,6 +467,7 @@ function AppRouter() {
         onOpenAdmin={handleOpenAdmin}
         onOpenProfile={() => navigateTo('profile', '/profile')}
       >
+        {renderBankErrorToast()}
         <SimulatorPage
           subject={selectedSubject.subject}
           onBack={goBack}
@@ -454,6 +484,8 @@ function AppRouter() {
             );
             if (res.success) {
               navigateTo('exam_attempt', '/exam/attempt');
+            } else {
+              setBankError(res.error || 'بنك الأسئلة لهذه المادة سيتوفر قريباً');
             }
           }}
         />
@@ -468,6 +500,7 @@ function AppRouter() {
       onOpenAdmin={handleOpenAdmin}
       onOpenProfile={() => navigateTo('profile', '/profile')}
     >
+      {renderBankErrorToast()}
       <Subjects
         onSelectSubject={(subject, dbId) => {
           setSelectedSubject({ subject, dbId });

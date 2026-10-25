@@ -1,5 +1,6 @@
 import React from 'react';
-import { Ban } from 'lucide-react';
+import { Ban, Check, X } from 'lucide-react';
+import { playFeedbackSound } from '../../utils/soundManager';
 
 interface OddOneOutProps {
   content: {
@@ -13,6 +14,8 @@ interface OddOneOutProps {
   };
   onChange: (ans: { selectedItem: string; reason?: string }) => void;
   isReadonly?: boolean;
+  correctAnswer?: any;
+  examMode?: 'simulator' | 'training';
 }
 
 export const OddOneOutRenderer: React.FC<OddOneOutProps> = ({
@@ -20,9 +23,19 @@ export const OddOneOutRenderer: React.FC<OddOneOutProps> = ({
   answer,
   onChange,
   isReadonly = false,
+  correctAnswer,
+  examMode = 'training',
 }) => {
   const selectedItem = answer?.selectedItem;
   const reason = answer?.reason || '';
+  const isImmediateReveal = examMode !== 'simulator';
+
+  const correctOddItem =
+    typeof correctAnswer === 'object' && correctAnswer !== null
+      ? correctAnswer.selectedItem || correctAnswer.oddItem || correctAnswer.correctAnswer || correctAnswer.value
+      : typeof correctAnswer === 'string'
+      ? correctAnswer
+      : undefined;
 
   const handleSelect = (item: string) => {
     if (isReadonly) return;
@@ -30,6 +43,14 @@ export const OddOneOutRenderer: React.FC<OddOneOutProps> = ({
       selectedItem: item,
       reason,
     });
+
+    if (isImmediateReveal && correctOddItem) {
+      if (item === correctOddItem) {
+        playFeedbackSound('correct');
+      } else {
+        playFeedbackSound('incorrect');
+      }
+    }
   };
 
   const handleReasonChange = (val: string) => {
@@ -50,6 +71,10 @@ export const OddOneOutRenderer: React.FC<OddOneOutProps> = ({
         {content?.items?.map((item, idx) => {
           const isSelected = selectedItem === item;
 
+          const isCorrect = isImmediateReveal && isSelected && correctOddItem && item === correctOddItem;
+          const isIncorrect = isImmediateReveal && isSelected && correctOddItem && item !== correctOddItem;
+          const isActualCorrect = isImmediateReveal && selectedItem && correctOddItem && item === correctOddItem;
+
           return (
             <button
               key={idx}
@@ -57,12 +82,22 @@ export const OddOneOutRenderer: React.FC<OddOneOutProps> = ({
               onClick={() => handleSelect(item)}
               disabled={isReadonly}
               className={`p-4 rounded-xl border-2 text-center font-bold text-base transition-all cursor-pointer flex flex-col items-center justify-center gap-2 ${
-                isSelected
-                  ? 'bg-rose-50 border-rose-500 text-rose-900 shadow-sm'
+                isCorrect || isActualCorrect
+                  ? 'bg-emerald-100 border-emerald-600 text-emerald-950 ring-2 ring-emerald-500/20 shadow-sm'
+                  : isIncorrect
+                  ? 'bg-rose-100 border-rose-600 text-rose-950 ring-2 ring-rose-500/20 shadow-sm'
+                  : isSelected
+                  ? 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm'
                   : 'bg-white border-slate-200 text-slate-800 hover:border-slate-300'
               }`}
             >
-              <Ban className={`w-5 h-5 ${isSelected ? 'text-rose-600' : 'text-slate-300'}`} />
+              {isCorrect || isActualCorrect ? (
+                <Check className="w-5 h-5 text-emerald-600 stroke-[3]" />
+              ) : isIncorrect ? (
+                <X className="w-5 h-5 text-rose-600 stroke-[3]" />
+              ) : (
+                <Ban className={`w-5 h-5 ${isSelected ? 'text-amber-600' : 'text-slate-300'}`} />
+              )}
               <span>{item}</span>
             </button>
           );

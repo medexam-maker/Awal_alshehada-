@@ -15,6 +15,8 @@ export const Register: React.FC<RegisterProps> = ({ onGoToLogin }) => {
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -29,15 +31,20 @@ export const Register: React.FC<RegisterProps> = ({ onGoToLogin }) => {
       return;
     }
 
-    const res = await register({
-      email,
-      password,
-      fullName: fullName || undefined,
-      phone: phone || undefined,
-    });
+    setIsSubmitting(true);
+    try {
+      const res = await register({
+        email,
+        password,
+        fullName: fullName || undefined,
+        phone: phone || undefined,
+      });
 
-    if (!res.success) {
-      setError(res.error || 'فشل إنشاء الحساب');
+      if (!res.success) {
+        setError(res.error || 'فشل إنشاء الحساب');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -130,10 +137,10 @@ export const Register: React.FC<RegisterProps> = ({ onGoToLogin }) => {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting}
             className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
           >
-            <span>{isLoading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}</span>
+            <span>{isSubmitting ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب'}</span>
             <ArrowLeft className="w-4 h-4" />
           </button>
         </form>

@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
 import { CheckCircle2, XCircle, Check, HelpCircle, Sparkles, Edit3 } from 'lucide-react';
+import { playFeedbackSound } from '../../utils/soundManager';
+
+export function formatEasternArabicNumber(val: number | string): string {
+  const easternDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  const cleaned = String(val).replace(/blank/gi, '').replace(/_/g, '').trim();
+  const num = parseInt(cleaned, 10);
+  if (!isNaN(num)) {
+    return String(num).replace(/\d/g, (d) => easternDigits[parseInt(d, 10)]);
+  }
+  return String(val).replace(/blank/gi, '').replace(/\d/g, (d) => easternDigits[parseInt(d, 10)]);
+}
 
 interface BlankItem {
   id: string;
@@ -172,6 +183,12 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
       selfEvaluations: nextEvals,
       confirmedBlanks: { ...confirmedMap, [blankId]: true },
     });
+
+    if (isCorrect) {
+      playFeedbackSound('correct');
+    } else {
+      playFeedbackSound('incorrect');
+    }
   };
 
   // Handler to Reopen/Edit a confirmed blank
@@ -198,6 +215,15 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
       answers: nextAnswers,
       blanks: nextAnswers,
     });
+
+    if (examMode !== 'simulator') {
+      const ref = getReferenceAnswer(blankId);
+      if (choice === ref) {
+        playFeedbackSound('correct');
+      } else {
+        playFeedbackSound('incorrect');
+      }
+    }
   };
 
   return (
@@ -208,6 +234,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
           const isToken = part.match(tokenRegex);
           if (isToken) {
             const blankId = part.replace(/[{}_]/g, '').trim() || String(idx + 1);
+            const displayNum = formatEasternArabicNumber(blankId || idx + 1);
             const val = answersMap[blankId] || localInput[blankId] || '';
             const isConfirmed = confirmedMap[blankId];
             const evalState = selfEvals[blankId];
@@ -227,7 +254,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                       : 'bg-white border-dashed border-emerald-400 text-slate-700'
                   }`}
                 >
-                  <span className="text-xs text-slate-400 font-normal">({blankId})</span>
+                  <span className="text-xs text-slate-400 font-normal">({displayNum})</span>
                   <span>{val || '___'}</span>
                   {isConfirmed && evalState === true && <Check className="w-3.5 h-3.5 text-emerald-600 inline" />}
                   {isConfirmed && evalState === false && <XCircle className="w-3.5 h-3.5 text-rose-600 inline" />}
@@ -242,7 +269,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                   value={val}
                   onChange={(e) => handleTextChange(blankId, e.target.value)}
                   disabled={isReadonly}
-                  placeholder={`(${bIdx + 1})`}
+                  placeholder={`(${displayNum})`}
                   className="inline-block mx-2 px-3 py-1 w-36 text-center border-b-2 border-emerald-600 bg-white rounded-md shadow-inner text-emerald-950 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               );
@@ -253,7 +280,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                   key={idx}
                   className="inline-block mx-2 px-3 py-1 min-w-[100px] text-center border-b-2 border-teal-600 bg-white rounded-md shadow-xs text-teal-950 font-bold"
                 >
-                  {val || `(${bIdx + 1})`}
+                  {val || `(${displayNum})`}
                 </span>
               );
             }
@@ -280,6 +307,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
           <div className="grid grid-cols-1 gap-4">
             {blankDescriptors.map((bDesc, bIdx) => {
               const bId = bDesc.id;
+              const displayNum = formatEasternArabicNumber(bId || bIdx + 1);
               const currentText = localInput[bId] ?? answersMap[bId] ?? '';
               const isConfirmed = Boolean(confirmedMap[bId]);
               const refAnswer = getReferenceAnswer(bId);
@@ -302,10 +330,10 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white font-black text-xs flex items-center justify-center">
-                        {bIdx + 1}
+                        {displayNum}
                       </div>
                       <span className="font-extrabold text-sm text-slate-900">
-                        الفراغ رقم ({bId})
+                        الفراغ ({displayNum})
                       </span>
                     </div>
 
@@ -363,7 +391,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                         className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                       >
                         <Check className="w-4 h-4" />
-                        <span>تأكيد الفراغ ({bIdx + 1})</span>
+                        <span>تأكيد الفراغ ({displayNum})</span>
                       </button>
                     </div>
                   ) : (
@@ -452,6 +480,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
           <div className="grid grid-cols-1 gap-4">
             {blankDescriptors.map((bDesc, bIdx) => {
               const bId = bDesc.id;
+              const displayNum = formatEasternArabicNumber(bId || bIdx + 1);
               const currentChoice = answersMap[bId] || '';
               const choices = getThreeChoices(bId);
 
@@ -459,29 +488,42 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                 <div key={bDesc.id} className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-lg bg-teal-600 text-white font-bold text-xs flex items-center justify-center">
-                      {bIdx + 1}
+                      {displayNum}
                     </span>
                     <span className="font-bold text-xs text-slate-800">
-                      خيارات الفراغ ({bId}):
+                      خيارات الفراغ ({displayNum}):
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {choices.map((choice, cIdx) => {
                       const isSelected = currentChoice === choice;
+                      const refAnswer = getReferenceAnswer(bId);
+                      const isImmediateReveal = examMode !== 'simulator';
+
+                      const isCorrectChoice = isImmediateReveal && isSelected && currentChoice === refAnswer;
+                      const isIncorrectChoice = isImmediateReveal && isSelected && currentChoice !== refAnswer;
+                      const isActualCorrectChoice = isImmediateReveal && currentChoice !== '' && choice === refAnswer;
+
                       return (
                         <button
                           key={cIdx}
                           type="button"
                           disabled={isReadonly}
                           onClick={() => handleSelectChoice(bId, choice)}
-                          className={`p-3 rounded-xl border-2 text-center text-xs font-bold transition-all cursor-pointer ${
-                            isSelected
+                          className={`p-3 rounded-xl border-2 text-center text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                            isCorrectChoice || isActualCorrectChoice
+                              ? 'border-emerald-600 bg-emerald-100 text-emerald-950 ring-2 ring-emerald-500/20 shadow-sm'
+                              : isIncorrectChoice
+                              ? 'border-rose-600 bg-rose-100 text-rose-950 ring-2 ring-rose-500/20 shadow-sm'
+                              : isSelected
                               ? 'border-teal-600 bg-teal-50 text-teal-950 ring-2 ring-teal-600/20 shadow-xs'
                               : 'border-slate-200 hover:border-slate-300 bg-slate-50/50 text-slate-800'
                           }`}
                         >
-                          {choice}
+                          <span>{choice}</span>
+                          {isIncorrectChoice && <span className="text-rose-600 text-sm font-black">✕</span>}
+                          {(isCorrectChoice || isActualCorrectChoice) && <span className="text-emerald-600 text-sm font-black">✓</span>}
                         </button>
                       );
                     })}

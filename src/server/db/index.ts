@@ -46,7 +46,7 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
 
   await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
       email TEXT UNIQUE NOT NULL,
       google_id TEXT UNIQUE,
       phone TEXT,

@@ -82,7 +82,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
     const normalizedEmail = email.trim().toLowerCase();
     try {
       const res = await apiClient.request<{
@@ -117,14 +116,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         success: false,
         error: 'تعذر الاتصال بخادم المصادقة.',
       };
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
   const register = useCallback(
     async (payload: { email: string; password: string; fullName?: string; phone?: string }) => {
-      setIsLoading(true);
       const normalizedEmail = payload.email.trim().toLowerCase();
       try {
         const res = await apiClient.request<{
@@ -162,15 +158,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           success: false,
           error: 'تعذر الاتصال بخادم المصادقة.',
         };
-      } finally {
-        setIsLoading(false);
       }
     },
     []
   );
 
   const logout = useCallback(async () => {
-    setIsLoading(true);
     const refreshToken = apiClient.getRefreshToken();
     try {
       if (refreshToken) {
@@ -182,7 +175,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       apiClient.clearAuth();
       setUser(null);
-      setIsLoading(false);
     }
   }, []);
 

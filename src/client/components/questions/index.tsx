@@ -70,10 +70,28 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
 
   switch (qType) {
     case QuestionType.TRUE_FALSE:
-      return <TrueFalseRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <TrueFalseRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.MULTIPLE_CHOICE:
-      return <MultipleChoiceRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <MultipleChoiceRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.FILL_BLANK:
       return (
@@ -99,13 +117,31 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       return <LongEssayRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
 
     case QuestionType.EXPLAIN:
-      return <ExplainRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <ExplainRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.COMPARISON_TABLE:
       return <ComparisonTableRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
 
     case QuestionType.ODD_ONE_OUT:
-      return <OddOneOutRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <OddOneOutRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.DIAGRAM_LABELING:
       return <DiagramLabelingRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
