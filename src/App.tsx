@@ -5,7 +5,11 @@ import { Layout } from './client/components/layout/Layout';
 import { Login } from './client/pages/Login';
 import { Register } from './client/pages/Register';
 import { Subjects } from './client/pages/Subjects';
-import { ExamSetup } from './client/pages/ExamSetup';
+import { ExamSetupPage } from './client/pages/ExamSetupPage';
+import { TrainingSetupPage } from './client/pages/TrainingSetupPage';
+import { ComprehensivePage } from './client/pages/ComprehensivePage';
+import { YearsPage } from './client/pages/YearsPage';
+import { SimulatorPage } from './client/pages/SimulatorPage';
 import { ExamAttempt } from './client/pages/ExamAttempt';
 import { Results } from './client/pages/Results';
 import { Profile } from './client/pages/Profile';
@@ -13,8 +17,21 @@ import { ExamReview } from './client/pages/ExamReview';
 import { ExamLandingPage } from './client/pages/ExamLandingPage';
 import { AdminDashboard } from './client/pages/admin/AdminDashboard';
 import { ContractSubject, TWELVE_CONTRACT_SUBJECTS } from './client/data/contractSubjects';
+import { ShieldAlert } from 'lucide-react';
 
-type AppView = 'subjects' | 'exam_setup' | 'exam_attempt' | 'results' | 'admin' | 'profile' | 'exam_review' | 'exam_landing';
+type AppView =
+  | 'subjects'
+  | 'exam_setup'
+  | 'training_setup'
+  | 'comprehensive'
+  | 'years'
+  | 'simulator'
+  | 'exam_attempt'
+  | 'results'
+  | 'admin'
+  | 'profile'
+  | 'exam_review'
+  | 'exam_landing';
 
 function parseExamUrl(pathname: string): { subjectSlug: string; year: number } | null {
   const match = pathname.match(/^\/exams\/([a-z0-9-]+)(?:\/(\d{4}))?\/?$/i);
@@ -24,22 +41,65 @@ function parseExamUrl(pathname: string): { subjectSlug: string; year: number } |
   return { subjectSlug, year };
 }
 
+function parseAppPath(pathname: string): { view: AppView; landingParams?: { subjectSlug: string; year: number } } {
+  const landing = parseExamUrl(pathname);
+  if (landing) {
+    return { view: 'exam_landing', landingParams: landing };
+  }
+  if (pathname === '/exam/training/comprehensive') {
+    return { view: 'comprehensive' };
+  }
+  if (pathname === '/exam/training/years') {
+    return { view: 'years' };
+  }
+  if (pathname === '/exam/training') {
+    return { view: 'training_setup' };
+  }
+  if (pathname === '/exam/simulator') {
+    return { view: 'simulator' };
+  }
+  if (pathname === '/exam/setup') {
+    return { view: 'exam_setup' };
+  }
+  if (pathname === '/exam/attempt') {
+    return { view: 'exam_attempt' };
+  }
+  if (pathname === '/exam/results' || pathname === '/results') {
+    return { view: 'results' };
+  }
+  if (pathname === '/exam/review') {
+    return { view: 'exam_review' };
+  }
+  if (pathname === '/profile') {
+    return { view: 'profile' };
+  }
+  if (pathname === '/admin') {
+    return { view: 'admin' };
+  }
+  return { view: 'subjects' };
+}
+
 function AppRouter() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { activeAttempt, lastResult, startNewExam } = useExam();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const { activeAttempt, lastResult, startNewExam, isLoading: isExamLoading } = useExam();
   const [authPage, setAuthPage] = useState<'login' | 'register'>('login');
+  const isAdmin = user?.role === 'admin';
+  const handleOpenAdmin = isAdmin ? () => navigateTo('admin', '/admin') : undefined;
+
   const [landingParams, setLandingParams] = useState<{ subjectSlug: string; year: number } | null>(() => {
     if (typeof window !== 'undefined') {
       return parseExamUrl(window.location.pathname);
     }
     return null;
   });
+
   const [currentView, setCurrentView] = useState<AppView>(() => {
-    if (typeof window !== 'undefined' && parseExamUrl(window.location.pathname)) {
-      return 'exam_landing';
+    if (typeof window !== 'undefined') {
+      return parseAppPath(window.location.pathname).view;
     }
     return 'subjects';
   });
+
   const [selectedSubject, setSelectedSubject] = useState<{
     subject: ContractSubject;
     dbId?: string;
@@ -47,16 +107,43 @@ function AppRouter() {
     subject: TWELVE_CONTRACT_SUBJECTS[0],
   });
 
+  const navigateTo = (view: AppView, path?: string) => {
+    setCurrentView(view);
+    if (typeof window !== 'undefined') {
+      const urlMap: Record<AppView, string> = {
+        subjects: '/',
+        exam_setup: '/exam/setup',
+        training_setup: '/exam/training',
+        comprehensive: '/exam/training/comprehensive',
+        years: '/exam/training/years',
+        simulator: '/exam/simulator',
+        exam_attempt: '/exam/attempt',
+        results: '/exam/results',
+        admin: '/admin',
+        profile: '/profile',
+        exam_review: '/exam/review',
+        exam_landing: '/exams',
+      };
+      const targetUrl = path || urlMap[view] || '/';
+      window.history.pushState({}, '', targetUrl);
+    }
+  };
+
+  const goBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigateTo('subjects', '/');
+    }
+  };
+
   useEffect(() => {
     const handlePopState = () => {
-      const parsed = parseExamUrl(window.location.pathname);
-      if (parsed) {
-        setLandingParams(parsed);
-        setCurrentView('exam_landing');
-      } else if (window.location.pathname === '/' || window.location.pathname === '') {
-        setLandingParams(null);
-        setCurrentView('subjects');
+      const parsed = parseAppPath(window.location.pathname);
+      if (parsed.landingParams) {
+        setLandingParams(parsed.landingParams);
       }
+      setCurrentView(parsed.view);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -72,10 +159,7 @@ function AppRouter() {
 
   const navigateHome = () => {
     setLandingParams(null);
-    setCurrentView('subjects');
-    if (typeof window !== 'undefined') {
-      window.history.pushState({}, '', '/');
-    }
+    navigateTo('subjects', '/');
   };
 
   if (authLoading) {
@@ -95,7 +179,7 @@ function AppRouter() {
     return (
       <Layout
         onNavigateHome={navigateHome}
-        onOpenAdmin={() => setCurrentView('admin')}
+        onOpenAdmin={handleOpenAdmin}
         onOpenProfile={() => setCurrentView('profile')}
       >
         <ExamLandingPage
@@ -140,23 +224,62 @@ function AppRouter() {
     return (
       <Layout hideHeader>
         <ExamAttempt
-          onFinishExam={() => setCurrentView('results')}
-          onExitExam={() => setCurrentView('subjects')}
+          onFinishExam={() => navigateTo('results', '/exam/results')}
+          onExitExam={() => navigateTo('subjects', '/')}
         />
       </Layout>
     );
   }
 
-  // Admin Dashboard View
+  // Admin Dashboard View - Strictly Guarded by User Role
   if (currentView === 'admin') {
+    if (!isAuthenticated || !user) {
+      return (
+        <Layout hideHeader>
+          {authPage === 'login' ? (
+            <Login onGoToRegister={() => setAuthPage('register')} />
+          ) : (
+            <Register onGoToLogin={() => setAuthPage('login')} />
+          )}
+        </Layout>
+      );
+    }
+    if (user.role !== 'admin') {
+      return (
+        <Layout
+          onNavigateHome={() => navigateTo('subjects', '/')}
+          onOpenAdmin={handleOpenAdmin}
+          onOpenProfile={() => navigateTo('profile', '/profile')}
+        >
+          <div className="min-h-[60vh] flex items-center justify-center p-4">
+            <div className="p-8 text-center max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-sm space-y-4">
+              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+                <ShieldAlert className="w-8 h-8" />
+              </div>
+              <h1 className="text-xl font-black text-slate-900">غير مصرح</h1>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                هذه الصفحة للمسؤولين فقط. حسابك الحالي مسجل كطالب.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigateTo('subjects', '/')}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-all cursor-pointer shadow-xs"
+              >
+                العودة للرئيسية
+              </button>
+            </div>
+          </div>
+        </Layout>
+      );
+    }
     return (
       <Layout
-        onNavigateHome={() => setCurrentView('subjects')}
-        onOpenAdmin={() => setCurrentView('subjects')}
-        onOpenProfile={() => setCurrentView('profile')}
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={() => navigateTo('subjects', '/')}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
         isAdminView
       >
-        <AdminDashboard onBackToStudentView={() => setCurrentView('subjects')} />
+        <AdminDashboard onBackToStudentView={() => navigateTo('subjects', '/')} />
       </Layout>
     );
   }
@@ -165,11 +288,11 @@ function AppRouter() {
   if (currentView === 'profile') {
     return (
       <Layout
-        onNavigateHome={() => setCurrentView('subjects')}
-        onOpenAdmin={() => setCurrentView('admin')}
-        onOpenProfile={() => setCurrentView('profile')}
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
       >
-        <Profile onBackToSubjects={() => setCurrentView('subjects')} />
+        <Profile onBackToSubjects={() => navigateTo('subjects', '/')} />
       </Layout>
     );
   }
@@ -178,13 +301,13 @@ function AppRouter() {
   if (currentView === 'exam_review') {
     return (
       <Layout
-        onNavigateHome={() => setCurrentView('subjects')}
-        onOpenAdmin={() => setCurrentView('admin')}
-        onOpenProfile={() => setCurrentView('profile')}
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
       >
         <ExamReview
-          onBackToResults={() => setCurrentView('results')}
-          onBackToSubjects={() => setCurrentView('subjects')}
+          onBackToResults={() => navigateTo('results', '/exam/results')}
+          onBackToSubjects={() => navigateTo('subjects', '/')}
         />
       </Layout>
     );
@@ -194,31 +317,145 @@ function AppRouter() {
   if (currentView === 'results' && lastResult) {
     return (
       <Layout
-        onNavigateHome={() => setCurrentView('subjects')}
-        onOpenAdmin={() => setCurrentView('admin')}
-        onOpenProfile={() => setCurrentView('profile')}
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
       >
         <Results
-          onBackToSubjects={() => setCurrentView('subjects')}
-          onOpenReview={() => setCurrentView('exam_review')}
+          onBackToSubjects={() => navigateTo('subjects', '/')}
+          onOpenReview={() => navigateTo('exam_review', '/exam/review')}
         />
       </Layout>
     );
   }
 
-  // Exam Setup view
+  // Step 1: Exam Setup Page (امتحان تدريبي vs محاكاة كاملة)
   if (currentView === 'exam_setup' && selectedSubject) {
     return (
       <Layout
-        onNavigateHome={() => setCurrentView('subjects')}
-        onOpenAdmin={() => setCurrentView('admin')}
-        onOpenProfile={() => setCurrentView('profile')}
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
       >
-        <ExamSetup
+        <ExamSetupPage
           subject={selectedSubject.subject}
           dbSubjectId={selectedSubject.dbId}
-          onBackToSubjects={() => setCurrentView('subjects')}
-          onExamStarted={() => setCurrentView('exam_attempt')}
+          onBack={goBack}
+          onSelectTraining={() => navigateTo('training_setup', '/exam/training')}
+          onSelectSimulator={() => navigateTo('simulator', '/exam/simulator')}
+          onOpenAdmin={handleOpenAdmin}
+          onOpenProfile={() => navigateTo('profile', '/profile')}
+        />
+      </Layout>
+    );
+  }
+
+  // Step 2: Training Setup Page (شامل من المقرر vs سنوات سابقة)
+  if (currentView === 'training_setup' && selectedSubject) {
+    return (
+      <Layout
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
+      >
+        <TrainingSetupPage
+          subject={selectedSubject.subject}
+          onBack={goBack}
+          onSelectComprehensive={() => navigateTo('comprehensive', '/exam/training/comprehensive')}
+          onSelectYears={() => navigateTo('years', '/exam/training/years')}
+        />
+      </Layout>
+    );
+  }
+
+  // Step 3A: Comprehensive Page (شامل من المقرر)
+  if (currentView === 'comprehensive' && selectedSubject) {
+    return (
+      <Layout
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
+      >
+        <ComprehensivePage
+          subject={selectedSubject.subject}
+          onBack={goBack}
+          isLoading={isExamLoading}
+          onStartExam={async () => {
+            const res = await startNewExam(
+              selectedSubject.dbId || selectedSubject.subject.slug,
+              'training',
+              'training',
+              'curriculum_review',
+              undefined,
+              selectedSubject.subject.slug,
+              user?.id
+            );
+            if (res.success) {
+              navigateTo('exam_attempt', '/exam/attempt');
+            }
+          }}
+        />
+      </Layout>
+    );
+  }
+
+  // Step 3B: Years Page (سنوات سابقة 2000-2026)
+  if (currentView === 'years' && selectedSubject) {
+    return (
+      <Layout
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
+      >
+        <YearsPage
+          subject={selectedSubject.subject}
+          onBack={goBack}
+          isLoading={isExamLoading}
+          onStartExam={async (year) => {
+            const res = await startNewExam(
+              selectedSubject.dbId || selectedSubject.subject.slug,
+              'training',
+              'training',
+              'yearly',
+              year,
+              selectedSubject.subject.slug,
+              user?.id
+            );
+            if (res.success) {
+              navigateTo('exam_attempt', '/exam/attempt');
+            }
+          }}
+        />
+      </Layout>
+    );
+  }
+
+  // Step 3C: Simulator Page (محاكاة كاملة رسمية)
+  if (currentView === 'simulator' && selectedSubject) {
+    return (
+      <Layout
+        onNavigateHome={() => navigateTo('subjects', '/')}
+        onOpenAdmin={handleOpenAdmin}
+        onOpenProfile={() => navigateTo('profile', '/profile')}
+      >
+        <SimulatorPage
+          subject={selectedSubject.subject}
+          onBack={goBack}
+          isLoading={isExamLoading}
+          onStartExam={async () => {
+            const res = await startNewExam(
+              selectedSubject.dbId || selectedSubject.subject.slug,
+              'comprehensive',
+              'simulator',
+              undefined,
+              undefined,
+              selectedSubject.subject.slug,
+              user?.id
+            );
+            if (res.success) {
+              navigateTo('exam_attempt', '/exam/attempt');
+            }
+          }}
         />
       </Layout>
     );
@@ -227,17 +464,17 @@ function AppRouter() {
   // Default: Subjects listing view
   return (
     <Layout
-      onNavigateHome={() => setCurrentView('subjects')}
-      onOpenAdmin={() => setCurrentView('admin')}
-      onOpenProfile={() => setCurrentView('profile')}
+      onNavigateHome={() => navigateTo('subjects', '/')}
+      onOpenAdmin={handleOpenAdmin}
+      onOpenProfile={() => navigateTo('profile', '/profile')}
     >
       <Subjects
         onSelectSubject={(subject, dbId) => {
           setSelectedSubject({ subject, dbId });
-          setCurrentView('exam_setup');
+          navigateTo('exam_setup', '/exam/setup');
         }}
-        onResumeExam={() => setCurrentView('exam_attempt')}
-        onOpenAdmin={() => setCurrentView('admin')}
+        onResumeExam={() => navigateTo('exam_attempt', '/exam/attempt')}
+        onOpenAdmin={handleOpenAdmin}
       />
     </Layout>
   );

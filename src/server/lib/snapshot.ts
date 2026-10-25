@@ -65,27 +65,30 @@ export function createClientSnapshot(
     isWeeklySimulation: boolean = false
 ): Record<string, unknown> {
     const rawContentObj = (row.content && typeof row.content === 'object') ? (row.content as Record<string, unknown>) : {};
-    const promptText = (typeof rawContentObj.prompt === 'string' && rawContentObj.prompt)
-        || (typeof rawContentObj.statement === 'string' && rawContentObj.statement)
-        || (typeof rawContentObj.textWithBlanks === 'string' && rawContentObj.textWithBlanks)
-        || '';
+    const promptText = 
+      (typeof rawContentObj.prompt === 'string' && rawContentObj.prompt) ||
+      (typeof rawContentObj.statement === 'string' && rawContentObj.statement) ||
+      (typeof rawContentObj.textWithBlanks === 'string' && rawContentObj.textWithBlanks) ||
+      null;
 
+    const marksNum = Number(row.marks);
     const snap: Record<string, unknown> = {
         id: row.id,
         type: row.question_type,
         questionType: row.question_type,
         primaryInteractionMode: row.primary_interaction_mode,
-        marks: row.marks,
-        points: Number(row.marks),
+        marks: marksNum,
+        points: Number.isFinite(marksNum) ? marksNum : null,
         prompt: promptText,
+        promptText: promptText,
         position: position
     };
 
     if (examMode === ExamMode.TRAINING) {
         snap.content = row.content;
         snap.correctAnswer = row.correct_answer;
-        snap.explanation = row.explanation;
-        snap.explanationAr = row.explanation;
+        snap.explanation = row.explanation ?? null;
+        snap.explanationAr = row.explanation ?? null;
     } else {
         snap.content = deepScrubCorrectAnswers(row.content);
         // CRITICAL BOUNDARY: ONLY for FILL_BLANK in confirmed Weekly Simulation mode (Self-Assessment)

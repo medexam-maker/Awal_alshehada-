@@ -125,7 +125,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
               <span>منصة أول الشهادة المعتمدة لطلاب الشهادة السودانية</span>
             </span>
 
-            {onOpenAdmin && (
+            {user?.role === 'admin' && onOpenAdmin && (
               <button
                 type="button"
                 onClick={onOpenAdmin}

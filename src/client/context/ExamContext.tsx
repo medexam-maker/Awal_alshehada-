@@ -325,16 +325,20 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         timeTakenSeconds,
       };
 
+      const isServerAttempt = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeAttempt.attemptId);
+
       try {
-        // Try server grading if server is online
-        let serverRes = await apiClient.request<ExamResult>(
-          '/api/exam/finish',
-          {
-            method: 'POST',
-            body: JSON.stringify(finishPayload),
-          },
-          true
-        ).catch(() => null);
+        // Try server grading if server is online and attempt is an authoritative server attempt
+        let serverRes = isServerAttempt
+          ? await apiClient.request<ExamResult>(
+              '/api/exam/finish',
+              {
+                method: 'POST',
+                body: JSON.stringify(finishPayload),
+              },
+              true
+            ).catch(() => null)
+          : null;
 
         if (serverRes?.success && serverRes.data) {
           const sData = serverRes.data as any;

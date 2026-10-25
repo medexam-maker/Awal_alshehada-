@@ -39,8 +39,8 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User context & actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* View Switcher Button (Student vs Admin) */}
-            {onOpenAdmin && (
+            {/* View Switcher Button (Admin only) */}
+            {user?.role === 'admin' && onOpenAdmin && (
               <button
                 type="button"
                 onClick={onOpenAdmin}

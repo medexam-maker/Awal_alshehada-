@@ -178,6 +178,11 @@ export async function finishExam(
   answers: Record<string, unknown>,
   timeTakenSeconds: number
 ) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(attemptId);
+    if (!isUuid) {
+        throw new Error('Attempt not found.');
+    }
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -355,6 +360,10 @@ export async function finishExam(
 }
 
 export async function getExamResult(userId: string, attemptId: string) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(attemptId);
+    if (!isUuid) {
+        throw new Error('Attempt not found.');
+    }
     const client = await pool.connect();
     try {
         const attemptRes = await client.query(

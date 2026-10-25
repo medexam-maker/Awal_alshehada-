@@ -78,6 +78,26 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
   const currentQuestion = questions[currentIndex] || questions[0];
   const totalQuestions = questions.length;
 
+  const questionText =
+    currentQuestion?.prompt
+    ?? currentQuestion?.content?.prompt
+    ?? currentQuestion?.content?.statement
+    ?? currentQuestion?.content?.textWithBlanks
+    ?? '— تحميل السؤال —';
+
+  if (questionText === '— تحميل السؤال —') {
+    console.warn(`[ExamAttempt] Missing question prompt text for question ID: ${currentQuestion?.id}, index: ${currentIndex}`);
+  }
+
+  const rawPoints = currentQuestion?.points ?? currentQuestion?.marks;
+  const pointsNum = Number(rawPoints);
+  const points = Number.isFinite(pointsNum) ? pointsNum : null;
+
+  // In Simulator Mode: NEVER show explanation or explanationAr. Explanations only in Training.
+  const explanation = activeAttempt.examMode === 'training'
+    ? (currentQuestion?.explanationAr ?? currentQuestion?.explanation ?? null)
+    : null;
+
   const matchedSubject = TWELVE_CONTRACT_SUBJECTS.find((s) => s.slug === activeAttempt.subjectId);
   const subjectNameAr = matchedSubject?.name_ar || 'امتحان الشهادة الثانوية';
 
@@ -300,7 +320,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
                   {getQuestionTypeLabel(currentQuestion.questionType || currentQuestion.type)}
                 </span>
                 <span className="text-xs font-semibold text-slate-500">
-                  درجة السؤال: {currentQuestion.marks ?? currentQuestion.points} درجات
+                  درجة السؤال: {points !== null ? `${points} درجات` : '—'}
                 </span>
               </div>
 
@@ -330,7 +350,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
 
             {/* Prompt */}
             <div className="text-lg md:text-xl font-bold text-slate-900 leading-relaxed">
-              {currentQuestion.prompt || (currentQuestion.content?.prompt || currentQuestion.content?.statement || currentQuestion.content?.textWithBlanks)}
+              {questionText}
             </div>
 
             {/* Specialized Question Component Renderer */}
@@ -347,7 +367,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
             </div>
 
             {/* Training Mode Explanations Accordion */}
-            {activeAttempt.examMode === 'training' && (currentQuestion.explanationAr || currentQuestion.explanation) && (
+            {activeAttempt.examMode === 'training' && explanation && (
               <div className="pt-4 border-t border-slate-100">
                 <button
                   type="button"
@@ -361,7 +381,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
                 {showTrainingHint && (
                   <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs leading-relaxed text-emerald-950 space-y-1.5">
                     <div className="font-extrabold text-emerald-900">توضيح المعلم / المنهج المقرر:</div>
-                    <p>{currentQuestion.explanationAr || currentQuestion.explanation}</p>
+                    <p>{explanation}</p>
                   </div>
                 )}
               </div>
