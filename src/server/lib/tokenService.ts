@@ -251,8 +251,8 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
       const bufferRes = await client.query(
         `SELECT encrypted_raw_replacement, encryption_iv, encryption_tag, encryption_key_id, expires_at
          FROM refresh_replay_buffer
-         WHERE old_token_id = $1`,
-        [lockedToken.id]
+         WHERE old_token_hash = $1`,
+        [oldHash] // Use oldHash (token hash)
       );
 
       if (bufferRes.rows.length > 0) {
@@ -275,8 +275,8 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
             );
 
             await client.query(
-              `UPDATE refresh_replay_buffer SET consumed_at = NOW() WHERE old_token_id = $1`,
-              [lockedToken.id]
+              `UPDATE refresh_replay_buffer SET consumed_at = NOW() WHERE old_token_hash = $1`,
+              [oldHash]
             );
 
             await client.query('COMMIT');

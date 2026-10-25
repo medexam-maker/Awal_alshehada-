@@ -99,7 +99,8 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
       recovery_secret_hash TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'PENDING',
       expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT uq_auth_op_user_operation UNIQUE (user_id, operation_id)
     );
 
     CREATE TABLE IF NOT EXISTS subjects (
