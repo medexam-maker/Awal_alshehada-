@@ -25,9 +25,15 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
   const [view, setView] = useState<AuthView>('login');
 
   // Login form state
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    return localStorage.getItem('awal_remembered_email') || '';
+  });
+  const [rememberEmail, setRememberEmail] = useState(() => {
+    return !!localStorage.getItem('awal_remembered_email');
+  });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
 
   // Recovery state
   const [recoveryEmail, setRecoveryEmail] = useState('');
@@ -53,7 +59,14 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
     }
 
     const res = await login(email, password);
-    if (!res.success) {
+    if (res.success) {
+      // حفظ أو حذف البريد الإلكتروني في التخزين المحلي بناءً على رغبة المستخدم
+      if (rememberEmail) {
+        localStorage.setItem('awal_remembered_email', email);
+      } else {
+        localStorage.removeItem('awal_remembered_email');
+      }
+    } else {
       setError(res.error || 'فشل تسجيل الدخول');
     }
   };
@@ -178,27 +191,6 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
         {/* 1. Standard Login View */}
         {view === 'login' && (
           <>
-            {/* Quick Test Credentials Box */}
-            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1.5 mb-2">
-              <div className="font-bold flex items-center gap-1.5 text-emerald-800">
-                <Sparkles className="w-4 h-4 text-emerald-600" />
-                <span>حساب تجريبي جاهز للاختبار السريع:</span>
-              </div>
-              <div className="text-[11px] text-emerald-700">
-                البريد: <span className="font-mono font-bold">student@firstcertificate.sd</span> | كلمة المرور: <span className="font-mono font-bold">Password123!</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setEmail('student@firstcertificate.sd');
-                  setPassword('Password123!');
-                }}
-                className="w-full mt-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
-              >
-                ملء بيانات التجربة تلقائياً
-              </button>
-            </div>
-
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">البريد الإلكتروني</label>
@@ -212,6 +204,19 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
                     required
                     className="w-full pl-3 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                   />
+                </div>
+                
+                {/* زر تذكر البريد الإلكتروني فقط (اسم المستخدم) */}
+                <div className="flex items-center justify-between pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberEmail}
+                      onChange={(e) => setRememberEmail(e.target.checked)}
+                      className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                    />
+                    <span className="text-xs text-slate-600 font-medium">تذكر البريد الإلكتروني على هذا الهاتف</span>
+                  </label>
                 </div>
               </div>
 
