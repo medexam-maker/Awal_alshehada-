@@ -31,22 +31,34 @@ import {
 interface RateLimitRecord {
   timestamps: number[];
 }
-const forgotPasswordRateLimitMap = new Map<string, RateLimitRecord>();
+// In-memory rate limiting maps: Strict limits per IP and per Email
+const forgotPasswordIpRateLimitMap = new Map<string, RateLimitRecord>();
+const forgotPasswordEmailRateLimitMap = new Map<string, RateLimitRecord>();
 
-function checkForgotPasswordRateLimit(key: string): boolean {
+function checkForgotPasswordRateLimit(ip: string, email: string): boolean {
   const now = Date.now();
   const windowMs = 15 * 60 * 1000;
-  const limit = 5;
+  
+  // Strict limit: 3 requests per 15 mins per IP, 2 requests per 15 mins per Email
+  const ipLimit = 3;
+  const emailLimit = 2;
 
-  const record = forgotPasswordRateLimitMap.get(key) || { timestamps: [] };
-  record.timestamps = record.timestamps.filter((ts) => now - ts < windowMs);
+  const ipRecord = forgotPasswordIpRateLimitMap.get(ip) || { timestamps: [] };
+  ipRecord.timestamps = ipRecord.timestamps.filter((ts) => now - ts < windowMs);
+  
+  const emailRecord = forgotPasswordEmailRateLimitMap.get(email) || { timestamps: [] };
+  emailRecord.timestamps = emailRecord.timestamps.filter((ts) => now - ts < windowMs);
 
-  if (record.timestamps.length >= limit) {
+  if (ipRecord.timestamps.length >= ipLimit || emailRecord.timestamps.length >= emailLimit) {
     return false;
   }
 
-  record.timestamps.push(now);
-  forgotPasswordRateLimitMap.set(key, record);
+  ipRecord.timestamps.push(now);
+  forgotPasswordIpRateLimitMap.set(ip, ipRecord);
+  
+  emailRecord.timestamps.push(now);
+  forgotPasswordEmailRateLimitMap.set(email, emailRecord);
+  
   return true;
 }
 
@@ -185,8 +197,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       res.status(401).json({
         success: false,
         error: {
-          code: 'AUTH_REQUIRED',
-          message: 'Invalid email or password',
+          code: 'ACCOUNT_NOT_FOUND',
+          message: 'هذا الحساب غير مسجل سجل الان',
           details: {},
         },
         timestamp: new Date().toISOString(),
@@ -728,9 +740,8 @@ router.post('/forgot-password', async (req: Request, res: Response): Promise<voi
     const normalizedEmail = String(email).trim().toLowerCase();
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
-    // Rate limiting: 5 requests per 15 minutes per IP + normalized email
-    const rateLimitKey = `${clientIp}:${normalizedEmail}`;
-    if (!checkForgotPasswordRateLimit(rateLimitKey)) {
+    // Rate limiting: 3 requests per 15 minutes per IP, 2 per Email
+    if (!checkForgotPasswordRateLimit(clientIp, normalizedEmail)) {
       res.status(429).json({
         success: false,
         error: {

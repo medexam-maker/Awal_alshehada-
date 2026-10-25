@@ -84,7 +84,6 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
-    ALTER TABLE refresh_replay_buffer ADD COLUMN IF NOT EXISTS old_token_id TEXT;
     ALTER TABLE refresh_replay_buffer ADD COLUMN IF NOT EXISTS encrypted_raw_replacement TEXT;
     ALTER TABLE refresh_replay_buffer ADD COLUMN IF NOT EXISTS encryption_iv TEXT;
     ALTER TABLE refresh_replay_buffer ADD COLUMN IF NOT EXISTS encryption_tag TEXT;

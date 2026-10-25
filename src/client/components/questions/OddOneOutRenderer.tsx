@@ -47,7 +47,7 @@ export const OddOneOutRenderer: React.FC<OddOneOutProps> = ({
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {content.items.map((item, idx) => {
+        {content?.items?.map((item, idx) => {
           const isSelected = selectedItem === item;
 
           return (
