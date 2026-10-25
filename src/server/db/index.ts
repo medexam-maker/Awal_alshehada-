@@ -147,20 +147,22 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_created_at TIMESTAMPTZ;
   `);
 
-  try {
-    const defaultPassHash = await hashPassword('Password123!');
-    const adminPassHash = await hashPassword('AdminPassword123!');
-    await db.query(
-      `INSERT INTO users (id, email, password_hash, full_name, role, status)
-       VALUES 
-       ('00000000-0000-0000-0000-000000000001', 'student@firstcertificate.sd', $1, 'طالب أول الشهادة', 'student', 'active'),
-       ('00000000-0000-0000-0000-000000000002', 'admin@firstcertificate.sd', $2, 'مسؤول النظام', 'admin', 'active')
-       ON CONFLICT (email) DO NOTHING`,
-      [defaultPassHash, adminPassHash]
-    );
-  } catch (err) {
-    console.warn('[DB] User seeding warning:', err);
-  }
+    /*
+    try {
+      const defaultPassHash = await hashPassword('Password123!');
+      const adminPassHash = await hashPassword('AdminPassword123!');
+      await db.query(
+        `INSERT INTO users (id, email, password_hash, full_name, role, status)
+         VALUES 
+         ('00000000-0000-0000-0000-000000000001', 'student@firstcertificate.sd', $1, 'طالب أول الشهادة', 'student', 'active'),
+         ('00000000-0000-0000-0000-000000000002', 'admin@firstcertificate.sd', $2, 'مسؤول النظام', 'admin', 'active')
+         ON CONFLICT (email) DO NOTHING`,
+        [defaultPassHash, adminPassHash]
+      );
+    } catch (err) {
+      console.warn('[DB] User seeding warning:', err);
+    }
+    */
 
   return new PGlitePoolWrapper(db);
 }

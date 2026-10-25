@@ -116,12 +116,13 @@ class ApiClient {
             this.lastVerifiedUser = json.data.user;
           }
           return json.data.accessToken;
-        } else {
+        } else if (response.status === 401) {
           this.clearAuth();
+          return null;
+        } else {
           return null;
         }
       } catch {
-        this.clearAuth();
         return null;
       } finally {
         this.isRefreshing = false;
