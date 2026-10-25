@@ -152,6 +152,7 @@ export async function createRefreshToken(
   sessionId?: string,
   sessionCreatedAt?: Date
 ): Promise<{ rawToken: string; sessionId: string; sessionCreatedAt: Date; expiresAt: Date }> {
+  const id = crypto.randomUUID();
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashToken(rawToken);
   const sid = sessionId || crypto.randomUUID();
@@ -159,9 +160,9 @@ export async function createRefreshToken(
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_ROLLING_DAYS * 24 * 60 * 60 * 1000);
 
   await db.query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, session_id, session_created_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [userId, tokenHash, expiresAt, sid, sCreatedAt]
+    `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, session_id, session_created_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, userId, tokenHash, expiresAt, sid, sCreatedAt]
   );
 
   return { rawToken, sessionId: sid, sessionCreatedAt: sCreatedAt, expiresAt };
@@ -352,13 +353,14 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
     );
 
     // Issue new refresh token
+    const newId = crypto.randomUUID();
     const newRawToken = crypto.randomBytes(32).toString('hex');
     const newHash = hashToken(newRawToken);
 
     await client.query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, session_id, session_created_at)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [lockedToken.user_id, newHash, newExpiresAt, sessionId, sessionCreatedAt]
+      `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, session_id, session_created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [newId, lockedToken.user_id, newHash, newExpiresAt, sessionId, sessionCreatedAt]
     );
 
     // Encrypt replacement token for replay buffer (D3)
@@ -372,11 +374,12 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
 
     await client.query(
       `INSERT INTO refresh_replay_buffer (
-         old_token_id, user_id, encrypted_raw_replacement, encryption_iv,
+         id, old_token_hash, user_id, encrypted_raw_replacement, encryption_iv,
          encryption_tag, encryption_key_id, expires_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
-        lockedToken.id,
+        crypto.randomUUID(),
+        hashToken(oldRawToken),
         lockedToken.user_id,
         encrypted.ciphertext,
         encrypted.iv,

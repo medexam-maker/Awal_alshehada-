@@ -27,13 +27,35 @@ export async function startExam(
         // Pessimistic lock on user to prevent concurrent duplicate attempts
         await client.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [userId]);
 
+        // Resolve subjectId (handle slug or UUID)
+        let resolvedSubjectId = subjectId;
+        const subCheck = await client.query(`SELECT id FROM subjects WHERE id = $1 OR slug = $1`, [subjectId]);
+        if (subCheck.rows.length > 0) {
+            resolvedSubjectId = subCheck.rows[0].id;
+        } else {
+            const newSubId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            await client.query(
+                `INSERT INTO subjects (id, name_ar, slug, is_active) VALUES ($1, $2, $2, true) ON CONFLICT (slug) DO NOTHING`,
+                [newSubId, subjectId]
+            );
+            const refetch = await client.query(`SELECT id FROM subjects WHERE slug = $1 OR id = $1`, [subjectId]);
+            resolvedSubjectId = refetch.rows[0]?.id || newSubId;
+        }
+
+        // Check if question bank has questions for this subject
+        const qCountRes = await client.query(`SELECT COUNT(*) as cnt FROM question_bank WHERE subject_id = $1`, [resolvedSubjectId]);
+        const qCount = Number(qCountRes.rows[0]?.cnt || 0);
+        if (qCount === 0) {
+            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
+        }
+
         const activeCheck = await client.query(
             `SELECT ea.id, ea.exam_mode, ea.bank_type, ea.training_set_id, ea.started_at, ea.expires_at, ea.total_marks,
                     (tes.exam_category = 'weekly') AS is_weekly
              FROM exam_attempts ea
              LEFT JOIN training_exam_sets tes ON tes.id = ea.training_set_id
              WHERE ea.user_id = $1 AND ea.subject_id = $2 AND ea.status = 'active'`,
-            [userId, subjectId]
+            [userId, resolvedSubjectId]
         );
         if (activeCheck.rows.length > 0) {
             const existing = activeCheck.rows[0];
@@ -91,7 +113,7 @@ export async function startExam(
         }
         const isWeeklySimulation = Boolean(isWeeklySet && examMode === ExamMode.SIMULATOR);
 
-        const questions = await selectQuestions(client, userId, subjectId, bankType, examMode, 40, trainingSetId);
+        const questions = await selectQuestions(client, userId, resolvedSubjectId, bankType, examMode, 40, trainingSetId);
         if (questions.length === 0) {
             throw new Error('No eligible questions found.');
         }
@@ -107,7 +129,7 @@ export async function startExam(
              (user_id, subject_id, bank_type, exam_mode, training_set_id, status, expires_at, total_marks)
              VALUES ($1, $2, $3, $4, $5, 'active', $6, $7)
              RETURNING id, started_at`,
-            [userId, subjectId, bankType, examMode, trainingSetId || null, expiresAt, totalMarks]
+            [userId, resolvedSubjectId, bankType, examMode, trainingSetId || null, expiresAt, totalMarks]
         );
         const attemptId = attemptResult.rows[0].id;
         const startedAt = attemptResult.rows[0].started_at;

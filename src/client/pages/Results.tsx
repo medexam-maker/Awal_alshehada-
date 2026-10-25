@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useExam } from '../context/ExamContext';
+import { playWaterDrop } from '../utils/soundEffects';
 import {
   Award,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   HelpCircle,
   AlertCircle,
   BookOpen,
+  ArrowRight,
 } from 'lucide-react';
 
 interface ResultsProps {
@@ -105,8 +107,29 @@ export const Results: React.FC<ResultsProps> = ({
     return true;
   });
 
+  const handleBack = () => {
+    playWaterDrop();
+    onBackToSubjects();
+  };
+
   return (
-    <div className="space-y-8 max-w-4xl mx-auto pb-12 w-full">
+    <div className="space-y-6 max-w-4xl mx-auto pb-12 w-full">
+      {/* Top Header Return Bar */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+          title="العودة لقائمة المواد"
+        >
+          <ArrowRight className="w-4 h-4 text-slate-700" />
+          <span>رجوع للمواد</span>
+        </button>
+        <span className="text-xs font-extrabold text-slate-500">
+          تقرير النتيجة
+        </span>
+      </div>
+
       {/* Top Result Banner */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-6 border-b border-slate-100">

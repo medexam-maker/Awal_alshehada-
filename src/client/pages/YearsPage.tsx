@@ -3,6 +3,8 @@ import { Helmet } from 'react-helmet-async';
 import { ContractSubject } from '../data/contractSubjects';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
 
+import { playWaterDrop } from '../utils/soundEffects';
+
 export interface YearsPageProps {
   subject: ContractSubject;
   onBack: () => void;
@@ -17,6 +19,16 @@ export const YearsPage: React.FC<YearsPageProps> = ({
   isLoading = false,
 }) => {
   const [selectedYear, setSelectedYear] = useState<number>(2024);
+
+  const handleBack = () => {
+    playWaterDrop();
+    onBack();
+  };
+
+  const handleStart = () => {
+    playWaterDrop();
+    onStartExam(selectedYear);
+  };
 
   // Years range 2026 down to 2000
   const years: number[] = [];
@@ -49,17 +61,18 @@ export const YearsPage: React.FC<YearsPageProps> = ({
       </Helmet>
 
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#E0E0E0]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <button
           type="button"
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          onClick={handleBack}
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+          title="الرجوع لنمط التدريب"
         >
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-4 h-4 text-slate-700" />
           <span>رجوع</span>
         </button>
 
-        <span className="text-xs font-bold text-[#2196F3] bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+        <span className="text-xs font-extrabold text-teal-800 bg-teal-50 px-3 py-1 rounded-full border border-teal-200">
           {subject.name_ar} — سنوات سابقة
         </span>
       </div>
@@ -191,10 +204,10 @@ export const YearsPage: React.FC<YearsPageProps> = ({
         <button
           type="button"
           disabled={isLoading}
-          onClick={() => onStartExam(selectedYear)}
-          className="w-full h-[64px] bg-[#2196F3] hover:bg-[#1e88e5] active:scale-[0.99] text-white text-[20px] font-bold rounded-[16px] shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          onClick={handleStart}
+          className="w-full h-[64px] bg-gradient-to-r from-teal-500 via-emerald-600 to-teal-700 hover:from-teal-600 hover:to-teal-800 active:scale-[0.98] text-white text-[20px] font-extrabold rounded-[18px] shadow-xl shadow-teal-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
-          <span>🚀 ابدأ الامتحان</span>
+          <span>🚀 ابدأ امتحان دورة {selectedYear}م</span>
         </button>
 
         {/* Note Box */}

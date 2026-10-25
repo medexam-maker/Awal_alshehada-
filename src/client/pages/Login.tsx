@@ -178,6 +178,27 @@ export const Login: React.FC<LoginProps> = ({ onGoToRegister }) => {
         {/* 1. Standard Login View */}
         {view === 'login' && (
           <>
+            {/* Quick Test Credentials Box */}
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-xs text-emerald-900 space-y-1.5 mb-2">
+              <div className="font-bold flex items-center gap-1.5 text-emerald-800">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                <span>حساب تجريبي جاهز للاختبار السريع:</span>
+              </div>
+              <div className="text-[11px] text-emerald-700">
+                البريد: <span className="font-mono font-bold">student@firstcertificate.sd</span> | كلمة المرور: <span className="font-mono font-bold">Password123!</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('student@firstcertificate.sd');
+                  setPassword('Password123!');
+                }}
+                className="w-full mt-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+              >
+                ملء بيانات التجربة تلقائياً
+              </button>
+            </div>
+
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">البريد الإلكتروني</label>

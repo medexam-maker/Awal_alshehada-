@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth';
 import { curriculumStorage } from '../storage/curriculumStorage';
 import { ArrowRight, Check } from 'lucide-react';
 
+import { playWaterDrop } from '../utils/soundEffects';
+
 export interface ComprehensivePageProps {
   subject: ContractSubject;
   onBack: () => void;
@@ -20,6 +22,16 @@ export const ComprehensivePage: React.FC<ComprehensivePageProps> = ({
 }) => {
   const { user } = useAuth();
   const studentId = user?.id || '00000000-0000-0000-0000-000000000001';
+
+  const handleBack = () => {
+    playWaterDrop();
+    onBack();
+  };
+
+  const handleStart = () => {
+    playWaterDrop();
+    onStartExam();
+  };
 
   const [progress, setProgress] = useState(() =>
     curriculumStorage.getStudentProgress(studentId, subject.slug)
@@ -62,17 +74,18 @@ export const ComprehensivePage: React.FC<ComprehensivePageProps> = ({
       </Helmet>
 
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#E0E0E0]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <button
           type="button"
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          onClick={handleBack}
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+          title="الرجوع لنمط التدريب"
         >
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-4 h-4 text-slate-700" />
           <span>رجوع</span>
         </button>
 
-        <span className="text-xs font-bold text-[#5B4FE9] bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
+        <span className="text-xs font-extrabold text-[#5B4FE9] bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200">
           {subject.name_ar} — شامل من المقرر
         </span>
       </div>
@@ -164,9 +177,9 @@ export const ComprehensivePage: React.FC<ComprehensivePageProps> = ({
         </div>
 
         {/* Bar */}
-        <div className="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
+        <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
           <div
-            className="h-full bg-[#5B4FE9] rounded-full transition-all duration-500"
+            className="h-full bg-gradient-to-r from-blue-500 via-indigo-600 to-violet-600 rounded-full transition-all duration-500 shadow-sm"
             style={{ width: `${Math.min(100, Math.max(5, completionPercentage))}%` }}
           />
         </div>
@@ -182,10 +195,10 @@ export const ComprehensivePage: React.FC<ComprehensivePageProps> = ({
         <button
           type="button"
           disabled={isLoading}
-          onClick={onStartExam}
-          className="w-full h-[64px] bg-[#5B4FE9] hover:bg-[#4d41db] active:scale-[0.99] text-white text-[20px] font-bold rounded-[16px] shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          onClick={handleStart}
+          className="w-full h-[64px] bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 active:scale-[0.98] text-white text-[20px] font-extrabold rounded-[18px] shadow-xl shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
-          <span>🚀 ابدأ الجلسة</span>
+          <span>🚀 ابدأ الجلسة الشاملة</span>
         </button>
 
         {/* Note Box */}

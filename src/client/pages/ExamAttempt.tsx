@@ -190,180 +190,73 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
 
   return (
     <div className="space-y-6 max-w-6xl w-full mx-auto pb-12">
-      {/* Sticky Exam Execution Header */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm sticky top-2 z-20 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Subject & Mode Identity */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-              {currentIndex + 1}
-            </div>
-            <div>
-              <h1 className="font-extrabold text-base text-slate-900 leading-tight">
-                {subjectNameAr}
-              </h1>
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <span
-                  className={`px-2 py-0.5 rounded-md ${
-                    activeAttempt.examMode === 'simulator'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-blue-100 text-blue-800'
-                  }`}
-                >
-                  {activeAttempt.examMode === 'simulator' ? 'محاكاة الامتحان' : 'تدريب ذاتي'}
-                </span>
-                <span>• السؤال {currentIndex + 1} من {totalQuestions}</span>
-              </div>
-            </div>
-          </div>
+      {/* Simplified Header - Only basic navigation */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-4 shadow-sm sticky top-2 z-20 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onExitExam}
+          className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+        >
+          <ArrowRight className="w-4 h-4" />
+          <span>رجوع</span>
+        </button>
 
-          {/* Zero-Request / Offline Pill & Timer */}
-          <div className="flex items-center gap-3">
-            <div
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-semibold border border-slate-200"
-              title="يعمل دون اتصال أثناء الإجابة لضمان الصمود أمام انقطاع الإنترنت (Zero-Request Invariant)"
-            >
-              <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-              <span>محلي متين (Zero-Request)</span>
-            </div>
-
-            <Timer
-              remainingSeconds={remainingSeconds}
-              isSimulator={activeAttempt.examMode === 'simulator'}
-            />
-
-            <button
-              type="button"
-              onClick={() => setIsSubmitModalOpen(true)}
-              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>تسليم الامتحان</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Pending Submission Alert Banner (if previous submission attempt failed) */}
-        {pendingSubmission && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{pendingSubmission.errorMessage}</span>
-            </div>
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={handleConfirmSubmit}
-              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shrink-0 cursor-pointer flex items-center gap-1"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
-              <span>إعادة محاولة التسليم</span>
-            </button>
-          </div>
-        )}
-
-        {/* Progress Bar */}
-        <ProgressBar
-          current={currentIndex + 1}
-          total={totalQuestions}
-          answeredCount={answeredCount}
-        />
+        <button
+          type="button"
+          onClick={() => setIsSubmitModalOpen(true)}
+          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+        >
+          <Send className="w-3.5 h-3.5" />
+          <span>تسليم الامتحان</span>
+        </button>
       </div>
 
-      {/* Main Layout: Question Card + Navigator Sidebar */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* Left Column (Desktop) / Sidebar: Question Navigator */}
-        <div className="lg:col-span-1 space-y-4">
-          <QuestionNavigator
-            totalQuestions={totalQuestions}
-            currentIndex={currentIndex}
-            answeredIndices={answeredIndices}
-            flaggedIndices={flaggedIndices}
-            onSelectIndex={(idx) => {
-              setCurrentIndex(idx);
-              setShowTrainingHint(false);
-            }}
-            onToggleFlag={toggleFlagIndex}
-          />
 
-          {/* Educational Note in Training Mode */}
-          {activeAttempt.examMode === 'training' && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl text-xs text-blue-900 space-y-2">
-              <div className="font-bold flex items-center gap-1.5">
-                <Info className="w-4 h-4 text-blue-600" />
-                <span>ملاحظة تعليمية</span>
-              </div>
-              <p className="leading-relaxed text-blue-800">
-                أنت في وضع التدريب؛ يمكنك استعراض التوضيحات المنهجية لكل سؤال بحرية دون التأثير على تقييمك.
-              </p>
-            </div>
-          )}
-
-          {/* Abandon Exam Button */}
-          <button
-            type="button"
-            onClick={onExitExam}
-            className="w-full py-2.5 px-3 text-xs font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>حفظ والعودة لقائمة المواد</span>
-          </button>
-        </div>
-
-        {/* Right / Main Column: Active Question Workspace */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-xs space-y-6">
-            {/* Question Meta Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 bg-emerald-50 text-emerald-800 font-extrabold text-xs rounded-xl border border-emerald-200">
-                  {getQuestionTypeLabel(currentQuestion.questionType || currentQuestion.type)}
-                </span>
-                <span className="text-xs font-semibold text-slate-500">
-                  درجة السؤال: {points !== null ? `${points} درجات` : '—'}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => toggleFlagIndex(currentIndex)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    isCurrentFlagged
-                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  <Bookmark className="w-4 h-4" />
-                  <span>{isCurrentFlagged ? 'إلغاء التمييز' : 'تمييز للمراجعة'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleClearAnswer}
-                  className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
-                >
-                  مسح الإجابة
-                </button>
-              </div>
+        {/* Main Workspace */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 md:p-8 shadow-xs space-y-6">
+          {/* Question Heading & Prompt */}
+          <div className="space-y-4">
+            <div className="text-base sm:text-lg font-black text-slate-900 bg-slate-100/90 px-4 py-2.5 rounded-2xl border border-slate-200 inline-flex items-center gap-2">
+              <span>{(() => {
+                const arabicNumbers = ['', 'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+                const numStr = arabicNumbers[currentIndex + 1] || `${currentIndex + 1}`;
+                const part = currentQuestion.partLabel ? ` (${currentQuestion.partLabel})` : ' (أ)';
+                return `السؤال ${numStr} :${part}`;
+              })()}</span>
             </div>
 
-            {/* Prompt */}
             <div className="text-lg md:text-xl font-bold text-slate-900 leading-relaxed">
               {questionText}
             </div>
+          </div>
 
-            {/* Specialized Question Component Renderer */}
-            <div className="pt-2">
-              <QuestionDispatcher
-                question={currentQuestion}
-                answer={answers[currentQuestion.id]}
-                onChange={(newAns) => setQuestionAnswer(currentQuestion.id, newAns)}
-                isReadonly={false}
-                examMode={activeAttempt.examMode as any}
-                trainingSubMode={activeAttempt.trainingSubMode}
-                isWeeklySimulation={Boolean(activeAttempt.isWeeklySimulation || activeAttempt.trainingSubMode === 'weekly')}
-              />
+          {/* Question Component Renderer */}
+          <div className="pt-2">
+            <QuestionDispatcher
+              question={currentQuestion}
+              answer={answers[currentQuestion.id]}
+              onChange={(newAns) => setQuestionAnswer(currentQuestion.id, newAns)}
+              isReadonly={false}
+              examMode={activeAttempt.examMode as any}
+              trainingSubMode={activeAttempt.trainingSubMode}
+              isWeeklySimulation={Boolean(activeAttempt.isWeeklySimulation || activeAttempt.trainingSubMode === 'weekly')}
+            />
+          </div>
+
+            {/* Action Buttons for Question (Bookmark) */}
+            <div className="pt-3 flex items-center justify-between text-xs border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => toggleFlagIndex(currentIndex)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  isCurrentFlagged
+                    ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Bookmark className="w-4 h-4" />
+                <span>{isCurrentFlagged ? 'إلغاء التمييز' : 'تمييز للمراجعة'}</span>
+              </button>
             </div>
 
             {/* Training Mode Explanations Accordion */}
@@ -420,8 +313,8 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
               )}
             </div>
           </div>
-        </div>
-      </div>
+
+
 
       {/* Submission Review Confirmation Modal */}
       {isSubmitModalOpen && (

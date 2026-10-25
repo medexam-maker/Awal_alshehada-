@@ -171,98 +171,59 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (examMode === 'simulator') {
           // Full Exam Simulation: matches the blueprint layout
           const bankQuestions = curriculumStorage.getQuestionsBySubject(targetSlug);
-          if (bankQuestions.length > 0) {
-            questionsToUse = bankQuestions.map((q, idx) => ({
-              id: q.id,
-              position: idx + 1,
-              questionNumber: q.questionNumber || (idx + 1),
-              partLabel: q.partLabel || '',
-              questionType: q.questionType,
-              prompt: q.prompt,
-              content: q.content,
-              marks: q.allocatedMarks || 5,
-              correctAnswer: q.correctAnswer,
-              explanationAr: q.explanationAr,
-            }));
-          } else {
-            // Build placeholders from blueprint patterns
-            questionsToUse = blueprint.patterns.map((p, idx) => ({
-              id: `q_sim_${targetSlug}_${idx + 1}`,
-              position: idx + 1,
-              questionNumber: p.questionNumber,
-              partLabel: p.partLabel,
-              questionType: p.questionType,
-              prompt: `${p.title}: ${p.instructions}`,
-              content: { options: [{ id: 'opt1', text: 'الخيار الأول المعتمد' }, { id: 'opt2', text: 'الخيار الثاني المعتمد' }] },
-              marks: p.allocatedMarks || 5,
-              correctAnswer: { selectedOptionId: 'opt1' },
-              explanationAr: 'الإجابة النموذجية المعتمدة وفق معايير منهج الشهادة الثانوية.',
-            }));
+          if (bankQuestions.length === 0) {
+            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
           }
+          questionsToUse = bankQuestions.map((q, idx) => ({
+            id: q.id,
+            position: idx + 1,
+            questionNumber: q.questionNumber || (idx + 1),
+            partLabel: q.partLabel || '',
+            questionType: q.questionType,
+            prompt: q.prompt,
+            content: q.content,
+            marks: q.allocatedMarks || 5,
+            correctAnswer: q.correctAnswer,
+            explanationAr: q.explanationAr,
+          }));
         } else if (trainingSubMode === 'yearly' && examYear) {
           // Specific Year Exam (2000 - 2026)
           const yearlyQuestions = curriculumStorage.getQuestionsBySubject(targetSlug, { examYear });
-          if (yearlyQuestions.length > 0) {
-            questionsToUse = yearlyQuestions.map((q, idx) => ({
-              id: q.id,
-              position: idx + 1,
-              questionNumber: q.questionNumber || (idx + 1),
-              partLabel: q.partLabel || '',
-              questionType: q.questionType,
-              prompt: q.prompt,
-              content: q.content,
-              marks: q.allocatedMarks || 5,
-              correctAnswer: q.correctAnswer,
-              explanationAr: q.explanationAr,
-            }));
-          } else {
-            // If no specific questions recorded yet for that exact year, create a structured year paper from blueprint
-            questionsToUse = blueprint.patterns.map((p, idx) => ({
-              id: `q_year_${examYear}_${targetSlug}_${idx + 1}`,
-              position: idx + 1,
-              questionNumber: p.questionNumber,
-              partLabel: p.partLabel,
-              questionType: p.questionType,
-              prompt: `[امتحان الشهادة الثانوية - دورة ${examYear}م] ${p.title}: ${p.instructions}`,
-              content: { options: [{ id: 'opt1', text: 'الإجابة المعتمدة في امتحان تلك الدورة' }, { id: 'opt2', text: 'خيار بديل' }] },
-              marks: p.allocatedMarks || 5,
-              correctAnswer: { selectedOptionId: 'opt1' },
-              explanationAr: `سؤال دورة عام ${examYear}م في الشهادة الثانوية السودانية لمادة ${blueprint.name_ar}.`,
-            }));
+          if (yearlyQuestions.length === 0) {
+            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
           }
+          questionsToUse = yearlyQuestions.map((q, idx) => ({
+            id: q.id,
+            position: idx + 1,
+            questionNumber: q.questionNumber || (idx + 1),
+            partLabel: q.partLabel || '',
+            questionType: q.questionType,
+            prompt: q.prompt,
+            content: q.content,
+            marks: q.allocatedMarks || 5,
+            correctAnswer: q.correctAnswer,
+            explanationAr: q.explanationAr,
+          }));
         } else {
           // Comprehensive Curriculum Review (مراجعة شاملة للمقرر مع حفظ التقدم)
           const curriculumQuestions = curriculumStorage.getQuestionsBySubject(targetSlug, { examScope: 'curriculum_review' });
           const allSubjectQuestions = curriculumQuestions.length > 0 ? curriculumQuestions : curriculumStorage.getQuestionsBySubject(targetSlug);
 
-          if (allSubjectQuestions.length > 0) {
-            questionsToUse = allSubjectQuestions.map((q, idx) => ({
-              id: q.id,
-              position: idx + 1,
-              questionNumber: q.questionNumber || (idx + 1),
-              partLabel: q.partLabel || '',
-              questionType: q.questionType,
-              prompt: q.prompt,
-              content: q.content,
-              marks: q.allocatedMarks || 5,
-              correctAnswer: q.correctAnswer,
-              explanationAr: q.explanationAr,
-            }));
-          } else {
-            // Generate standard review questions from blueprint
-            questionsToUse = blueprint.patterns.map((p, idx) => ({
-              id: `q_rev_${targetSlug}_${idx + 1}`,
-              position: idx + 1,
-              questionNumber: p.questionNumber,
-              partLabel: p.partLabel,
-              questionType: p.questionType,
-              prompt: `[مراجعة شاملة] ${p.title}`,
-              content: { options: [{ id: 'opt1', text: 'الحل النموذجي للتدريب' }, { id: 'opt2', text: 'خيار غير صحيح' }] },
-              marks: p.allocatedMarks || 5,
-              correctAnswer: { selectedOptionId: 'opt1' },
-              explanationAr: 'توجيه تدريبي لتعزيز استيعاب الطالب لمفردات المقرر.',
-            }));
+          if (allSubjectQuestions.length === 0) {
+            throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
           }
+          questionsToUse = allSubjectQuestions.map((q, idx) => ({
+            id: q.id,
+            position: idx + 1,
+            questionNumber: q.questionNumber || (idx + 1),
+            partLabel: q.partLabel || '',
+            questionType: q.questionType,
+            prompt: q.prompt,
+            content: q.content,
+            marks: q.allocatedMarks || 5,
+            correctAnswer: q.correctAnswer,
+            explanationAr: q.explanationAr,
+          }));
         }
 
         const totalPoints = questionsToUse.reduce((sum, q) => sum + (Number(q.marks) || 5), 0);

@@ -58,7 +58,7 @@ export const GrammarRenderer: React.FC<GrammarProps> = ({
 
       {/* Grammar Aspects Analysis */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {content.aspects.map((aspect) => (
+        {content?.aspects?.map((aspect) => (
           <div key={aspect.id} className="p-4 bg-white border border-slate-200 rounded-xl space-y-2">
             <label className="text-sm font-bold text-slate-700 block">
               {aspect.label}:

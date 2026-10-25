@@ -3,6 +3,8 @@ import { Helmet } from 'react-helmet-async';
 import { ContractSubject } from '../data/contractSubjects';
 import { ArrowRight, Check } from 'lucide-react';
 
+import { playWaterDrop } from '../utils/soundEffects';
+
 export interface SimulatorPageProps {
   subject: ContractSubject;
   onBack: () => void;
@@ -16,6 +18,16 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
   onStartExam,
   isLoading = false,
 }) => {
+  const handleBack = () => {
+    playWaterDrop();
+    onBack();
+  };
+
+  const handleStart = () => {
+    playWaterDrop();
+    onStartExam();
+  };
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Quiz',
@@ -43,17 +55,18 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
       </Helmet>
 
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#E0E0E0]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <button
           type="button"
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          onClick={handleBack}
+          className="flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+          title="الرجوع لاختيار نوع الامتحان"
         >
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="w-4 h-4 text-slate-700" />
           <span>رجوع</span>
         </button>
 
-        <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+        <span className="text-xs font-extrabold text-orange-800 bg-orange-50 px-3 py-1 rounded-full border border-orange-200">
           {subject.name_ar} — محاكاة رسمية
         </span>
       </div>
@@ -147,10 +160,10 @@ export const SimulatorPage: React.FC<SimulatorPageProps> = ({
         <button
           type="button"
           disabled={isLoading}
-          onClick={onStartExam}
-          className="w-full h-[64px] bg-[#4CAF50] hover:bg-[#43a047] active:scale-[0.99] text-white text-[20px] font-bold rounded-[16px] shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          onClick={handleStart}
+          className="w-full h-[64px] bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 hover:from-orange-600 hover:to-rose-700 active:scale-[0.98] text-white text-[20px] font-extrabold rounded-[18px] shadow-xl shadow-orange-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
         >
-          <span>🚀 ابدأ المحاكاة</span>
+          <span>🚀 ابدأ المحاكاة الرسمية</span>
         </button>
 
         {/* Note Box */}

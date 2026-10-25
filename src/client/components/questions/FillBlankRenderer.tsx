@@ -242,7 +242,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                   value={val}
                   onChange={(e) => handleTextChange(blankId, e.target.value)}
                   disabled={isReadonly}
-                  placeholder={`فراغ (${blankId})`}
+                  placeholder={`(${bIdx + 1})`}
                   className="inline-block mx-2 px-3 py-1 w-36 text-center border-b-2 border-emerald-600 bg-white rounded-md shadow-inner text-emerald-950 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               );
@@ -253,7 +253,7 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
                   key={idx}
                   className="inline-block mx-2 px-3 py-1 min-w-[100px] text-center border-b-2 border-teal-600 bg-white rounded-md shadow-xs text-teal-950 font-bold"
                 >
-                  {val || `[فراغ (${blankId})]`}
+                  {val || `(${bIdx + 1})`}
                 </span>
               );
             }
@@ -439,12 +439,14 @@ export const FillBlankRenderer: React.FC<FillBlankProps> = ({
         /* وضعا التدريب والامتحانات التاريخية: 3 خيارات لكل فراغ (tap_reveal_3) */
         /* =================================================================== */
         <div className="space-y-4">
-          <div className="flex items-center justify-between pb-1">
+          <div className="flex flex-col gap-2 pb-4">
             <div className="text-sm font-black text-slate-800 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-teal-600" />
-              <span>اختر الكلمة المناسبة لكل فراغ (نمط الخيارات الثلاثة):</span>
+              <span>اختر الكلمة المناسبة لكل فراغ:</span>
             </div>
-            <span className="text-xs text-slate-500 font-medium">3 خيارات معتمدة لكل فراغ</span>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium">
+              تنبيه : في الامتحان الحقيقي لاتوجد خيارات لملء الفراغات ، الخيارات هنا فقط لمساعدتك علي الحفظ
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
