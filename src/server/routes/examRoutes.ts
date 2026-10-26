@@ -149,7 +149,7 @@ router.post('/finish', async (req: AuthRequest, res: Response): Promise<void> =>
 router.get('/:attemptId/result', async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user!.id;
-        const attemptId = req.params.attemptId;
+        const attemptId = Array.isArray(req.params.attemptId) ? req.params.attemptId[0] : req.params.attemptId;
 
         const result = await getExamResult(userId, attemptId);
         
