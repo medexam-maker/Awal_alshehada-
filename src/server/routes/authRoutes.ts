@@ -263,15 +263,14 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       message: 'Login successful',
       timestamp: new Date().toISOString(),
     });
-  } catch (error: unknown) {
+  } catch (error: any) {
     console.error('[auth/login] Internal error:', error);
     res.status(500).json({
       success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error',
-        details: {},
-      },
+      error: error?.message || 'Internal server error',
+      where: 'login route',
+      code: error?.code || 'INTERNAL_ERROR',
+      details: String(error),
       timestamp: new Date().toISOString(),
     });
   }

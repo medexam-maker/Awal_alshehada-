@@ -6,7 +6,7 @@ import { generateInitialQuestions } from '../client/storage/defaultCurriculumDat
 
 dotenv.config();
 
-const app = express();
+export const app = express();
 const port = process.env.EXPRESS_PORT || 3001;
 
 app.use(cors());
@@ -89,6 +89,8 @@ app.post('/api/admin/bulk-import-ordering', (req, res) => {
   });
 });
 
-app.listen(port, () => {
-  console.log(`[Awal-AlShehada Server] Running on http://localhost:${port}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(port, () => {
+    console.log(`[Awal-AlShehada Server] Running on http://localhost:${port}`);
+  });
+}
