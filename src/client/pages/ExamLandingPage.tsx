@@ -29,7 +29,7 @@ interface ExamLandingPageProps {
 // Question count mapping per subject curriculum standard
 const SUBJECT_QUESTION_COUNTS: Record<string, number> = {
   'islamic-studies': 40,
-  'christian-studies': 40,
+  'military-sciences': 40,
   'arabic-language': 45,
   'english-language': 40,
   'basic-mathematics': 30,

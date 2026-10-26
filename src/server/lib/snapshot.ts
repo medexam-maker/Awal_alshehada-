@@ -86,15 +86,166 @@ export function createClientSnapshot(
         position: position
     };
 
-    if (examMode === ExamMode.TRAINING) {
-        snap.content = row.content;
-        snap.correctAnswer = row.correct_answer;
-        snap.explanation = row.explanation ?? null;
-        snap.explanationAr = row.explanation ?? null;
-    } else {
-        snap.content = deepScrubCorrectAnswers(row.content);
+    // Special Deterministic Snapshot handling for MATCHING
+    if (row.question_type === 'matching') {
+        const rawPairs = Array.isArray(rawContentObj.pairs) ? rawContentObj.pairs : [];
+        const rawDistractors = Array.isArray(rawContentObj.distractors) ? rawContentObj.distractors : [];
+
+        if (rawPairs.length > 0) {
+            const sources = rawPairs.map((p: any) => ({
+                id: String(p.id),
+                text: String(p.source || ''),
+            }));
+
+            const rawAllTargets = [
+                ...rawPairs.map((p: any) => ({
+                    originalId: String(p.id),
+                    text: String(p.target || ''),
+                    isDistractor: false,
+                })),
+                ...rawDistractors.map((d: any) => ({
+                    originalId: null,
+                    text: String(d.target || ''),
+                    isDistractor: true,
+                })),
+            ];
+
+            // Single Fisher-Yates shuffle
+            const shuffledArray = [...rawAllTargets];
+            for (let i = shuffledArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
+            }
+
+            const correctPairsMap: Record<string, string> = {};
+            const shuffledTargets = shuffledArray.map((item, idx) => {
+                const targetCardId = `target_card_${idx}`;
+                if (item.originalId) {
+                    correctPairsMap[item.originalId] = targetCardId;
+                }
+                return {
+                    id: targetCardId,
+                    text: item.text,
+                    originalId: item.originalId,
+                    isDistractor: item.isDistractor,
+                };
+            });
+
+            const matchingContentObj = {
+                prompt: promptText,
+                sources,
+                sourceOrder: sources.map((s) => s.id),
+                shuffledTargets,
+                scoring_type: rawContentObj.scoring_type || 'partial',
+                explanation: row.explanation ?? null,
+            };
+
+            snap.content = matchingContentObj;
+            snap.correctAnswer = { pairs: correctPairsMap };
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+
+            return snap;
+        }
+    }
+
+    // Special Deterministic Snapshot handling for EXPLAIN & WORD_BLOCK_EXPLAIN
+    if (row.question_type === 'explain' || row.question_type === 'word_block_explain') {
+        const rawSeq = Array.isArray(rawContentObj.correctSequence)
+            ? rawContentObj.correctSequence
+            : Array.isArray(rawContentObj.words)
+            ? rawContentObj.words
+            : typeof row.correct_answer === 'string'
+            ? row.correct_answer.trim().split(/\s+/)
+            : [];
+
+        // Normalize rawSeq to individual words
+        const allWords: string[] = [];
+        for (const item of rawSeq) {
+            const parts = String(item).trim().split(/\s+/).filter(Boolean);
+            allWords.push(...parts);
+        }
+
+        // Group words into 3-word phrase chunks (2-3 words per chunk)
+        const correctChunkTexts: string[] = [];
+        for (let i = 0; i < allWords.length; i += 3) {
+            const chunk = allWords.slice(i, i + 3).join(' ');
+            if (chunk) correctChunkTexts.push(chunk);
+        }
+
+        const correctChunks = correctChunkTexts.map((text, idx) => ({
+            id: `chunk_c_${idx}`,
+            text,
+            isDistractor: false,
+        }));
+
+        // Distractor chunks (max 2 distractor phrases)
+        const rawDistractors = Array.isArray(rawContentObj.distractorWords)
+            ? rawContentObj.distractorWords
+            : Array.isArray(rawContentObj.distractors)
+            ? rawContentObj.distractors
+            : [];
+
+        const distractorsAllWords: string[] = [];
+        for (const item of rawDistractors) {
+            const parts = String(item).trim().split(/\s+/).filter(Boolean);
+            distractorsAllWords.push(...parts);
+        }
+
+        const distractorChunkTexts: string[] = [];
+        for (let i = 0; i < distractorsAllWords.length && distractorChunkTexts.length < 2; i += 2) {
+            const chunk = distractorsAllWords.slice(i, i + 2).join(' ');
+            if (chunk) distractorChunkTexts.push(chunk);
+        }
+
+        const distractorChunks = distractorChunkTexts.map((text, idx) => ({
+            id: `chunk_d_${idx}`,
+            text,
+            isDistractor: true,
+        }));
+
+        const allChunks = [...correctChunks, ...distractorChunks];
+
+        // Fisher-Yates shuffle for bank
+        const shuffledBank = [...allChunks];
+        for (let i = shuffledBank.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledBank[i], shuffledBank[j]] = [shuffledBank[j], shuffledBank[i]];
+        }
+
+        const correctOrder = correctChunks.map((c) => c.id);
+
+        const explainContentObj = {
+            prompt: promptText,
+            targetPhenomenon: rawContentObj.targetPhenomenon || promptText,
+            correctOrder,
+            shuffledBank,
+            correctChunks,
+            scoring_type: rawContentObj.scoring_type || 'all_or_nothing',
+            explanation: row.explanation ?? null,
+        };
+
+        if (examMode === ExamMode.TRAINING) {
+            snap.content = explainContentObj;
+            snap.correctAnswer = { sequence: correctChunkTexts, text: correctChunkTexts.join(' ') };
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+        } else {
+            snap.content = deepScrubCorrectAnswers(explainContentObj);
+            (snap.content as any).correctOrder = correctOrder;
+            (snap.content as any).shuffledBank = shuffledBank;
+        }
+
+        return snap;
+    }
+
+    snap.content = row.content;
+    snap.correctAnswer = row.correct_answer;
+    snap.explanation = row.explanation ?? null;
+    snap.explanationAr = row.explanation ?? null;
+
+    if (examMode !== ExamMode.TRAINING) {
         // CRITICAL BOUNDARY: ONLY for FILL_BLANK in confirmed Weekly Simulation mode (Self-Assessment)
-        // General simulations and other exam modes MUST NEVER expose reference answers
         if (row.question_type === 'fill_blank' && isWeeklySimulation) {
             const rawContent = (row.content && typeof row.content === 'object') ? (row.content as Record<string, unknown>) : undefined;
             const rawCa = (row.correct_answer && typeof row.correct_answer === 'object') ? (row.correct_answer as Record<string, unknown>) : undefined;

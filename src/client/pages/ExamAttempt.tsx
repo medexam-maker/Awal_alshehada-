@@ -249,6 +249,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
               })()}</span>
             </div>
 
+            {/* Question Prompt */}
             <div className="text-lg md:text-xl font-bold text-slate-900 leading-relaxed">
               {questionText}
             </div>

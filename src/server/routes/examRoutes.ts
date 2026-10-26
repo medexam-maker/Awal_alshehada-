@@ -39,6 +39,20 @@ router.post('/start', async (req: AuthRequest, res: Response): Promise<void> => 
                 res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied', details: {} }, timestamp: new Date().toISOString() });
             } else if (error.message.includes('already has an active attempt')) {
                 res.status(409).json({ success: false, error: { code: 'CONFLICT', message: 'Active attempt already exists', details: {} }, timestamp: new Date().toISOString() });
+            } else if (
+                error.message.includes('قيد الإنشاء والمراجعة') ||
+                error.message.includes('INSUFFICIENT_QUESTIONS') ||
+                error.message.includes('No eligible questions found')
+            ) {
+                res.status(404).json({
+                    success: false,
+                    error: {
+                        code: 'QUESTION_BANK_EMPTY',
+                        message: 'بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.',
+                        details: {}
+                    },
+                    timestamp: new Date().toISOString()
+                });
             } else {
                 console.error('[exam/start] Internal error:', error);
                 res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Internal server error', details: {} }, timestamp: new Date().toISOString() });

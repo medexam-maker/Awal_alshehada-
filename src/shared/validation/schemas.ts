@@ -32,7 +32,7 @@ export const ContentSchemas = {
       },
     },
   },
-  matching: { type: 'object', required: ['prompt', 'listA', 'listB'] },
+  matching: { type: 'object', required: ['pairs'] },
   short_essay: { type: 'object', required: ['prompt'] },
   long_essay: { type: 'object', required: ['prompt'] },
   explain: { type: 'object', required: ['prompt'] },

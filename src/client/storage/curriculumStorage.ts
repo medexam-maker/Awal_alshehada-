@@ -31,7 +31,24 @@ class CurriculumStorageService {
       // 2. Load questions
       const storedQ = localStorage.getItem(STORAGE_KEYS.QUESTIONS);
       if (storedQ) {
-        this.questions = JSON.parse(storedQ);
+        try {
+          this.questions = JSON.parse(storedQ);
+          const defaults = generateInitialQuestions();
+          const existingIds = new Set(this.questions.map((q) => q.id));
+          let added = false;
+          defaults.forEach((dq) => {
+            if (!existingIds.has(dq.id)) {
+              this.questions.push(dq);
+              added = true;
+            }
+          });
+          if (added) {
+            this.persistQuestions();
+          }
+        } catch {
+          this.questions = generateInitialQuestions();
+          this.persistQuestions();
+        }
       } else {
         this.questions = generateInitialQuestions();
         this.persistQuestions();

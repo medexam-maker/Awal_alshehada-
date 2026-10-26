@@ -4,6 +4,7 @@ import { curriculumStorage } from '../../storage/curriculumStorage';
 import { SubjectExamBlueprint, QuestionPattern, AuthoredQuestion } from '../../types/curriculum';
 import { QuestionType } from '../../../shared/constants';
 import { apiClient } from '../../api/apiClient';
+import { MatchingRenderer } from '../../components/questions/MatchingRenderer';
 import {
   Settings,
   PlusCircle,
@@ -458,6 +459,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [calcExpression, setCalcExpression] = useState<string>('');
   const [calcAnswer, setCalcAnswer] = useState<string>('');
 
+  // Matching question states
+  const [matchingPairs, setMatchingPairs] = useState<
+    Array<{ id: string; source: string; target: string }>
+  >([
+    { id: 'pair_1', source: '', target: '' },
+    { id: 'pair_2', source: '', target: '' },
+  ]);
+  const [matchingDistractors, setMatchingDistractors] = useState<
+    Array<{ id: string; target: string }>
+  >([]);
+  const [matchingScoringType, setMatchingScoringType] = useState<'all_or_nothing' | 'partial'>('partial');
+
+  const handleAddMatchingPair = () => {
+    const nextIdx = matchingPairs.length + 1;
+    setMatchingPairs((prev) => [...prev, { id: `pair_${nextIdx}`, source: '', target: '' }]);
+  };
+
+  const handleRemoveMatchingPair = (index: number) => {
+    if (matchingPairs.length <= 2) return;
+    setMatchingPairs((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleUpdateMatchingPair = (index: number, field: 'source' | 'target', val: string) => {
+    setMatchingPairs((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: val };
+      return updated;
+    });
+  };
+
+  const handleAddMatchingDistractor = () => {
+    const nextIdx = matchingDistractors.length + 1;
+    setMatchingDistractors((prev) => [...prev, { id: `dist_${nextIdx}`, target: '' }]);
+  };
+
+  const handleRemoveMatchingDistractor = (index: number) => {
+    setMatchingDistractors((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleUpdateMatchingDistractor = (index: number, val: string) => {
+    setMatchingDistractors((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], target: val };
+      return updated;
+    });
+  };
+
   // Handle selecting a blueprint pattern to auto-fill metadata
   const handleSelectPatternForAuthoring = (pId: string) => {
     setSelectedPatternId(pId);
@@ -523,6 +571,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
     } else if (questionType === QuestionType.CALCULATION) {
       content = { expression: calcExpression };
       correctAnswer = calcAnswer;
+    } else if (questionType === QuestionType.MATCHING) {
+      if (matchingPairs.some((p) => !p.source.trim() || !p.target.trim())) {
+        showNotification('يرجى كتابة العنصر الأساسي والمطابق لجميع الأزواج المضافة قبل الحفظ.', 'info');
+        return;
+      }
+      content = {
+        prompt: questionPrompt.trim(),
+        pairs: matchingPairs.map((p) => ({
+          id: p.id,
+          source: p.source.trim(),
+          target: p.target.trim(),
+        })),
+        distractors: matchingDistractors
+          .filter((d) => d.target.trim())
+          .map((d) => ({
+            id: d.id,
+            target: d.target.trim(),
+          })),
+        scoring_type: matchingScoringType,
+        explanation: explanationAr.trim() || undefined,
+      };
+
+      const correctPairsMap: Record<string, string> = {};
+      matchingPairs.forEach((p) => {
+        correctPairsMap[p.id] = `target_${p.id}`;
+      });
+      correctAnswer = { pairs: correctPairsMap };
     } else {
       content = { instructions: questionPrompt };
       correctAnswer = blankAnswer || 'الإجابة النموذجية المعتمدة';
@@ -1264,13 +1339,169 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 </div>
               )}
 
+              {questionType === QuestionType.MATCHING && (
+                <div className="space-y-5 bg-white p-4 rounded-2xl border border-emerald-200">
+                  {/* Pairs Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-800">
+                        أزواج المطابقة الأساسية ({matchingPairs.length}):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddMatchingPair}
+                        className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>+ إضافة زوج مطابقة</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {matchingPairs.map((pair, pIdx) => (
+                        <div key={pair.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                          <div className="sm:col-span-1 text-center font-mono font-bold text-xs text-indigo-700">
+                            #{pIdx + 1}
+                          </div>
+                          <div className="sm:col-span-5">
+                            <input
+                              type="text"
+                              value={pair.source}
+                              onChange={(e) => handleUpdateMatchingPair(pIdx, 'source', e.target.value)}
+                              placeholder="العنصر الأساسي (Source)"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="sm:col-span-5">
+                            <input
+                              type="text"
+                              value={pair.target}
+                              onChange={(e) => handleUpdateMatchingPair(pIdx, 'target', e.target.value)}
+                              placeholder="العنصر المطابق (Target)"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="sm:col-span-1 text-center">
+                            {matchingPairs.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMatchingPair(pIdx)}
+                                className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                title="حذف الزوج"
+                              >
+                                <Trash2 className="w-4 h-4 mx-auto" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Distractors Section */}
+                  <div className="space-y-3 pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-slate-700">
+                        العناصر المشتتة المبعثرة (Distractors - اختياري):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddMatchingDistractor}
+                        className="text-xs bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>+ إضافة مشتت مبعثر</span>
+                      </button>
+                    </div>
+
+                    {matchingDistractors.length > 0 && (
+                      <div className="space-y-2">
+                        {matchingDistractors.map((dist, dIdx) => (
+                          <div key={dist.id} className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                            <span className="text-xs font-bold text-slate-400 font-mono px-1">مشتت {dIdx + 1}</span>
+                            <input
+                              type="text"
+                              value={dist.target}
+                              onChange={(e) => handleUpdateMatchingDistractor(dIdx, e.target.value)}
+                              placeholder="نص الخيار المشتت الخاطئ"
+                              className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveMatchingDistractor(dIdx)}
+                              className="p-1 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded transition-colors cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Scoring Type Radio */}
+                  <div className="space-y-2 pt-3 border-t border-slate-100">
+                    <label className="text-xs font-black text-slate-800 block">
+                      آلية احتساب درجات المطابقة (Scoring Type):
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-indigo-900 bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-200">
+                        <input
+                          type="radio"
+                          name="matching_scoring_type"
+                          value="partial"
+                          checked={matchingScoringType === 'partial'}
+                          onChange={() => setMatchingScoringType('partial')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>احتساب جزئي (Partial) - درجات متناسبة لكل ربط صحيح</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+                        <input
+                          type="radio"
+                          name="matching_scoring_type"
+                          value="all_or_nothing"
+                          checked={matchingScoringType === 'all_or_nothing'}
+                          onChange={() => setMatchingScoringType('all_or_nothing')}
+                          className="text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>كل شيء أو لا شيء (All or Nothing) - الربط التام فقط يمنح الدرجة</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Interactive Live Preview */}
+                  {matchingPairs.some((p) => p.source.trim() && p.target.trim()) && (
+                    <div className="mt-4 pt-4 border-t border-slate-200 space-y-2">
+                      <div className="text-xs font-black text-emerald-800 flex items-center gap-1.5">
+                        <Eye className="w-4 h-4 text-emerald-600" />
+                        <span>معاينة حية وتفاعلية لنمط المطابقة (Tap-to-Connect Preview):</span>
+                      </div>
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <MatchingRenderer
+                          content={{
+                            prompt: questionPrompt,
+                            pairs: matchingPairs.filter((p) => p.source.trim() && p.target.trim()),
+                            distractors: matchingDistractors.filter((d) => d.target.trim()),
+                            scoring_type: matchingScoringType,
+                          }}
+                          examMode="training"
+                          onChange={() => {}}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Fallback text answer for Essays, Explain, etc. */}
               {questionType !== QuestionType.TRUE_FALSE &&
                 questionType !== QuestionType.MULTIPLE_CHOICE &&
                 questionType !== QuestionType.FILL_BLANK &&
                 questionType !== QuestionType.ARABIC_GRAMMAR &&
                 questionType !== QuestionType.ODD_ONE_OUT &&
-                questionType !== QuestionType.CALCULATION && (
+                questionType !== QuestionType.CALCULATION &&
+                questionType !== QuestionType.MATCHING && (
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700 block">الحل النموذجي المعتمد:</label>
                     <input

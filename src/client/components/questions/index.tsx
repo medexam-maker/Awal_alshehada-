@@ -108,7 +108,16 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       );
 
     case QuestionType.MATCHING:
-      return <MatchingRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <MatchingRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.SHORT_ESSAY:
       return <ShortEssayRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
@@ -119,6 +128,7 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
     case QuestionType.EXPLAIN:
       return (
         <ExplainRenderer
+          questionId={question.id}
           content={content}
           answer={answer}
           onChange={onChange}

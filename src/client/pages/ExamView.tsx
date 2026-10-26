@@ -328,7 +328,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ onFinishExam, onExitExam }) 
               </div>
             </div>
 
-            {/* Prompt */}
+            {/* Question Prompt */}
             <div className="text-lg md:text-xl font-bold text-slate-900 leading-relaxed">
               {questionText}
             </div>

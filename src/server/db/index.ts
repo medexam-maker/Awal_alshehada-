@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import path from 'path';
 import fs from 'fs';
 import { hashPassword } from '../lib/password';
+import { seedDatabase } from './seed';
 
 let pgliteInstance: PGlite | null = null;
 
@@ -131,20 +132,90 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     );
 
     CREATE TABLE IF NOT EXISTS exam_attempts (
-      id TEXT PRIMARY KEY,
-      student_id TEXT NOT NULL,
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id TEXT NOT NULL,
       subject_id TEXT NOT NULL,
+      bank_type TEXT NOT NULL DEFAULT 'comprehensive',
       exam_mode TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'in_progress',
-      score NUMERIC(8,2),
-      total_questions INT NOT NULL,
+      training_set_id TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      submitted_at TIMESTAMPTZ,
+      expires_at TIMESTAMPTZ,
+      total_marks NUMERIC(8,2) NOT NULL DEFAULT 0,
+      obtained_marks NUMERIC(8,2),
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Ensure session columns exist in case table was created earlier without them
+    CREATE TABLE IF NOT EXISTS exam_attempt_questions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      attempt_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      position INT NOT NULL,
+      marks NUMERIC(8,2) NOT NULL DEFAULT 1,
+      question_snapshot TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS exam_question_history (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      attempt_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS exam_answers (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      attempt_id TEXT NOT NULL,
+      attempt_question_id TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      grading_status TEXT NOT NULL,
+      obtained_marks NUMERIC(8,2) NOT NULL DEFAULT 0,
+      grader_type TEXT NOT NULL DEFAULT 'system',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS training_exam_sets (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      exam_category TEXT NOT NULL DEFAULT 'regular',
+      subject_id TEXT,
+      exam_year INT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS training_set_questions (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      training_set_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      position INT NOT NULL,
+      marks_override NUMERIC(8,2),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      actor_user_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      metadata TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Ensure session and attempt columns exist in case table was created earlier without them
     ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_id TEXT;
     ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_created_at TIMESTAMPTZ;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS user_id TEXT;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS bank_type TEXT;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS training_set_id TEXT;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS total_marks NUMERIC(8,2) DEFAULT 0;
+    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS obtained_marks NUMERIC(8,2);
   `);
 
     /*
@@ -164,7 +235,9 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     }
     */
 
-  return new PGlitePoolWrapper(db);
+  const wrapper = new PGlitePoolWrapper(db);
+  await seedDatabase(wrapper);
+  return wrapper;
 }
 
 class DatabaseProxy {
@@ -201,6 +274,7 @@ class DatabaseProxy {
 
       const testPool = new Pool(poolConfig);
       await testPool.query('SELECT 1 AS ok');
+      await seedDatabase(testPool);
       console.log('[DB] Connected to remote PostgreSQL successfully.');
       this.delegate = testPool;
       return this.delegate;

@@ -25,6 +25,17 @@ export const DEMO_SUBJECTS: SubjectMeta[] = [
     totalPoints: 100,
   },
   {
+    id: '10000000-0000-0000-0000-000000000010',
+    name_ar: 'العلوم العسكرية',
+    name_en: 'Military Science',
+    slug: 'military-science',
+    category: 'literary',
+    iconName: 'Shield',
+    description_ar: 'مبادئ الدفاع، العلوم والمهارات العسكرية الأساسية، والتنظيم والتكتيكات.',
+    durationMinutes: 150,
+    totalPoints: 100,
+  },
+  {
     id: '10000000-0000-0000-0000-000000000002',
     name_ar: 'اللغة العربية',
     name_en: 'Arabic Language',

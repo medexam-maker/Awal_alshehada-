@@ -108,17 +108,83 @@ export function autoGrade(
     );
     obtainedMarks = isCorrect ? maxMarks : 0;
   } else if (questionType === QuestionType.MATCHING) {
-    const ca = correctAnswer as MatchingAnswer;
-    const sa = studentAnswer as MatchingAnswer | undefined;
-    const pairs = Object.keys(ca.pairs || {});
-    const totalUnits = pairs.length;
-    let correctUnits = 0;
-    if (sa?.pairs) {
-        for (const key of pairs) {
-            if (sa.pairs[key] === ca.pairs[key]) correctUnits++;
+    const c = (content || {}) as Record<string, any>;
+    const ca = (correctAnswer || {}) as Record<string, any>;
+    const sa = studentAnswer as { connections?: Record<string, string>; pairs?: Record<string, string> } | undefined;
+    const connections = sa?.connections || sa?.pairs || {};
+
+    const pairs = Array.isArray(c.pairs) ? c.pairs : [];
+    const scoringType = c.scoring_type || 'partial';
+    const totalPairs = pairs.length;
+
+    if (totalPairs === 0) {
+      obtainedMarks = 0;
+    } else {
+      const targetLookup = new Map<string, { originalId: string | null; targetText: string; isDistractor: boolean }>();
+
+      if (Array.isArray(c.shuffledTargets)) {
+        for (const t of c.shuffledTargets) {
+          if (t && typeof t === 'object') {
+            targetLookup.set(String(t.id), {
+              originalId: t.originalId ? String(t.originalId) : null,
+              targetText: String(t.text || ''),
+              isDistractor: Boolean(t.isDistractor),
+            });
+          }
         }
+      }
+
+      for (const p of pairs) {
+        if (p && p.id) {
+          const pId = String(p.id);
+          targetLookup.set(`target_${pId}`, { originalId: pId, targetText: String(p.target || ''), isDistractor: false });
+          targetLookup.set(pId, { originalId: pId, targetText: String(p.target || ''), isDistractor: false });
+        }
+      }
+
+      if (Array.isArray(c.distractors)) {
+        for (const d of c.distractors) {
+          if (d && d.id) {
+            const dId = String(d.id);
+            targetLookup.set(`target_${dId}`, { originalId: null, targetText: String(d.target || ''), isDistractor: true });
+            targetLookup.set(dId, { originalId: null, targetText: String(d.target || ''), isDistractor: true });
+          }
+        }
+      }
+
+      const caPairs = ca?.pairs || {};
+      let correctCount = 0;
+      const connectedEntries = Object.entries(connections).filter(([_, targetVal]) => Boolean(targetVal));
+
+      for (const [sourceId, targetVal] of connectedEntries) {
+        const targetStr = String(targetVal);
+        const targetInfo = targetLookup.get(targetStr);
+        const pairObj = pairs.find((p: any) => String(p.id) === String(sourceId));
+
+        let isMatch = false;
+
+        if (caPairs[sourceId] && caPairs[sourceId] === targetStr) {
+          isMatch = true;
+        } else if (targetInfo && !targetInfo.isDistractor && targetInfo.originalId === String(sourceId)) {
+          isMatch = true;
+        } else if (pairObj && targetInfo && !targetInfo.isDistractor && targetInfo.targetText.trim() === String(pairObj.target || '').trim()) {
+          isMatch = true;
+        } else if (pairObj && targetStr.trim() === String(pairObj.target || '').trim()) {
+          isMatch = true;
+        }
+
+        if (isMatch) {
+          correctCount++;
+        }
+      }
+
+      if (scoringType === 'all_or_nothing') {
+        const isPerfect = correctCount === totalPairs && connectedEntries.length === totalPairs;
+        obtainedMarks = isPerfect ? maxMarks : 0;
+      } else {
+        obtainedMarks = (correctCount / totalPairs) * maxMarks;
+      }
     }
-    obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.FILL_BLANK) {
     const c = (content || {}) as FillBlankContent;
     const ca = (correctAnswer || {}) as any;

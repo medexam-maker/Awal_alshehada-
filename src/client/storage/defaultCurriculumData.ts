@@ -324,7 +324,7 @@ export function generateDefaultBlueprints(): Record<string, SubjectExamBlueprint
         },
       ];
     } else {
-      // Standard template for all other subjects (Physics, Chemistry, Biology, History, Computer Science, English, Christian)
+      // Standard template for all other subjects (Physics, Chemistry, Biology, History, Computer Science, English, Military Science)
       patterns = [
         {
           id: `${subject.slug}_q1_a`,
@@ -789,5 +789,136 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
     }
   );
 
+  // Military Science Starter Questions
+  questions.push(
+    {
+      id: 'ms_2024_01',
+      subjectSlug: 'military-science',
+      patternId: 'military-science_q1_a',
+      questionNumber: 1,
+      partLabel: 'أ',
+      questionType: QuestionType.TRUE_FALSE,
+      prompt: 'تعتبر الضوابط العسكرية والانضباط الأساس المتين لبناء القوات المسلحة وحفظ الأمن القومي.',
+      content: {
+        statement: 'تعتبر الضوابط العسكرية والانضباط الأساس المتين لبناء القوات المسلحة وحفظ الأمن القومي.',
+      },
+      correctAnswer: { value: true },
+      allocatedMarks: 5,
+      explanationAr: 'الانضباط العسكري هو الركيزة الأساسية للجاهزية وتنفيذ الأوامر بدقة.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2024-05-10T14:00:00Z',
+    },
+    {
+      id: 'ms_2024_02',
+      subjectSlug: 'military-science',
+      patternId: 'military-science_q1_b',
+      questionNumber: 1,
+      partLabel: 'ب',
+      questionType: QuestionType.MULTIPLE_CHOICE,
+      prompt: 'ما هي الرتبة العسكرية التي تلي رتبة (نقيب) مباشرة في نظام الرتب العسكرية؟',
+      content: {
+        options: [
+          { id: 'opt1', text: 'رائد' },
+          { id: 'opt2', text: 'ملازم أول' },
+          { id: 'opt3', text: 'مقدم' },
+          { id: 'opt4', text: 'عقيد' },
+        ],
+      },
+      correctAnswer: { selectedOptionId: 'opt1' },
+      allocatedMarks: 5,
+      explanationAr: 'التسلسل القيادي للضباط: ملازم، ملازم أول، نقيب، رائد، مقدم، عقيد، عميد، لواء، فريق.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2024-05-10T14:05:00Z',
+    },
+    {
+      id: 'ms_2024_03',
+      subjectSlug: 'military-science',
+      patternId: 'military-science_q2_b',
+      questionNumber: 2,
+      partLabel: 'ب',
+      questionType: QuestionType.EXPLAIN,
+      prompt: 'علل: أسباب أهمية التدريب العسكري المستمر للضباط والأفراد في القوات المسلحة.',
+      content: {
+        targetPhenomenon: 'علل: أهمية التدريب العسكري المستمر والتمارين القتالية الدورية في القوات المسلحة.',
+        correctSequence: ['رفع', 'الكفاءة', 'القتالية', 'والجاهزية', 'لحماية', 'الوطن'],
+        distractorWords: ['الإدارية', 'العشوائية', 'التأخير'],
+      },
+      correctAnswer: {
+        correctSequence: ['رفع', 'الكفاءة', 'القتالية', 'والجاهزية', 'لحماية', 'الوطن'],
+        text: 'رفع الكفاءة القتالية والجاهزية لحماية الوطن',
+      },
+      allocatedMarks: 10,
+      explanationAr: 'التدريب المستمر يضمن الحفاظ على الكفاءة القتالية العالية والجاهزية الدائمة لمواجهة التحديات الأجنبية وتوفير الأمن والأمان.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2024-05-10T14:10:00Z',
+    },
+    {
+      id: 'ms_test_explain_01',
+      subjectSlug: 'military-science',
+      patternId: 'military-science_q3_b',
+      questionNumber: 3,
+      partLabel: 'ب',
+      questionType: QuestionType.EXPLAIN,
+      prompt: 'علل: يعتبر موقع السودان ذا أهمية استراتيجية عسكرية؟',
+      content: {
+        prompt: 'علل: يعتبر موقع السودان ذا أهمية استراتيجية عسكرية؟',
+        targetPhenomenon: 'علل: يعتبر موقع السودان ذا أهمية استراتيجية عسكرية؟',
+        correctSequence: ['لأنه', 'يربط', 'بين', 'شمال', 'أفريقيا', 'وجنوبها', 'ويطل', 'على', 'البحر', 'الأحمر', 'ويجاور', '7', 'دول', 'مما', 'يجعله', 'نقطة', 'ارتكاز', 'جيوسياسي.'],
+        distractorWords: ['غرب', 'شرق', 'النيل', 'أوروبا'],
+        scoring_type: 'all_or_nothing',
+        explanation: 'موقع السودان الجغرافي يمنحه عمق استراتيجي...',
+      },
+      correctAnswer: 'لأنه يربط بين شمال أفريقيا وجنوبها ويطل على البحر الأحمر ويجاور 7 دول مما يجعله نقطة ارتكاز جيوسياسي.',
+      allocatedMarks: 5,
+      explanationAr: 'موقع السودان الجغرافي يمنحه عمق استراتيجي...',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'ms_test_matching_01',
+      subjectSlug: 'military-science',
+      patternId: 'military-science_q2_b',
+      questionNumber: 2,
+      partLabel: 'ب',
+      questionType: QuestionType.MATCHING,
+      prompt: 'طابق القائد مع المعركة المناسبة:',
+      content: {
+        prompt: 'طابق القائد مع المعركة المناسبة:',
+        pairs: [
+          { id: 'p1', source: 'معركة القادسية', target: 'سعد بن أبي وقاص' },
+          { id: 'p2', source: 'معركة اليرموك', target: 'خالد بن الوليد' },
+          { id: 'p3', source: 'معركة حطين', target: 'صلاح الدين الأيوبي' },
+        ],
+        distractors: [
+          { id: 'd1', target: 'طارق بن زياد' },
+        ],
+        scoring_type: 'partial',
+        explanation: 'القادسية بقيادة سعد، اليرموك بقيادة خالد، حطين بقيادة صلاح الدين.',
+      },
+      correctAnswer: {
+        pairs: {
+          p1: 'p1',
+          p2: 'p2',
+          p3: 'p3',
+        },
+      },
+      allocatedMarks: 6,
+      explanationAr: 'القادسية بقيادة سعد، اليرموك بقيادة خالد، حطين بقيادة صلاح الدين.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+  );
+
   return questions;
 }
+

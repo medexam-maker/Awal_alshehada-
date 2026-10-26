@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, X } from 'lucide-react';
 import { playFeedbackSound } from '../../utils/soundManager';
+import { playWaterDrop } from '../../utils/soundEffects';
 
 interface MultipleChoiceProps {
   content: {
@@ -9,6 +10,8 @@ interface MultipleChoiceProps {
       id: string;
       text: string;
     }>;
+    correctOptionId?: string;
+    correctAnswer?: any;
   };
   answer?: {
     selectedOptionId?: string;
@@ -21,6 +24,66 @@ interface MultipleChoiceProps {
 
 const ARABIC_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
 
+function resolveCorrectOptionId(
+  ca: any,
+  optionsList: Array<{ id: string; text: string }>,
+  contentObj?: any
+): string | undefined {
+  let raw: any = ca;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        raw = parsed;
+      }
+    } catch {}
+  }
+
+  if (typeof raw === 'object' && raw !== null) {
+    const candidate =
+      raw.selectedOptionId ??
+      raw.optionId ??
+      raw.value ??
+      raw.id ??
+      raw.answer ??
+      raw.correctOptionId;
+    if (typeof candidate === 'string') {
+      const matched = optionsList.find((o) => o.id === candidate);
+      if (matched) return matched.id;
+      const textMatched = optionsList.find((o) => o.text.trim() === candidate.trim());
+      if (textMatched) return textMatched.id;
+      return candidate;
+    }
+    if (typeof candidate === 'number' && optionsList[candidate]) {
+      return optionsList[candidate].id;
+    }
+    if (typeof raw.text === 'string') {
+      const match = optionsList.find((o) => o.text.trim() === raw.text.trim());
+      if (match) return match.id;
+    }
+  }
+
+  if (typeof raw === 'string') {
+    const direct = optionsList.find((o) => o.id === raw);
+    if (direct) return direct.id;
+    const textMatch = optionsList.find((o) => o.text.trim() === raw.trim());
+    if (textMatch) return textMatch.id;
+    const num = parseInt(raw, 10);
+    if (!isNaN(num) && optionsList[num]) return optionsList[num].id;
+  }
+
+  if (typeof raw === 'number' && optionsList[raw]) {
+    return optionsList[raw].id;
+  }
+
+  if (contentObj && typeof contentObj === 'object') {
+    if (contentObj.correctOptionId) return contentObj.correctOptionId;
+    if (contentObj.correctAnswer) return resolveCorrectOptionId(contentObj.correctAnswer, optionsList);
+  }
+
+  return undefined;
+}
+
 export const MultipleChoiceRenderer: React.FC<MultipleChoiceProps> = ({
   content,
   answer,
@@ -32,27 +95,21 @@ export const MultipleChoiceRenderer: React.FC<MultipleChoiceProps> = ({
   const selectedId = answer?.selectedOptionId;
   const options = Array.isArray(content?.options) ? content.options : [];
 
-  // In training modes (not simulator): reveal correct/incorrect immediately on click
-  const isImmediateReveal = examMode !== 'simulator';
-
-  // Determine correct option ID
-  const correctOptionId =
-    typeof correctAnswer === 'object' && correctAnswer !== null
-      ? correctAnswer.selectedOptionId || correctAnswer.value || correctAnswer.id
-      : typeof correctAnswer === 'string'
-      ? correctAnswer
-      : undefined;
+  const correctOptionId = resolveCorrectOptionId(correctAnswer, options, content);
 
   const handleSelectOption = (optionId: string) => {
     if (isReadonly) return;
     onChange({ selectedOptionId: optionId });
 
-    if (isImmediateReveal && correctOptionId) {
+    // Sound feedback activation:
+    if (correctOptionId !== undefined) {
       if (optionId === correctOptionId) {
         playFeedbackSound('correct');
       } else {
         playFeedbackSound('incorrect');
       }
+    } else {
+      playWaterDrop();
     }
   };
 
@@ -63,8 +120,8 @@ export const MultipleChoiceRenderer: React.FC<MultipleChoiceProps> = ({
           const isSelected = selectedId === option.id;
           const letter = ARABIC_LETTERS[idx] || String(idx + 1);
 
-          const isCorrect = isImmediateReveal && selectedId && option.id === correctOptionId;
-          const isSelectedIncorrect = isImmediateReveal && isSelected && correctOptionId && selectedId !== correctOptionId;
+          const isCorrect = selectedId && option.id === correctOptionId;
+          const isSelectedIncorrect = isSelected && correctOptionId && selectedId !== correctOptionId;
 
           return (
             <button
@@ -105,3 +162,4 @@ export const MultipleChoiceRenderer: React.FC<MultipleChoiceProps> = ({
     </div>
   );
 };
+

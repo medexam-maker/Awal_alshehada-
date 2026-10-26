@@ -65,7 +65,7 @@ export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEn
     labelEn: 'Matching',
     contentSchema: ContentSchemas.matching,
     answerSchema: AnswerSchemas.matching,
-    allowedModes: ['tap_to_match', 'drag_drop', 'dropdown_per_item'],
+    allowedModes: ['tap_to_match'],
     defaultMode: 'tap_to_match',
     grading: GradingStrategy.AUTO,
     trainingSupport: true,
@@ -73,9 +73,9 @@ export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEn
     manualGradingSupport: false,
     mediaRequired: false,
     validationRules: [
-      { field: 'listA', required: true, type: 'array' },
-      { field: 'listB', required: true, type: 'array' }
-    ]
+      { field: 'pairs', required: true, type: 'array' }
+    ],
+    customValidator: (content) => validateMatchingQuestionContent(content),
   },
   [QuestionType.SHORT_ESSAY]: {
     type: QuestionType.SHORT_ESSAY,
@@ -271,3 +271,73 @@ export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEn
     ]
   }
 };
+
+export interface MatchingPair {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface MatchingDistractor {
+  id: string;
+  target: string;
+}
+
+export interface MatchingQuestionContent {
+  prompt?: string;
+  pairs: MatchingPair[];
+  distractors?: MatchingDistractor[];
+  scoring_type: 'all_or_nothing' | 'partial';
+  explanation?: string;
+}
+
+export function validateMatchingQuestionContent(content: unknown): { valid: boolean; errors: string[] } {
+  if (!content || typeof content !== 'object') {
+    return { valid: false, errors: ['محتوى سؤال المطابقة يجب أن يكون كائناً صريحاً.'] };
+  }
+  const c = content as MatchingQuestionContent;
+  if (!Array.isArray(c.pairs) || c.pairs.length < 2) {
+    return { valid: false, errors: ['يجب أن يحتوي سؤال المطابقة على زوجين اثنين على الأقل من العناصر.'] };
+  }
+
+  const seenSources = new Set<string>();
+  const seenTargets = new Set<string>();
+
+  for (const pair of c.pairs) {
+    if (!pair || typeof pair !== 'object') {
+      return { valid: false, errors: ['بيانات أحد الأزواج غير صالحة.'] };
+    }
+    if (!pair.source || typeof pair.source !== 'string' || pair.source.trim() === '') {
+      return { valid: false, errors: ['لا يمكن إبقاء حقل العنصر الأساسي (Source) فارغاً.'] };
+    }
+    if (!pair.target || typeof pair.target !== 'string' || pair.target.trim() === '') {
+      return { valid: false, errors: ['لا يمكن إبقاء حقل العنصر المطابق (Target) فارغاً.'] };
+    }
+    if (seenSources.has(pair.source.trim())) {
+      return { valid: false, errors: [`يمنع تكرار العنصر الأساسي: '${pair.source}'`] };
+    }
+    if (seenTargets.has(pair.target.trim())) {
+      return { valid: false, errors: [`يمنع تكرار العنصر المطابق: '${pair.target}'`] };
+    }
+    seenSources.add(pair.source.trim());
+    seenTargets.add(pair.target.trim());
+  }
+
+  if (c.distractors && Array.isArray(c.distractors)) {
+    for (const dist of c.distractors) {
+      if (!dist || typeof dist !== 'object' || !dist.target || typeof dist.target !== 'string' || dist.target.trim() === '') {
+        return { valid: false, errors: ['نص المشتت المبعثر لا يمكن أن يكون فارغاً.'] };
+      }
+      if (seenTargets.has(dist.target.trim())) {
+        return { valid: false, errors: [`المشتت '${dist.target}' يطابق أحد عناصر الأزواج.`] };
+      }
+      seenTargets.add(dist.target.trim());
+    }
+  }
+
+  if (c.scoring_type && !['all_or_nothing', 'partial'].includes(c.scoring_type)) {
+    return { valid: false, errors: ['نوع تصحيح المطابقة يجب أن يكون إما all_or_nothing أو partial.'] };
+  }
+
+  return { valid: true, errors: [] };
+}

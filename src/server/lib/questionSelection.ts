@@ -50,10 +50,11 @@ export async function selectQuestions(
     const allQuestionsRes = await client.query(query, params);
     const allQuestions = allQuestionsRes.rows as Record<string, unknown>[];
 
-    // C5 Section 15: If the eligible pool cannot satisfy the required limit, fail deterministically
-    if (allQuestions.length < limit) {
-        throw new Error(`INSUFFICIENT_QUESTIONS: Eligible question pool (${allQuestions.length}) is insufficient for required exam size (${limit}).`);
+    if (allQuestions.length === 0) {
+        throw new Error('بنك الأسئلة لهذا الجزء قيد الإنشاء والمراجعة وسيتوفر قريباً.');
     }
+
+    const effectiveLimit = Math.min(limit, allQuestions.length);
 
     // Check seen questions in current cycle for this user + subject + comprehensive bank
     const historyRes = await client.query(
@@ -67,9 +68,9 @@ export async function selectQuestions(
 
     const unseen = allQuestions.filter(q => !seenIds.has(q.id as string));
 
-    if (unseen.length >= limit) {
+    if (unseen.length >= effectiveLimit) {
         shuffleArray(unseen);
-        return unseen.slice(0, limit);
+        return unseen.slice(0, effectiveLimit);
     }
 
     // C5 Section 13: Cycle Reset when unseen questions are insufficient
@@ -83,5 +84,5 @@ export async function selectQuestions(
 
     // After reset, entire eligible pool is available again; select required questions without duplicates
     shuffleArray(allQuestions);
-    return allQuestions.slice(0, limit);
+    return allQuestions.slice(0, effectiveLimit);
 }

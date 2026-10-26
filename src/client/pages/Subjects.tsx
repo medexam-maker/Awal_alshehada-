@@ -57,33 +57,33 @@ const SUBJECT_VISUAL_THEMES: Record<
     badgeText: 'text-emerald-700',
     tagAr: 'مادة أساسية',
   },
-  'christian-studies': {
-    gradient: 'from-violet-400 via-purple-600 to-indigo-900',
-    shadowColor: 'shadow-purple-600/30',
-    badgeBg: 'bg-purple-50',
-    badgeText: 'text-purple-700',
-    tagAr: 'مادة أساسية',
+  'military-science': {
+    gradient: 'from-amber-600 via-amber-700 to-slate-900',
+    shadowColor: 'shadow-amber-700/30',
+    badgeBg: 'bg-amber-50',
+    badgeText: 'text-amber-800',
+    tagAr: 'القسم الأدبي',
   },
   'arabic-language': {
     gradient: 'from-rose-500 via-red-600 to-amber-900',
     shadowColor: 'shadow-rose-600/30',
     badgeBg: 'bg-rose-50',
     badgeText: 'text-rose-700',
-    tagAr: 'مادة مشتركة',
+    tagAr: 'مادة أساسية',
   },
   'english-language': {
     gradient: 'from-sky-400 via-blue-600 to-indigo-900',
     shadowColor: 'shadow-blue-600/30',
     badgeBg: 'bg-blue-50',
     badgeText: 'text-blue-700',
-    tagAr: 'مادة مشتركة',
+    tagAr: 'مادة أساسية',
   },
   'basic-mathematics': {
     gradient: 'from-amber-400 via-orange-500 to-rose-700',
     shadowColor: 'shadow-orange-600/30',
     badgeBg: 'bg-orange-50',
     badgeText: 'text-orange-700',
-    tagAr: 'القسم الأدبي',
+    tagAr: 'مادة أساسية',
   },
   'specialized-mathematics': {
     gradient: 'from-fuchsia-500 via-purple-600 to-slate-900',
@@ -132,7 +132,7 @@ const SUBJECT_VISUAL_THEMES: Record<
     shadowColor: 'shadow-indigo-600/30',
     badgeBg: 'bg-indigo-50',
     badgeText: 'text-indigo-700',
-    tagAr: 'القسم العلمي',
+    tagAr: 'القسم الأدبي',
   },
 };
 
@@ -144,7 +144,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
   const { user } = useAuth();
   const { activeAttempt, abandonExam } = useExam();
   const [dbSubjects, setDbSubjects] = useState<Array<{ id: string; name_ar: string; slug: string }>>([]);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'common' | 'scientific' | 'literary'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'scientific' | 'literary'>('all');
   const [isLoadingSubjects, setIsLoadingSubjects] = useState<boolean>(true);
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState<boolean>(soundEffects.isMuted);
@@ -195,6 +195,9 @@ export const Subjects: React.FC<SubjectsProps> = ({
         return <BookOpen className={iconClass} />;
       case 'Cross':
         return <Cross className={iconClass} />;
+      case 'Shield':
+      case 'ShieldCheck':
+        return <ShieldCheck className={iconClass} />;
       case 'Feather':
         return <Feather className={iconClass} />;
       case 'Globe':
@@ -335,16 +338,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 selectedCategory === 'all' ? 'bg-white text-emerald-900 shadow-xs' : 'hover:text-slate-900'
               }`}
             >
-              الكل (12)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('common')}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer whitespace-nowrap ${
-                selectedCategory === 'common' ? 'bg-white text-emerald-900 shadow-xs' : 'hover:text-slate-900'
-              }`}
-            >
-              المشتركة
+              جميع المواد (12)
             </button>
             <button
               type="button"
@@ -353,7 +347,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 selectedCategory === 'scientific' ? 'bg-white text-emerald-900 shadow-xs' : 'hover:text-slate-900'
               }`}
             >
-              العلمي
+              القسم العلمي (4)
             </button>
             <button
               type="button"
@@ -362,7 +356,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 selectedCategory === 'literary' ? 'bg-white text-emerald-900 shadow-xs' : 'hover:text-slate-900'
               }`}
             >
-              الأدبي
+              القسم الأدبي (4)
             </button>
           </div>
         </div>

@@ -276,16 +276,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartExam, onResumeExam 
                 selectedCategory === 'all' ? 'bg-white text-emerald-900 shadow-xs' : ''
               }`}
             >
-              الكل (9)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('common')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
-                selectedCategory === 'common' ? 'bg-white text-emerald-900 shadow-xs' : ''
-              }`}
-            >
-              المواد المشتركة
+              جميع المواد
             </button>
             <button
               type="button"

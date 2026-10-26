@@ -1,12 +1,16 @@
 import React from 'react';
 import { CheckCircle2, XCircle, Check, X } from 'lucide-react';
 import { playFeedbackSound } from '../../utils/soundManager';
+import { playWaterDrop } from '../../utils/soundEffects';
 
 interface TrueFalseProps {
   content: {
     prompt?: string;
     statement?: string;
     explanation?: string;
+    correctValue?: boolean;
+    correctAnswer?: any;
+    value?: boolean;
   };
   answer?: {
     value?: boolean;
@@ -16,6 +20,47 @@ interface TrueFalseProps {
   isReadonly?: boolean;
   correctAnswer?: any;
   examMode?: 'simulator' | 'training';
+}
+
+function resolveCorrectValue(ca: any, contentObj?: any): boolean | undefined {
+  if (typeof ca === 'boolean') return ca;
+
+  if (typeof ca === 'string') {
+    const trimmed = ca.trim().toLowerCase();
+    if (trimmed === 'true' || trimmed === '1' || trimmed === 'صواب' || trimmed === 'صح') return true;
+    if (trimmed === 'false' || trimmed === '0' || trimmed === 'خطأ' || trimmed === 'خطا') return false;
+    try {
+      const parsed = JSON.parse(ca);
+      if (typeof parsed === 'boolean') return parsed;
+      if (typeof parsed?.value === 'boolean') return parsed.value;
+    } catch {}
+  }
+
+  if (typeof ca === 'object' && ca !== null) {
+    if (typeof ca.value === 'boolean') return ca.value;
+    if (typeof ca.answer === 'boolean') return ca.answer;
+    if (typeof ca.correct === 'boolean') return ca.correct;
+    if (typeof ca.isCorrect === 'boolean') return ca.isCorrect;
+    if (typeof ca.value === 'string') {
+      const t = ca.value.trim().toLowerCase();
+      if (t === 'true' || t === '1' || t === 'صواب' || t === 'صح') return true;
+      if (t === 'false' || t === '0' || t === 'خطأ' || t === 'خطا') return false;
+    }
+    if (typeof ca.answer === 'string') {
+      const t = ca.answer.trim().toLowerCase();
+      if (t === 'true' || t === '1' || t === 'صواب' || t === 'صح') return true;
+      if (t === 'false' || t === '0' || t === 'خطأ' || t === 'خطا') return false;
+    }
+  }
+
+  if (contentObj && typeof contentObj === 'object') {
+    if (typeof contentObj.correctValue === 'boolean') return contentObj.correctValue;
+    if (typeof contentObj.value === 'boolean') return contentObj.value;
+    if (typeof contentObj.correctAnswer === 'boolean') return contentObj.correctAnswer;
+    if (contentObj.correctAnswer) return resolveCorrectValue(contentObj.correctAnswer);
+  }
+
+  return undefined;
 }
 
 export const TrueFalseRenderer: React.FC<TrueFalseProps> = ({
@@ -33,21 +78,7 @@ export const TrueFalseRenderer: React.FC<TrueFalseProps> = ({
         ? answer.value
         : undefined;
 
-  const isImmediateReveal = examMode !== 'simulator';
-
-  const correctValue =
-    typeof correctAnswer === 'boolean'
-      ? correctAnswer
-      : typeof correctAnswer === 'object' && correctAnswer !== null && typeof correctAnswer.value === 'boolean'
-      ? correctAnswer.value
-      : undefined;
-
-  const statementText =
-    content?.statement && content.statement !== content?.prompt
-      ? content.statement
-      : !content?.prompt
-        ? content?.statement || ''
-        : '';
+  const correctValue = resolveCorrectValue(correctAnswer, content);
 
   const handleSelect = (val: boolean) => {
     if (isReadonly) return;
@@ -56,29 +87,26 @@ export const TrueFalseRenderer: React.FC<TrueFalseProps> = ({
       correctionText: typeof answer === 'object' && answer !== null ? answer.correctionText : undefined,
     });
 
-    if (isImmediateReveal && typeof correctValue === 'boolean') {
+    // Sound feedback activation:
+    if (typeof correctValue === 'boolean') {
       if (val === correctValue) {
         playFeedbackSound('correct');
       } else {
         playFeedbackSound('incorrect');
       }
+    } else {
+      playWaterDrop();
     }
   };
 
-  const isTrueCorrect = isImmediateReveal && currentValue !== undefined && typeof correctValue === 'boolean' && correctValue === true;
-  const isTrueIncorrect = isImmediateReveal && currentValue === true && typeof correctValue === 'boolean' && correctValue === false;
+  const isTrueCorrect = currentValue !== undefined && typeof correctValue === 'boolean' && correctValue === true;
+  const isTrueIncorrect = currentValue === true && typeof correctValue === 'boolean' && correctValue === false;
 
-  const isFalseCorrect = isImmediateReveal && currentValue !== undefined && typeof correctValue === 'boolean' && correctValue === false;
-  const isFalseIncorrect = isImmediateReveal && currentValue === false && typeof correctValue === 'boolean' && correctValue === true;
+  const isFalseCorrect = currentValue !== undefined && typeof correctValue === 'boolean' && correctValue === false;
+  const isFalseIncorrect = currentValue === false && typeof correctValue === 'boolean' && correctValue === true;
 
   return (
     <div className="space-y-6">
-      {statementText && (
-        <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-lg leading-relaxed font-semibold shadow-xs">
-          {statementText}
-        </div>
-      )}
-
       <div className="grid grid-cols-2 gap-4">
         <button
           type="button"
@@ -135,4 +163,5 @@ export const TrueFalseRenderer: React.FC<TrueFalseProps> = ({
     </div>
   );
 };
+
 
