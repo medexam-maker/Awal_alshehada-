@@ -247,7 +247,6 @@ class DatabaseProxy {
     const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.NETLIFY);
     const connectionString = process.env.DATABASE_URL;
     const hasUnreachableHost = connectionString && (
-      connectionString.includes('ehdchhfnlidvvyhdoqzz') ||
       connectionString.includes('placeholder') ||
       connectionString.includes('[YOUR-HOST]')
     );
