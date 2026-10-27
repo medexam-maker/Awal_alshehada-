@@ -1,10 +1,10 @@
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
+// In production/Netlify, preserve existing environment variables without overriding
+dotenv.config();
 import { Pool, PoolConfig } from 'pg';
 import { PGlite } from '@electric-sql/pglite';
 import path from 'path';
 import fs from 'fs';
-import { hashPassword } from '../lib/password';
 import { seedDatabase } from './seed';
 
 let pgliteInstance: PGlite | null = null;
@@ -38,6 +38,9 @@ class PGlitePoolWrapper {
 }
 
 async function initPgliteDb(): Promise<PGlitePoolWrapper> {
+  if (process.env.NODE_ENV === 'production' || process.env.NETLIFY) {
+    throw new Error('[DB Security] Embedded PGlite storage is strictly forbidden in production environments.');
+  }
   const dataDir = path.resolve(process.cwd(), '.data/pglite');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -218,26 +221,21 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS obtained_marks NUMERIC(8,2);
   `);
 
-    /*
-    try {
-      const defaultPassHash = await hashPassword('Password123!');
-      const adminPassHash = await hashPassword('AdminPassword123!');
-      await db.query(
-        `INSERT INTO users (id, email, password_hash, full_name, role, status)
-         VALUES 
-         ('00000000-0000-0000-0000-000000000001', 'student@firstcertificate.sd', $1, 'طالب أول الشهادة', 'student', 'active'),
-         ('00000000-0000-0000-0000-000000000002', 'admin@firstcertificate.sd', $2, 'مسؤول النظام', 'admin', 'active')
-         ON CONFLICT (email) DO NOTHING`,
-        [defaultPassHash, adminPassHash]
-      );
-    } catch (err) {
-      console.warn('[DB] User seeding warning:', err);
-    }
-    */
-
   const wrapper = new PGlitePoolWrapper(db);
-  await seedDatabase(wrapper);
+  // Only seed PGlite if in local development
+  if (process.env.NODE_ENV !== 'production' && !process.env.NETLIFY) {
+    await seedDatabase(wrapper);
+  }
   return wrapper;
+}
+
+function sanitizeDbError(error: unknown): string {
+  if (!error) return 'Unknown database error';
+  const raw = error instanceof Error ? error.message : String(error);
+  // Redact passwords, connection string credentials or tokens
+  return raw
+    .replace(/(postgres(?:ql)?:\/\/[^:]+:)[^@]+(@)/gi, '$1***$2')
+    .replace(/password=[^\s;&]+/gi, 'password=***');
 }
 
 class DatabaseProxy {
@@ -246,6 +244,7 @@ class DatabaseProxy {
   private async getDelegate() {
     if (this.delegate) return this.delegate;
 
+    const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.NETLIFY);
     const connectionString = process.env.DATABASE_URL;
     const hasUnreachableHost = connectionString && (
       connectionString.includes('ehdchhfnlidvvyhdoqzz') ||
@@ -254,7 +253,16 @@ class DatabaseProxy {
     );
 
     if (!connectionString || hasUnreachableHost) {
-      console.log('[DB] Using embedded PGlite storage (no valid remote DATABASE_URL configured).');
+      const reason = !connectionString
+        ? 'DATABASE_URL environment variable is not defined.'
+        : 'DATABASE_URL contains an unresolved placeholder host.';
+
+      if (isProduction) {
+        console.error(`[DB Fatal] Production database configuration error: ${reason}`);
+        throw new Error(`[Database Error] Connection failed: ${reason} Falling back to embedded database is disabled in production.`);
+      }
+
+      console.log(`[DB] Using embedded PGlite storage (local development only: ${reason}).`);
       this.delegate = await initPgliteDb();
       return this.delegate;
     }
@@ -263,23 +271,38 @@ class DatabaseProxy {
       const isRemoteDb = Boolean(
         connectionString.includes('supabase.co') ||
         connectionString.includes('neon.tech') ||
-        connectionString.includes('sslmode=require')
+        connectionString.includes('sslmode=require') ||
+        connectionString.includes('pooler')
       );
       const cleanConnectionString = connectionString.replace(/([?&])sslmode=[^&]+(&|$)/, '$1').replace(/[?&]$/, '');
       const poolConfig: PoolConfig = {
         connectionString: cleanConnectionString,
         ssl: isRemoteDb ? { rejectUnauthorized: false } : undefined,
-        connectionTimeoutMillis: 3000,
+        connectionTimeoutMillis: 10000,
+        max: isProduction ? 5 : 10,
       };
 
       const testPool = new Pool(poolConfig);
       await testPool.query('SELECT 1 AS ok');
-      await seedDatabase(testPool);
-      console.log('[DB] Connected to remote PostgreSQL successfully.');
+
+      // In production, do NOT automatically alter database contents on connect
+      if (!isProduction && process.env.AUTO_SEED === 'true') {
+        await seedDatabase(testPool);
+      }
+
+      console.log('[DB] Connected to PostgreSQL database successfully.');
       this.delegate = testPool;
       return this.delegate;
-    } catch (err) {
-      console.warn('[DB] Remote PostgreSQL connection failed (falling back to embedded PGlite):', err);
+    } catch (err: unknown) {
+      const safeError = sanitizeDbError(err);
+      console.error('[DB Error] Failed to connect to remote PostgreSQL database:', safeError);
+
+      if (isProduction) {
+        // Strictly fail in production without attempting any filesystem write or PGlite fallback
+        throw new Error(`[Database Error] Remote PostgreSQL connection failed in production: ${safeError}`);
+      }
+
+      console.warn('[DB] Remote PostgreSQL connection failed (falling back to embedded PGlite for local development).');
       this.delegate = await initPgliteDb();
       return this.delegate;
     }
@@ -309,7 +332,7 @@ export async function testConnection(): Promise<boolean> {
     const result = await pool.query('SELECT 1 AS ok');
     return Boolean(result.rows && result.rows.length > 0);
   } catch (error) {
-    console.error('Database connection failed:', error);
+    console.error('Database connection test failed:', sanitizeDbError(error));
     return false;
   }
 }

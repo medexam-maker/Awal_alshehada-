@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
+// Do not override system/Netlify environment variables
+dotenv.config();
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
