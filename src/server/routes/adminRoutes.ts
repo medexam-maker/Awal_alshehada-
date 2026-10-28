@@ -806,4 +806,116 @@ router.post('/questions/bulk-import', async (req: AuthenticatedRequest, res: Res
   }
 });
 
+/**
+ * POST /api/admin/bulk-import-ordering
+ * Central database route for bulk importing ordering questions (JSON or pre-parsed CSV).
+ */
+router.post('/bulk-import-ordering', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { subjectSlug, questions } = req.body;
+
+  if (!subjectSlug || !Array.isArray(questions) || questions.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'subjectSlug and non-empty questions array are required', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const validQuestions: any[] = [];
+  for (let idx = 0; idx < questions.length; idx++) {
+    const q = questions[idx];
+    let items = q.items || [];
+
+    if (Array.isArray(items)) {
+      items = items.map((it: any, i: number) => {
+        if (typeof it === 'string') return { id: `s${i + 1}`, text: it.trim() };
+        return { id: it.id || `s${i + 1}`, text: String(it.text || it.title || '').trim() };
+      });
+    }
+
+    if (!Array.isArray(items) || items.length < 2) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `السؤال رقم ${idx + 1} يجب أن يحتوي على عنصرين على الأقل للترتيب.`,
+          details: {},
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const correctOrder = Array.isArray(q.correctOrder) && q.correctOrder.length > 0
+      ? q.correctOrder
+      : items.map((it: any) => it.id);
+
+    validQuestions.push({
+      prompt: q.prompt || q.text || 'رتب الأحداث التالية بالترتيب الصحيح:',
+      items,
+      correctOrder,
+      allocatedMarks: q.allocatedMarks || q.marks || 5,
+      explanationAr: q.explanationAr || q.explanation || null,
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let subjectRes = await client.query('SELECT id FROM subjects WHERE slug = $1', [subjectSlug]);
+    if (subjectRes.rows.length === 0) {
+      const defaultName = subjectSlug.replace(/-/g, ' ');
+      subjectRes = await client.query(
+        `INSERT INTO subjects (name_ar, name_en, slug, is_active) VALUES ($1, $2, $3, true) RETURNING id`,
+        [defaultName, subjectSlug, subjectSlug]
+      );
+    }
+    const subjectId = subjectRes.rows[0].id;
+
+    for (const q of validQuestions) {
+      const content = {
+        prompt: q.prompt,
+        items: q.items,
+        correctOrder: q.correctOrder,
+        scoring_type: 'partial',
+      };
+      const correctAnswer = { orderedIds: q.correctOrder };
+
+      await client.query(
+        `INSERT INTO question_bank
+         (subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, created_by)
+         VALUES ($1, 'ordering', $2, $3, 'large_cards', $4, 'comprehensive', 'approved', $5, $6)`,
+        [
+          subjectId,
+          JSON.stringify(content),
+          JSON.stringify(correctAnswer),
+          q.allocatedMarks,
+          q.explanationAr,
+          req.user?.id || 'admin',
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(200).json({
+      success: true,
+      data: { count: validQuestions.length },
+      message: `تم استيراد ${validQuestions.length} سؤال ترتيب بنجاح`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[admin/bulk-import-ordering:POST] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to bulk import ordering questions', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;

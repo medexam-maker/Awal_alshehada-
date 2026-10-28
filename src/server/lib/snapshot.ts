@@ -239,6 +239,57 @@ export function createClientSnapshot(
         return snap;
     }
 
+    // Special Deterministic Snapshot handling for ORDERING
+    if (row.question_type === 'ordering') {
+        const rawItems = Array.isArray(rawContentObj.items)
+            ? rawContentObj.items
+            : Array.isArray(rawContentObj.events)
+            ? rawContentObj.events
+            : [];
+
+        if (rawItems.length > 0) {
+            const formattedItems = rawItems.map((item: any, idx: number) => ({
+                id: String(item.id || `s${idx + 1}`),
+                text: String(item.text || item.title || item.label || ''),
+            }));
+
+            let correctOrder: string[] = [];
+            const rawCa = row.correct_answer as any;
+            if (Array.isArray(rawContentObj.correctOrder)) {
+                correctOrder = rawContentObj.correctOrder.map(String);
+            } else if (rawCa && Array.isArray(rawCa.orderedIds)) {
+                correctOrder = rawCa.orderedIds.map(String);
+            } else if (rawCa && Array.isArray(rawCa.order)) {
+                correctOrder = rawCa.order.map(String);
+            } else {
+                correctOrder = formattedItems.map((it) => it.id);
+            }
+
+            // Fisher-Yates shuffle for shuffledBank
+            const shuffledBank = [...formattedItems];
+            for (let i = shuffledBank.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledBank[i], shuffledBank[j]] = [shuffledBank[j], shuffledBank[i]];
+            }
+
+            const orderingContentObj = {
+                prompt: promptText,
+                items: formattedItems,
+                shuffledBank,
+                correctOrder,
+                scoring_type: rawContentObj.scoring_type || 'partial',
+                explanation: row.explanation ?? null,
+            };
+
+            snap.content = orderingContentObj;
+            snap.correctAnswer = { orderedIds: correctOrder };
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+
+            return snap;
+        }
+    }
+
     snap.content = row.content;
     snap.correctAnswer = row.correct_answer;
     snap.explanation = row.explanation ?? null;

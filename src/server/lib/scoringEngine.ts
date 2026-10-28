@@ -260,16 +260,48 @@ export function autoGrade(
     }
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.ORDERING) {
-    const ca = correctAnswer as OrderingAnswer;
-    const sa = studentAnswer as OrderingAnswer | undefined;
-    const items = Object.keys(ca.order || {});
-    const totalUnits = items.length;
-    let correctUnits = 0;
-    if (sa?.order) {
-        for (const key of items) {
-            if (sa.order[key] === ca.order[key]) correctUnits++;
-        }
+    const c = (content || {}) as Record<string, any>;
+    const ca = (correctAnswer || {}) as Record<string, any>;
+    const sa = (studentAnswer || {}) as Record<string, any>;
+
+    let expectedOrder: string[] = [];
+    if (Array.isArray(ca.orderedIds)) {
+      expectedOrder = ca.orderedIds.map(String);
+    } else if (Array.isArray(ca.correctOrder)) {
+      expectedOrder = ca.correctOrder.map(String);
+    } else if (Array.isArray(c.correctOrder)) {
+      expectedOrder = c.correctOrder.map(String);
+    } else if (ca.order && typeof ca.order === 'object') {
+      const entries = Object.entries(ca.order as Record<string, number>);
+      entries.sort((a, b) => Number(a[1]) - Number(b[1]));
+      expectedOrder = entries.map(([id]) => id);
+    } else if (Array.isArray(c.items)) {
+      expectedOrder = c.items.map((it: any) => String(it.id));
     }
+
+    let studentOrder: string[] = [];
+    if (Array.isArray(sa.orderedIds)) {
+      studentOrder = sa.orderedIds.map(String);
+    } else if (Array.isArray(sa.order)) {
+      studentOrder = sa.order.map(String);
+    } else if (Array.isArray(studentAnswer)) {
+      studentOrder = (studentAnswer as any[]).map(String);
+    } else if (sa.order && typeof sa.order === 'object') {
+      const entries = Object.entries(sa.order as Record<string, number>);
+      entries.sort((a, b) => Number(a[1]) - Number(b[1]));
+      studentOrder = entries.map(([id]) => id);
+    }
+
+    const totalUnits = expectedOrder.length;
+    let correctUnits = 0;
+    if (totalUnits > 0) {
+      for (let i = 0; i < totalUnits; i++) {
+        if (studentOrder[i] && studentOrder[i] === expectedOrder[i]) {
+          correctUnits++;
+        }
+      }
+    }
+
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.DIAGRAM_LABELING) {
     const ca = correctAnswer as DiagramLabelingAnswer;

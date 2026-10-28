@@ -137,6 +137,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [activeTab, setActiveTab] = useState<'blueprint' | 'authoring' | 'bank' | 'bulk'>('blueprint');
 
   // Bulk Import States
+  const [bulkImportType, setBulkImportType] = useState<'all_json' | 'ordering'>('all_json');
+  const [orderingFormat, setOrderingFormat] = useState<'json' | 'csv'>('json');
   const [bulkJsonText, setBulkJsonText] = useState<string>('');
   const [bulkScope, setBulkScope] = useState<'both' | 'yearly_exam' | 'curriculum_review'>('both');
   const [bulkYear, setBulkYear] = useState<number>(2024);
@@ -307,6 +309,158 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       }
     } catch (err: any) {
       showNotification(`فشل الاستيراد: ${err.message}`, 'info');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const parseOrderingCsv = (csvText: string) => {
+    const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const questions: any[] = [];
+    const errors: string[] = [];
+
+    lines.forEach((line, lineIdx) => {
+      const cells: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if ((char === ',' || char === ';') && !inQuotes) {
+          cells.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      cells.push(current.trim());
+
+      const lowerCell0 = cells[0]?.toLowerCase() || '';
+      if (
+        lineIdx === 0 &&
+        (lowerCell0.includes('prompt') || lowerCell0.includes('text') || lowerCell0.includes('السؤال') || lowerCell0.includes('نص'))
+      ) {
+        return;
+      }
+
+      if (cells.length < 3) {
+        errors.push(`السطر ${lineIdx + 1}: يجب أن يحتوي على نص السؤال وعنصرين على الأقل للترتيب.`);
+        return;
+      }
+
+      const prompt = cells[0].replace(/^"|"$/g, '').trim();
+      const rawItems = cells.slice(1).map((c) => c.replace(/^"|"$/g, '').trim()).filter(Boolean);
+
+      let allocatedMarks = 5;
+      let explanation = '';
+
+      if (rawItems.length > 2 && !isNaN(Number(rawItems[rawItems.length - 1]))) {
+        allocatedMarks = Number(rawItems.pop()) || 5;
+      }
+
+      if (rawItems.length < 2) {
+        errors.push(`السطر ${lineIdx + 1}: يلزم وجود عنصرين على الأقل للترتيب.`);
+        return;
+      }
+
+      const items = rawItems.map((text, i) => ({
+        id: `s${i + 1}`,
+        text,
+      }));
+
+      questions.push({
+        prompt,
+        items,
+        correctOrder: items.map((it) => it.id),
+        allocatedMarks,
+        explanation,
+      });
+    });
+
+    return { questions, errors };
+  };
+
+  const handleImportOrderingQuestions = async () => {
+    setJsonParseError(null);
+    setValidationResult(null);
+    setImportSummaryResult(null);
+
+    const trimmed = bulkJsonText.trim();
+    if (!trimmed) {
+      setJsonParseError('يرجى لصق بيانات الأسئلة أولاً.');
+      return;
+    }
+
+    let questionsToImport: any[] = [];
+
+    if (orderingFormat === 'csv') {
+      const { questions, errors } = parseOrderingCsv(trimmed);
+      if (errors.length > 0) {
+        setJsonParseError(`أخطاء في ملف CSV:\n${errors.join('\n')}`);
+        return;
+      }
+      questionsToImport = questions;
+    } else {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const list = Array.isArray(parsed) ? parsed : parsed.questions || [];
+        questionsToImport = list.map((q: any) => {
+          let items = q.items || [];
+          if (Array.isArray(items)) {
+            items = items.map((it: any, i: number) => {
+              if (typeof it === 'string') return { id: `s${i + 1}`, text: it.trim() };
+              return { id: it.id || `s${i + 1}`, text: String(it.text || it.title || '').trim() };
+            });
+          }
+          return {
+            prompt: q.prompt || q.text || 'رتب الأحداث التالية:',
+            items,
+            correctOrder: Array.isArray(q.correctOrder) && q.correctOrder.length > 0 ? q.correctOrder : items.map((it: any) => it.id),
+            allocatedMarks: q.allocatedMarks || q.marks || 5,
+            explanation: q.explanation || q.explanationAr || '',
+          };
+        });
+      } catch (err: any) {
+        setJsonParseError(`JSON غير صالح: ${err.message}`);
+        return;
+      }
+    }
+
+    if (questionsToImport.length === 0) {
+      setJsonParseError('لم يتم العثور على أي أسئلة صالحة للاستيراد.');
+      return;
+    }
+
+    for (let i = 0; i < questionsToImport.length; i++) {
+      const q = questionsToImport[i];
+      const items = Array.isArray(q.items) ? q.items : [];
+      if (items.length < 2) {
+        setJsonParseError(`السؤال رقم ${i + 1} ("${q.prompt || ''}") يجب أن يحتوي على عنصرين على الأقل للترتيب.`);
+        return;
+      }
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await apiClient.request<{ count: number }>('/api/admin/bulk-import-ordering', {
+        method: 'POST',
+        body: JSON.stringify({
+          subjectSlug: selectedSubjectSlug,
+          questions: questionsToImport,
+        }),
+      });
+
+      if (res?.success) {
+        const importedCount = res.data?.count || questionsToImport.length;
+        showNotification(`تم استيراد ${importedCount} سؤال ترتيب بنجاح!`, 'success');
+        setBulkJsonText('');
+        fetchServerQuestions(selectedSubjectSlug);
+      } else {
+        throw new Error(res?.error?.message || 'فشل استيراد أسئلة الترتيب');
+      }
+    } catch (err: any) {
+      setJsonParseError(err.message || 'حدث خطأ أثناء استيراد أسئلة الترتيب.');
     } finally {
       setIsImporting(false);
     }
@@ -1659,20 +1813,163 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       )}
 
       {/* ========================================================= */}
-      {/* TAB 4: BULK QUESTION IMPORTER (JSON COPY-PASTE)           */}
+      {/* TAB 4: BULK QUESTION IMPORTER (JSON & CSV)                */}
       {/* ========================================================= */}
       {activeTab === 'bulk' && (
         <div className="space-y-6">
           <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xs space-y-5">
-            <div>
-              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <FileCode className="w-5 h-5 text-emerald-600" />
-                <span>استيراد جماعي للأسئلة لمادة ({blueprint.name_ar}) عبر JSON</span>
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                الصق كود JSON مباشرة للتحقق منه ومعاينته بدقة قبل إدراجه في قاعدة البيانات. يتم التحقق وفق نظام (الكل أو لا شيء).
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <FileCode className="w-5 h-5 text-emerald-600" />
+                  <span>استيراد جماعي للأسئلة لمادة ({blueprint.name_ar})</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  اختر نوع الاستيراد والتنسيق المطلوب (JSON للأنماط العامة أو JSON/CSV المخصص لأسئلة الترتيب والتسلسل)
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-2xl shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkImportType('all_json');
+                    setJsonParseError(null);
+                    setValidationResult(null);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    bulkImportType === 'all_json'
+                      ? 'bg-white text-emerald-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  أنماط عامة (JSON)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkImportType('ordering');
+                    setJsonParseError(null);
+                    setValidationResult(null);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                    bulkImportType === 'ordering'
+                      ? 'bg-white text-emerald-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  أسئلة ترتيب وتسلسل (Ordering)
+                </button>
+              </div>
             </div>
+
+            {bulkImportType === 'ordering' && (
+              <div className="space-y-4 bg-indigo-50/60 p-4 rounded-2xl border border-indigo-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-950">تنسيق استيراد الترتيب والتسلسل:</span>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-indigo-900">
+                      <input
+                        type="radio"
+                        name="ordering_format"
+                        value="json"
+                        checked={orderingFormat === 'json'}
+                        onChange={() => setOrderingFormat('json')}
+                        className="text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>JSON</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-indigo-900 mr-3">
+                      <input
+                        type="radio"
+                        name="ordering_format"
+                        value="csv"
+                        checked={orderingFormat === 'csv'}
+                        onChange={() => setOrderingFormat('csv')}
+                        className="text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>CSV</span>
+                    </label>
+                  </div>
+                </div>
+
+                <p className="text-xs text-indigo-800 leading-relaxed">
+                  {orderingFormat === 'csv'
+                    ? 'صيغة CSV: السطر يبدأ بنص السؤال ثم العناصر بالترتيب الصحيح مفصولة بفاصلة (مثال: "رتب الأحداث:",حدث1,حدث2,حدث3,5). يلزم عنصرين على الأقل.'
+                    : 'صيغة JSON: مصفوفة من الكائنات تضمن prompt و items (مصفوفة نصوص أو كائنات بها text). يتم إنشاء المعرفات (s1, s2...) تلقائياً.'}
+                </p>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-slate-700 block">
+                      المحتوى ({orderingFormat.toUpperCase()}):
+                    </label>
+                    {bulkJsonText && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkJsonText('');
+                          setJsonParseError(null);
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-rose-600 font-bold transition-colors cursor-pointer"
+                      >
+                        مسح النص
+                      </button>
+                    )}
+                  </div>
+
+                  <textarea
+                    rows={12}
+                    value={bulkJsonText}
+                    onChange={(e) => {
+                      setBulkJsonText(e.target.value);
+                      setJsonParseError(null);
+                    }}
+                    placeholder={
+                      orderingFormat === 'csv'
+                        ? '"رتب خلفاء بني أمية:",معاوية بن أبي سفيان,يزيد بن معاوية,عبد الملك بن مروان,5\n"رتب الأحداث التاريخية:",استقلال السودان 1956,ثورة أكتوبر 1964,انتفاضة أبريل 1985,5'
+                        : '[\n  {\n    "prompt": "رتب الأحداث التاريخية التالية من الأقدم للأحدث:",\n    "items": ["استقلال السودان 1956", "ثورة أكتوبر 1964", "انتفاضة أبريل 1985"],\n    "allocatedMarks": 5\n  }\n]'
+                    }
+                    dir="ltr"
+                    className="w-full bg-slate-950 text-slate-100 font-mono text-xs p-4 rounded-2xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-left"
+                  />
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleImportOrderingQuestions}
+                    disabled={!bulkJsonText.trim() || isImporting}
+                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    {isImporting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>جارٍ استيراد أسئلة الترتيب...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>استيراد أسئلة الترتيب والتسلسل (Bulk Import Ordering)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {jsonParseError && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-rose-900 text-xs">
+                    <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-black">خطأ في استيراد أسئلة الترتيب:</p>
+                      <pre className="font-mono text-[11px] text-rose-700 whitespace-pre-wrap">{jsonParseError}</pre>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {bulkImportType === 'all_json' && (
+              <>
 
             {/* Scope & Year Selector */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
@@ -1961,6 +2258,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                   </div>
                 )}
               </div>
+            )}
+            </>
             )}
           </div>
         </div>
