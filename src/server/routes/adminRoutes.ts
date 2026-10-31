@@ -1121,4 +1121,358 @@ router.post('/bulk-import-ordering', async (req: AuthenticatedRequest, res: Resp
   }
 });
 
+/**
+ * POST /api/admin/questions/pattern8
+ * Creates a Pattern 8 Short Structured Essay question.
+ */
+router.post('/questions/pattern8', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const {
+    subjectSlug,
+    question_text,
+    model_answer,
+    mandatory_keywords,
+    hint = null,
+    max_words = 30,
+    max_score = 2,
+    grading_mode = 'auto',
+    partial_threshold = 0.5,
+  } = req.body;
+
+  if (!subjectSlug || !question_text || !model_answer || !Array.isArray(mandatory_keywords) || mandatory_keywords.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'subjectSlug, question_text, model_answer, and mandatory_keywords (non-empty array) are required',
+        details: {},
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let subjectRes = await client.query('SELECT id FROM subjects WHERE slug = $1', [subjectSlug]);
+    if (subjectRes.rows.length === 0) {
+      const defaultName = subjectSlug.replace(/-/g, ' ');
+      subjectRes = await client.query(
+        `INSERT INTO subjects (name_ar, name_en, slug, is_active) VALUES ($1, $2, $3, true) RETURNING id`,
+        [defaultName, subjectSlug, subjectSlug]
+      );
+    }
+    const subjectId = subjectRes.rows[0].id;
+
+    const contentObj = {
+      prompt: question_text,
+      model_answer,
+      mandatory_keywords,
+      hint,
+      max_words,
+      grading_mode,
+      partial_threshold,
+    };
+
+    const correctAnswerObj = {
+      model_answer,
+      mandatory_keywords,
+      partial_threshold,
+      grading_mode,
+    };
+
+    const result = await client.query(
+      `INSERT INTO question_bank
+       (subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, created_by, grading_mode, partial_threshold)
+       VALUES ($1, 'short_essay', $2, $3, 'free_text_box', $4, 'comprehensive', 'approved', $5, $6, $7, $8)
+       RETURNING id, created_at`,
+      [
+        subjectId,
+        JSON.stringify(contentObj),
+        JSON.stringify(correctAnswerObj),
+        max_score,
+        hint || model_answer,
+        req.user?.id || 'admin',
+        grading_mode,
+        partial_threshold,
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
+      success: true,
+      data: { id: result.rows[0].id, createdAt: result.rows[0].created_at },
+      message: 'تم إضافة سؤال المقال القصيرة (النمط 8) بنجاح',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[admin/questions/pattern8:POST] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to create Pattern 8 question', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * PUT /api/admin/questions/pattern8/:id
+ * Updates an existing Pattern 8 Short Essay question.
+ */
+router.put('/questions/pattern8/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const {
+    question_text,
+    model_answer,
+    mandatory_keywords,
+    hint = null,
+    max_words = 30,
+    max_score = 2,
+    grading_mode = 'auto',
+    partial_threshold = 0.5,
+  } = req.body;
+
+  if (!id || !question_text || !model_answer || !Array.isArray(mandatory_keywords) || mandatory_keywords.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'question_text, model_answer, and mandatory_keywords are required',
+        details: {},
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    const contentObj = {
+      prompt: question_text,
+      model_answer,
+      mandatory_keywords,
+      hint,
+      max_words,
+      grading_mode,
+      partial_threshold,
+    };
+
+    const correctAnswerObj = {
+      model_answer,
+      mandatory_keywords,
+      partial_threshold,
+      grading_mode,
+    };
+
+    const updateRes = await pool.query(
+      `UPDATE question_bank
+       SET content = $1, correct_answer = $2, marks = $3, explanation = $4, grading_mode = $5, partial_threshold = $6, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7 AND question_type = 'short_essay'
+       RETURNING id`,
+      [
+        JSON.stringify(contentObj),
+        JSON.stringify(correctAnswerObj),
+        max_score,
+        hint || model_answer,
+        grading_mode,
+        partial_threshold,
+        id,
+      ]
+    );
+
+    if (updateRes.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Pattern 8 question not found', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: { id },
+      message: 'تم تحديث سؤال النمط 8 بنجاح',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/questions/pattern8:PUT] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to update Pattern 8 question', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * POST /api/admin/questions/pattern8/import
+ * Bulk imports Pattern 8 questions using only manual entry JSON/CSV payloads.
+ */
+router.post('/questions/pattern8/import', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { subjectSlug, questions } = req.body;
+
+  if (!subjectSlug || !Array.isArray(questions) || questions.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'subjectSlug and non-empty questions array are required', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const validQuestions = [];
+  const errors = [];
+
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const qText = q.question_text || q.prompt;
+    const mAns = q.model_answer || q.modelAnswer;
+    const kws = q.mandatory_keywords || q.mandatoryKeywords;
+
+    if (!qText || !mAns || !Array.isArray(kws) || kws.length === 0) {
+      errors.push({ row: i + 1, message: 'Missing required manual fields (question_text, model_answer, mandatory_keywords)' });
+      continue;
+    }
+
+    validQuestions.push({
+      question_text: qText,
+      model_answer: mAns,
+      mandatory_keywords: kws,
+      hint: q.hint || null,
+      max_words: q.max_words || q.maxWords || 30,
+      max_score: q.max_score || q.marks || 2,
+      grading_mode: q.grading_mode || 'auto',
+      partial_threshold: q.partial_threshold || 0.5,
+    });
+  }
+
+  if (validQuestions.length === 0) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'No valid Pattern 8 questions in payload', details: errors },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    let subjectRes = await client.query('SELECT id FROM subjects WHERE slug = $1', [subjectSlug]);
+    if (subjectRes.rows.length === 0) {
+      const defaultName = subjectSlug.replace(/-/g, ' ');
+      subjectRes = await client.query(
+        `INSERT INTO subjects (name_ar, name_en, slug, is_active) VALUES ($1, $2, $3, true) RETURNING id`,
+        [defaultName, subjectSlug, subjectSlug]
+      );
+    }
+    const subjectId = subjectRes.rows[0].id;
+
+    for (const q of validQuestions) {
+      const content = {
+        prompt: q.question_text,
+        model_answer: q.model_answer,
+        mandatory_keywords: q.mandatory_keywords,
+        hint: q.hint,
+        max_words: q.max_words,
+        grading_mode: q.grading_mode,
+        partial_threshold: q.partial_threshold,
+      };
+      const correctAnswer = {
+        model_answer: q.model_answer,
+        mandatory_keywords: q.mandatory_keywords,
+        partial_threshold: q.partial_threshold,
+        grading_mode: q.grading_mode,
+      };
+
+      await client.query(
+        `INSERT INTO question_bank
+         (subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, created_by, grading_mode, partial_threshold)
+         VALUES ($1, 'short_essay', $2, $3, 'free_text_box', $4, 'comprehensive', 'approved', $5, $6, $7, $8)`,
+        [
+          subjectId,
+          JSON.stringify(content),
+          JSON.stringify(correctAnswer),
+          q.max_score,
+          q.hint || q.model_answer,
+          req.user?.id || 'admin',
+          q.grading_mode,
+          q.partial_threshold,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      data: { count: validQuestions.length, errors },
+      message: `تم استيراد ${validQuestions.length} سؤال مقال قصير بنجاح`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[admin/questions/pattern8/import:POST] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to bulk import Pattern 8 questions', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * PATCH /api/admin/attempts/:attemptId/questions/:questionId/grade
+ * Teacher manual/hybrid grade override for short essay questions.
+ */
+router.patch('/attempts/:attemptId/questions/:questionId/grade', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const { attemptId, questionId } = req.params;
+  const { assignedScore, maxScore = 2, feedbackNote = '' } = req.body;
+
+  if (assignedScore === undefined || Number.isNaN(Number(assignedScore))) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'assignedScore is required and must be a valid number', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO essay_manual_grades
+       (attempt_id, question_id, grader_user_id, assigned_score, max_score, feedback_note)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (attempt_id, question_id) DO UPDATE
+       SET assigned_score = EXCLUDED.assigned_score,
+           max_score = EXCLUDED.max_score,
+           feedback_note = EXCLUDED.feedback_note,
+           graded_at = CURRENT_TIMESTAMP`,
+      [attemptId, questionId, req.user?.id || 'admin', Number(assignedScore), Number(maxScore), feedbackNote]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: { attemptId, questionId, assignedScore: Number(assignedScore) },
+      message: 'تم تسجيل الدرجة اليدوية بنجاح',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/attempts/grade:PATCH] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to save manual grade', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
 export default router;

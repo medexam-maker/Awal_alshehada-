@@ -689,8 +689,170 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
     }
   );
 
-  // Mathematics Starter Questions
+  // Mathematics Starter Questions (including Pattern 7 Multi-Step Calculations)
   questions.push(
+    {
+      id: 'math_p7_calculus_01',
+      subjectSlug: 'specialized-mathematics',
+      patternId: 'specialized-mathematics_q2_a',
+      questionNumber: 3,
+      partLabel: 'أ',
+      questionType: QuestionType.CALCULATION,
+      prompt: 'يتحرك جسم في خط مستقيم بحيث تُعطى إزاحته $s(t)$ بالأمتار بعد مرور $t$ ثانية بالعلاقة: $$s(t) = 2t^3 - 9t^2 + 12t + 5$$ أجب عن الخطوات المتسلسلة التالية لإيجاد دالة السرعة، ولحظات السكون، والتسارع:',
+      content: {
+        mode: 'multi_step_mcq',
+        prompt: 'يتحرك جسم في خط مستقيم بحيث تُعطى إزاحته $s(t)$ بالأمتار بعد مرور $t$ ثانية بالعلاقة: $$s(t) = 2t^3 - 9t^2 + 12t + 5$$ أجب عن الخطوات المتسلسلة التالية لإيجاد دالة السرعة، ولحظات السكون، والتسارع:',
+        scenario: 'تطبيق فيزيائي ورياضي على التفاضل: دراسة حركة نقطة مادية، اشتقاق السرعة والتسارع وتحديد لحظات السكون اللحظي.',
+        given_values: {
+          's(t)': '2t^3 - 9t^2 + 12t + 5',
+          't': '\\ge 0'
+        },
+        steps: [
+          {
+            id: 'step_1',
+            order: 1,
+            prompt: 'الخطوة الأولى: أوجد دالة السرعة اللحظية $v(t) = \\frac{ds}{dt}$ (باشتقاق دالة الإزاحة بالنسبة للزمن):',
+            marks: 2,
+            options: [
+              { id: 'opt_1a', label: 'v(t) = 6t^2 - 18t + 12' },
+              { id: 'opt_1b', label: 'v(t) = 6t^2 - 9t + 12' },
+              { id: 'opt_1c', label: 'v(t) = 2t^2 - 9t + 12' },
+              { id: 'opt_1d', label: 'v(t) = 6t^3 - 18t^2 + 12t' }
+            ]
+          },
+          {
+            id: 'step_2',
+            order: 2,
+            prompt: 'الخطوة الثانية: أوجد لحظات السكون اللحظي للجسم (أي عندما تنعدم السرعة $v(t) = 0$):',
+            marks: 2,
+            options: [
+              { id: 'opt_2a', label: 't = 1\\text{ s} \\text{ و } t = 2\\text{ s}' },
+              { id: 'opt_2b', label: 't = 0\\text{ s} \\text{ و } t = 2\\text{ s}' },
+              { id: 'opt_2c', label: 't = 3\\text{ s} \\text{ و } t = 4\\text{ s}' },
+              { id: 'opt_2d', label: 't = 1\\text{ s} \\text{ فقط}' }
+            ]
+          },
+          {
+            id: 'step_3',
+            order: 3,
+            prompt: 'الخطوة الثالثة: أوجد تسارع الجسم $a(t) = \\frac{dv}{dt}$ عند اللحظة $t = 3\\text{ s}$:',
+            marks: 2,
+            options: [
+              { id: 'opt_3a', label: '18\\text{ m/s}^2' },
+              { id: 'opt_3b', label: '27\\text{ m/s}^2' },
+              { id: 'opt_3c', label: '12\\text{ m/s}^2' },
+              { id: 'opt_3d', label: '36\\text{ m/s}^2' }
+            ]
+          }
+        ],
+        solution_guide: '1. دالة السرعة المشتقة: $v(t) = s\'(t) = 6t^2 - 18t + 12$.\n2. لحظات السكون اللحظي: $6t^2 - 18t + 12 = 0 \\iff 6(t-1)(t-2) = 0 \\iff t = 1\\text{ s}, t = 2\\text{ s}$.\n3. دالة التسارع: $a(t) = v\'(t) = 12t - 18$. عند $t = 3\\text{ s}$: $a(3) = 12(3) - 18 = 18\\text{ m/s}^2$.'
+      },
+      correctAnswer: {
+        step_answers: {
+          step_1: { canonical_option_id: 'opt_1a', marks: 2 },
+          step_2: { canonical_option_id: 'opt_2a', marks: 2 },
+          step_3: { canonical_option_id: 'opt_3a', marks: 2 }
+        },
+        conditional_credit_rules: [
+          {
+            rule_id: 'rule_s3_from_s1_err',
+            target_step_id: 'step_3',
+            awarded_option_id: 'opt_3b',
+            prerequisite_step_id: 'step_1',
+            prerequisite_option_id: 'opt_1b',
+            credit_fraction: 0.5,
+            description: 'منح 50% من درجة الخطوة الثالثة نظير تطبيق اشتقاق التسارع والتعويض صحيحاً بناءً على مشتقة السرعة الخاطئة في الخطوة الأولى'
+          }
+        ]
+      },
+      allocatedMarks: 6,
+      explanationAr: 'تطبيق فيزيائي ورياضي على التفاضل في حساب السرعة والتسارع وفق المنهج السوداني.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2024-05-10T12:00:00Z'
+    },
+    {
+      id: 'math_basic_p7_calculus_01',
+      subjectSlug: 'basic-mathematics',
+      patternId: 'basic-mathematics_q2_a',
+      questionNumber: 3,
+      partLabel: 'أ',
+      questionType: QuestionType.CALCULATION,
+      prompt: 'يتحرك جسم في خط مستقيم بحيث تُعطى إزاحته $s(t)$ بالأمتار بعد مرور $t$ ثانية بالعلاقة: $$s(t) = 2t^3 - 9t^2 + 12t + 5$$ أجب عن الخطوات المتسلسلة التالية لإيجاد دالة السرعة، ولحظات السكون، والتسارع:',
+      content: {
+        mode: 'multi_step_mcq',
+        prompt: 'يتحرك جسم في خط مستقيم بحيث تُعطى إزاحته $s(t)$ بالأمتار بعد مرور $t$ ثانية بالعلاقة: $$s(t) = 2t^3 - 9t^2 + 12t + 5$$ أجب عن الخطوات المتسلسلة التالية لإيجاد دالة السرعة، ولحظات السكون، والتسارع:',
+        scenario: 'تطبيق فيزيائي ورياضي على التفاضل: دراسة حركة نقطة مادية، اشتقاق السرعة والتسارع وتحديد لحظات السكون اللحظي.',
+        given_values: {
+          's(t)': '2t^3 - 9t^2 + 12t + 5',
+          't': '\\ge 0'
+        },
+        steps: [
+          {
+            id: 'step_1',
+            order: 1,
+            prompt: 'الخطوة الأولى: أوجد دالة السرعة اللحظية $v(t) = \\frac{ds}{dt}$ (باشتقاق دالة الإزاحة بالنسبة للزمن):',
+            marks: 2,
+            options: [
+              { id: 'opt_1a', label: 'v(t) = 6t^2 - 18t + 12' },
+              { id: 'opt_1b', label: 'v(t) = 6t^2 - 9t + 12' },
+              { id: 'opt_1c', label: 'v(t) = 2t^2 - 9t + 12' },
+              { id: 'opt_1d', label: 'v(t) = 6t^3 - 18t^2 + 12t' }
+            ]
+          },
+          {
+            id: 'step_2',
+            order: 2,
+            prompt: 'الخطوة الثانية: أوجد لحظات السكون اللحظي للجسم (أي عندما تنعدم السرعة $v(t) = 0$):',
+            marks: 2,
+            options: [
+              { id: 'opt_2a', label: 't = 1\\text{ s} \\text{ و } t = 2\\text{ s}' },
+              { id: 'opt_2b', label: 't = 0\\text{ s} \\text{ و } t = 2\\text{ s}' },
+              { id: 'opt_2c', label: 't = 3\\text{ s} \\text{ و } t = 4\\text{ s}' },
+              { id: 'opt_2d', label: 't = 1\\text{ s} \\text{ فقط}' }
+            ]
+          },
+          {
+            id: 'step_3',
+            order: 3,
+            prompt: 'الخطوة الثالثة: أوجد تسارع الجسم $a(t) = \\frac{dv}{dt}$ عند اللحظة $t = 3\\text{ s}$:',
+            marks: 2,
+            options: [
+              { id: 'opt_3a', label: '18\\text{ m/s}^2' },
+              { id: 'opt_3b', label: '27\\text{ m/s}^2' },
+              { id: 'opt_3c', label: '12\\text{ m/s}^2' },
+              { id: 'opt_3d', label: '36\\text{ m/s}^2' }
+            ]
+          }
+        ],
+        solution_guide: '1. دالة السرعة المشتقة: $v(t) = s\'(t) = 6t^2 - 18t + 12$.\n2. لحظات السكون اللحظي: $6t^2 - 18t + 12 = 0 \\iff 6(t-1)(t-2) = 0 \\iff t = 1\\text{ s}, t = 2\\text{ s}$.\n3. دالة التسارع: $a(t) = v\'(t) = 12t - 18$. عند $t = 3\\text{ s}$: $a(3) = 12(3) - 18 = 18\\text{ m/s}^2$.'
+      },
+      correctAnswer: {
+        step_answers: {
+          step_1: { canonical_option_id: 'opt_1a', marks: 2 },
+          step_2: { canonical_option_id: 'opt_2a', marks: 2 },
+          step_3: { canonical_option_id: 'opt_3a', marks: 2 }
+        },
+        conditional_credit_rules: [
+          {
+            rule_id: 'rule_s3_from_s1_err',
+            target_step_id: 'step_3',
+            awarded_option_id: 'opt_3b',
+            prerequisite_step_id: 'step_1',
+            prerequisite_option_id: 'opt_1b',
+            credit_fraction: 0.5,
+            description: 'منح 50% من درجة الخطوة الثالثة نظير تطبيق اشتقاق التسارع والتعويض صحيحاً بناءً على مشتقة السرعة الخاطئة في الخطوة الأولى'
+          }
+        ]
+      },
+      allocatedMarks: 6,
+      explanationAr: 'تطبيق فيزيائي ورياضي على التفاضل في حساب السرعة والتسارع وفق المنهج السوداني.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2024-05-10T12:00:00Z'
+    },
     {
       id: 'math_2024_01',
       subjectSlug: 'specialized-mathematics',
@@ -912,6 +1074,34 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
       },
       allocatedMarks: 6,
       explanationAr: 'القادسية بقيادة سعد، اليرموك بقيادة خالد، حطين بقيادة صلاح الدين.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'ms_p8_short_essay_01',
+      subjectSlug: 'military-science',
+      patternId: 'military-science_q4_b',
+      questionNumber: 4,
+      partLabel: 'ب',
+      questionType: QuestionType.SHORT_ESSAY,
+      prompt: 'اذكر باختصار الفائدتان الأساسيتان من إنشاء خطوط الدفاع الخلفية (الاحتياطية) في التكتيكات العسكرية؟',
+      content: {
+        question_text: 'اذكر باختصار الفائدتان الأساسيتان من إنشاء خطوط الدفاع الخلفية (الاحتياطية) في التكتيكات العسكرية؟',
+        model_answer: '1. تأمين خطوط الإمداد والتموين وحمايتها من الاختراق. 2. توفير قوة احتياطية للتدخل السريع لصد الهجمات المعاكسة أو سد الثغرات عند حدوث انهيار في الخطوط الأمامية.',
+        mandatory_keywords: ['تأمين الإمداد', 'قوة احتياطية', 'التدخل السريع', 'صد الهجمات'],
+        hint: 'فكر في دور القوات غير المشاركة مباشرة في الاشتباك الأمامي، وكيف تؤمن الخلفية والتموين.',
+        max_words: 30,
+        grading_mode: 'auto',
+        partial_threshold: 0.5,
+      },
+      correctAnswer: {
+        model_answer: '1. تأمين خطوط الإمداد والتموين وحمايتها من الاختراق. 2. توفير قوة احتياطية للتدخل السريع لصد الهجمات المعاكسة أو سد الثغرات عند حدوث انهيار في الخطوط الأمامية.',
+        mandatory_keywords: ['تأمين الإمداد', 'قوة احتياطية', 'التدخل السريع', 'صد الهجمات'],
+      },
+      allocatedMarks: 5,
+      explanationAr: 'خطوط الدفاع الخلفية تضمن تأمين خطوط الإمداد والتموين وتتيح قوة احتياطية للتدخل السريع عند الطوارئ.',
       examScope: 'both',
       examYear: 2024,
       status: 'approved',

@@ -225,16 +225,10 @@ export function createClientSnapshot(
             explanation: row.explanation ?? null,
         };
 
-        if (examMode === ExamMode.TRAINING) {
-            snap.content = explainContentObj;
-            snap.correctAnswer = { sequence: correctChunkTexts, text: correctChunkTexts.join(' ') };
-            snap.explanation = row.explanation ?? null;
-            snap.explanationAr = row.explanation ?? null;
-        } else {
-            snap.content = deepScrubCorrectAnswers(explainContentObj);
-            (snap.content as any).correctOrder = correctOrder;
-            (snap.content as any).shuffledBank = shuffledBank;
-        }
+        snap.content = explainContentObj;
+        snap.correctAnswer = { sequence: correctChunkTexts, text: correctChunkTexts.join(' ') };
+        snap.explanation = row.explanation ?? null;
+        snap.explanationAr = row.explanation ?? null;
 
         return snap;
     }
@@ -286,6 +280,56 @@ export function createClientSnapshot(
             snap.explanation = row.explanation ?? null;
             snap.explanationAr = row.explanation ?? null;
 
+            return snap;
+        }
+    }
+
+    // Special Snapshot handling for SHORT_ESSAY (Pattern 8)
+    if (row.question_type === 'short_essay' || row.question_type === 'pattern_8') {
+        const rawContent = (row.content && typeof row.content === 'object') ? (row.content as Record<string, unknown>) : {};
+        const rawCa = (row.correct_answer && typeof row.correct_answer === 'object') ? (row.correct_answer as Record<string, unknown>) : {};
+
+        if (examMode === ExamMode.SIMULATOR) {
+            // STRICT SANITIZATION FOR EXAM / SIMULATOR MODE:
+            // Absolutely NO hint, model_answer, mandatory_keywords, partial_threshold, or grading_mode in exam payload
+            const cleanContent: Record<string, unknown> = {
+                prompt: promptText,
+                wordLimit: rawContent.wordLimit || rawContent.max_words || rawContent.maxWords || 30,
+                maxWords: rawContent.maxWords || rawContent.max_words || 30,
+            };
+
+            snap.content = cleanContent;
+            delete snap.correctAnswer;
+            delete snap.explanation;
+            delete snap.explanationAr;
+            return snap;
+        } else {
+            // TRAINING MODE: include full question payload for zero-latency local feedback
+            const modelAns = rawContent.model_answer || rawContent.modelAnswer || rawCa.model_answer || rawCa.modelAnswer || null;
+            const keywords = rawContent.mandatory_keywords || rawContent.mandatoryKeywords || rawCa.mandatory_keywords || rawCa.mandatoryKeywords || [];
+
+            const trainingContent: Record<string, unknown> = {
+                ...rawContent,
+                prompt: promptText,
+                hint: rawContent.hint ?? row.explanation ?? null,
+                model_answer: modelAns,
+                modelAnswer: modelAns,
+                mandatory_keywords: keywords,
+                mandatoryKeywords: keywords,
+                partial_threshold: rawContent.partial_threshold ?? rawContent.partialThreshold ?? 0.5,
+                grading_mode: rawContent.grading_mode ?? rawContent.gradingMode ?? 'auto',
+                max_words: rawContent.max_words || rawContent.maxWords || 30,
+            };
+
+            snap.content = trainingContent;
+            snap.correctAnswer = {
+                model_answer: modelAns,
+                mandatory_keywords: keywords,
+                partial_threshold: trainingContent.partial_threshold,
+                grading_mode: trainingContent.grading_mode,
+            };
+            snap.explanation = row.explanation ?? (modelAns as string) ?? null;
+            snap.explanationAr = row.explanation ?? (modelAns as string) ?? null;
             return snap;
         }
     }

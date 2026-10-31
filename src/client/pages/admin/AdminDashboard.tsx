@@ -6,6 +6,7 @@ import { QuestionType } from '../../../shared/constants';
 import { apiClient } from '../../api/apiClient';
 import { MatchingRenderer } from '../../components/questions/MatchingRenderer';
 import { Pattern7AuthoringForm } from '../../components/admin/Pattern7AuthoringForm';
+import { Pattern8AuthoringForm, Pattern8FormFields } from '../../components/admin/Pattern8AuthoringForm';
 import {
   Settings,
   PlusCircle,
@@ -615,6 +616,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [calcAnswer, setCalcAnswer] = useState<string>('');
   const [calcMode, setCalcMode] = useState<'multi_step_mcq' | 'numeric_with_work'>('multi_step_mcq');
   const [pattern7Data, setPattern7Data] = useState<any>(null);
+  const [pattern8Data, setPattern8Data] = useState<Pattern8FormFields | null>(null);
 
   // Matching question states
   const [matchingPairs, setMatchingPairs] = useState<
@@ -772,6 +774,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
         correctPairsMap[p.id] = `target_${p.id}`;
       });
       correctAnswer = { pairs: correctPairsMap };
+    } else if (questionType === QuestionType.SHORT_ESSAY) {
+      if (pattern8Data) {
+        content = {
+          prompt: pattern8Data.question_text || questionPrompt,
+          question_text: pattern8Data.question_text || questionPrompt,
+          model_answer: pattern8Data.model_answer,
+          mandatory_keywords: pattern8Data.mandatory_keywords,
+          hint: pattern8Data.hint,
+          max_words: pattern8Data.max_words,
+          grading_mode: pattern8Data.grading_mode,
+          partial_threshold: pattern8Data.partial_threshold,
+        };
+        correctAnswer = {
+          model_answer: pattern8Data.model_answer,
+          mandatory_keywords: pattern8Data.mandatory_keywords,
+        };
+        setQuestionMarks(pattern8Data.max_score || questionMarks);
+      } else {
+        content = {
+          prompt: questionPrompt.trim(),
+          question_text: questionPrompt.trim(),
+          model_answer: blankAnswer || 'الإجابة النموذجية المعتمدة',
+          mandatory_keywords: [],
+          hint: '',
+          max_words: 30,
+          grading_mode: 'auto',
+          partial_threshold: 0.5,
+        };
+        correctAnswer = {
+          model_answer: blankAnswer || 'الإجابة النموذجية المعتمدة',
+          mandatory_keywords: [],
+        };
+      }
     } else {
       content = { instructions: questionPrompt };
       correctAnswer = blankAnswer || 'الإجابة النموذجية المعتمدة';
@@ -1727,6 +1762,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 </div>
               )}
 
+              {questionType === QuestionType.SHORT_ESSAY && (
+                <Pattern8AuthoringForm
+                  initialValues={
+                    pattern8Data || {
+                      question_text: questionPrompt,
+                      model_answer: '',
+                      mandatory_keywords: [],
+                      hint: '',
+                      max_words: 30,
+                      max_score: questionMarks,
+                      grading_mode: 'auto',
+                      partial_threshold: 0.5,
+                    }
+                  }
+                  onChange={(data) => {
+                    setPattern8Data(data);
+                    if (data.question_text) setQuestionPrompt(data.question_text);
+                    if (data.max_score) setQuestionMarks(data.max_score);
+                  }}
+                />
+              )}
+
               {/* Fallback text answer for Essays, Explain, etc. */}
               {questionType !== QuestionType.TRUE_FALSE &&
                 questionType !== QuestionType.MULTIPLE_CHOICE &&
@@ -1734,7 +1791,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 questionType !== QuestionType.ARABIC_GRAMMAR &&
                 questionType !== QuestionType.ODD_ONE_OUT &&
                 questionType !== QuestionType.CALCULATION &&
-                questionType !== QuestionType.MATCHING && (
+                questionType !== QuestionType.MATCHING &&
+                questionType !== QuestionType.SHORT_ESSAY && (
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700 block">الحل النموذجي المعتمد:</label>
                     <input

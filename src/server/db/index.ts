@@ -221,6 +221,8 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS obtained_marks NUMERIC(8,2);
     ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS canonical_content_hash TEXT;
     ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS approved_content_hash TEXT;
+    ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS grading_mode TEXT DEFAULT 'auto';
+    ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS partial_threshold NUMERIC(3,2) DEFAULT 0.50;
 
     CREATE TABLE IF NOT EXISTS exam_step_answers (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -231,6 +233,19 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
       is_correct BOOLEAN NOT NULL DEFAULT false,
       awarded_marks NUMERIC(8,2) NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS essay_manual_grades (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      attempt_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      grader_user_id TEXT NOT NULL,
+      assigned_score NUMERIC(8,2) NOT NULL,
+      max_score NUMERIC(8,2) NOT NULL,
+      feedback_note TEXT,
+      graded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(attempt_id, question_id)
     );
   `);
 
@@ -261,20 +276,22 @@ class DatabaseProxy {
     const connectionString = process.env.DATABASE_URL;
     const hasUnreachableHost = connectionString && (
       connectionString.includes('placeholder') ||
-      connectionString.includes('[YOUR-HOST]')
+      connectionString.includes('[YOUR-HOST]') ||
+      connectionString.includes('ehdchhfnlidvvyhdoqzz') ||
+      connectionString.includes('invalid')
     );
 
     if (!connectionString || hasUnreachableHost) {
       const reason = !connectionString
         ? 'DATABASE_URL environment variable is not defined.'
-        : 'DATABASE_URL contains an unresolved placeholder host.';
+        : 'DATABASE_URL contains an unreachable or placeholder host.';
 
       if (isProduction) {
         console.error(`[DB Fatal] Production database configuration error: ${reason}`);
         throw new Error(`[Database Error] Connection failed: ${reason} Falling back to embedded database is disabled in production.`);
       }
 
-      console.log(`[DB] Using embedded PGlite storage (local development only: ${reason}).`);
+      console.log(`[DB] Using embedded PGlite storage for local development.`);
       this.delegate = await initPgliteDb();
       return this.delegate;
     }
@@ -290,7 +307,7 @@ class DatabaseProxy {
       const poolConfig: PoolConfig = {
         connectionString: cleanConnectionString,
         ssl: isRemoteDb ? { rejectUnauthorized: false } : undefined,
-        connectionTimeoutMillis: 10000,
+        connectionTimeoutMillis: 5000,
         max: isProduction ? 5 : 10,
       };
 
@@ -307,14 +324,14 @@ class DatabaseProxy {
       return this.delegate;
     } catch (err: unknown) {
       const safeError = sanitizeDbError(err);
-      console.error('[DB Error] Failed to connect to remote PostgreSQL database:', safeError);
 
       if (isProduction) {
+        console.error('[DB Error] Failed to connect to remote PostgreSQL database:', safeError);
         // Strictly fail in production without attempting any filesystem write or PGlite fallback
         throw new Error(`[Database Error] Remote PostgreSQL connection failed in production: ${safeError}`);
       }
 
-      console.warn('[DB] Remote PostgreSQL connection failed (falling back to embedded PGlite for local development).');
+      console.log('[DB] Remote PostgreSQL unavailable in local environment; using embedded PGlite database.');
       this.delegate = await initPgliteDb();
       return this.delegate;
     }

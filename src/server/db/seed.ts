@@ -1,5 +1,6 @@
 import { TWELVE_CONTRACT_SUBJECTS } from '../../client/data/contractSubjects';
 import { generateInitialQuestions } from '../../client/storage/defaultCurriculumData';
+import { buildCanonicalAssessmentPayload, computeCanonicalSha256Node } from '../../shared/canonicalHash';
 
 export async function seedDatabase(db: { query: (text: string, params?: any[]) => Promise<any> }) {
   try {
@@ -32,12 +33,27 @@ export async function seedDatabase(db: { query: (text: string, params?: any[]) =
         ...(typeof q.content === 'object' && q.content !== null ? q.content : {}),
       };
 
+      const canonicalPayload = buildCanonicalAssessmentPayload({
+        prompt: q.prompt,
+        marks: q.allocatedMarks || 5,
+        content: fullContent,
+        correct_answer: typeof q.correctAnswer === 'object' && q.correctAnswer !== null ? q.correctAnswer : { answer: q.correctAnswer },
+        explanation: q.explanationAr
+      });
+      const canonicalHash = computeCanonicalSha256Node(canonicalPayload);
+      const approvedHash = q.status === 'approved' ? canonicalHash : null;
+
       await db.query(
         `INSERT INTO question_bank
-         (id, subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         (id, subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, canonical_content_hash, approved_content_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (id) DO UPDATE
-         SET content = EXCLUDED.content, correct_answer = EXCLUDED.correct_answer, explanation = EXCLUDED.explanation`,
+         SET content = EXCLUDED.content,
+             correct_answer = EXCLUDED.correct_answer,
+             explanation = EXCLUDED.explanation,
+             canonical_content_hash = EXCLUDED.canonical_content_hash,
+             approved_content_hash = EXCLUDED.approved_content_hash,
+             status = EXCLUDED.status`,
         [
           q.id,
           subjectId,
@@ -47,8 +63,10 @@ export async function seedDatabase(db: { query: (text: string, params?: any[]) =
           'large_cards',
           q.allocatedMarks || 5,
           'comprehensive',
-          'approved',
+          q.status || 'approved',
           q.explanationAr || null,
+          canonicalHash,
+          approvedHash,
         ]
       );
     }

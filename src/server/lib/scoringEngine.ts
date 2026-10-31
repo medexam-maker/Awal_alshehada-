@@ -1,5 +1,6 @@
 import { QuestionType, GradingStrategy, GradingStatus } from '../../shared/constants';
 import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
+import { matchKeywords } from '../../shared/keywordMatcher';
 import {
   FillBlankContent, FillBlankAnswer,
   MatchingAnswer, ComparisonTableContent, ComparisonTableAnswer,
@@ -47,6 +48,40 @@ export function autoGrade(
   studentAnswer: unknown,
   maxMarks: number
 ): GradingOutcome {
+  if (questionType === QuestionType.SHORT_ESSAY) {
+    const c = (content || {}) as Record<string, any>;
+    const ca = (correctAnswer || {}) as Record<string, any>;
+    const studentText = typeof studentAnswer === 'string'
+      ? studentAnswer
+      : typeof (studentAnswer as any)?.text === 'string'
+        ? (studentAnswer as any).text
+        : '';
+
+    const gradingMode = c.grading_mode || c.gradingMode || ca.grading_mode || ca.gradingMode || 'auto';
+    if (gradingMode === 'manual') {
+      return { obtainedMarks: 0, gradingStatus: GradingStatus.MANUAL_PENDING };
+    }
+
+    const keywords = Array.isArray(c.mandatory_keywords)
+      ? c.mandatory_keywords
+      : Array.isArray(c.mandatoryKeywords)
+        ? c.mandatoryKeywords
+        : Array.isArray(ca.mandatory_keywords)
+          ? ca.mandatory_keywords
+          : Array.isArray(ca.mandatoryKeywords)
+            ? ca.mandatoryKeywords
+            : [];
+
+    const threshold = Number(c.partial_threshold ?? c.partialThreshold ?? ca.partial_threshold ?? ca.partialThreshold ?? 0.5);
+
+    const evalRes = matchKeywords(studentText, keywords, maxMarks, threshold);
+
+    return {
+      obtainedMarks: evalRes.score,
+      gradingStatus: GradingStatus.AUTO_GRADED,
+    };
+  }
+
   const registryEntry = QUESTION_TYPE_REGISTRY[questionType];
   
   if (registryEntry.grading === GradingStrategy.MANUAL) {
@@ -565,7 +600,7 @@ export function gradeSingleStepCommitment(
   selectedOptionId: string,
   questionSnapshot: Record<string, any>,
   committedPreviousStepAnswers: Record<string, string>
-): { isCorrect: boolean; awardedMarks: number; stepMaxMarks: number; matchedRuleId?: string } {
+): { isCorrect: boolean; awardedMarks: number; stepMaxMarks: number; matchedRuleId?: string; canonicalOptionId?: string | null } {
   const content = questionSnapshot.content || {};
   const correctAnswer = questionSnapshot.correct_answer || {};
   const steps = Array.isArray(content.steps) ? content.steps : [];
@@ -584,7 +619,8 @@ export function gradeSingleStepCommitment(
     return {
       isCorrect: true,
       awardedMarks: stepMaxMarks,
-      stepMaxMarks
+      stepMaxMarks,
+      canonicalOptionId
     };
   }
 
@@ -614,6 +650,7 @@ export function gradeSingleStepCommitment(
       isCorrect: fraction === 1.0,
       awardedMarks: awarded,
       stepMaxMarks,
+      canonicalOptionId,
       matchedRuleId: bestRule.rule_id
     };
   }
@@ -621,6 +658,7 @@ export function gradeSingleStepCommitment(
   return {
     isCorrect: false,
     awardedMarks: 0,
-    stepMaxMarks
+    stepMaxMarks,
+    canonicalOptionId
   };
 }

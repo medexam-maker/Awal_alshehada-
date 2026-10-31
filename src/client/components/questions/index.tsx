@@ -54,6 +54,7 @@ export interface QuestionDispatcherProps {
   examMode?: 'simulator' | 'training';
   trainingSubMode?: 'yearly' | 'curriculum_review' | 'weekly';
   isWeeklySimulation?: boolean;
+  attemptId?: string;
 }
 
 export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
@@ -64,6 +65,7 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
   examMode = 'training',
   trainingSubMode,
   isWeeklySimulation = false,
+  attemptId,
 }) => {
   const content = question.content || {};
   const qType = question.questionType || question.type || '';
@@ -167,6 +169,7 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
           onChange={onChange}
           isReadonly={isReadonly}
           examMode={examMode}
+          attemptId={attemptId}
           attemptQuestionId={question.id}
           correctAnswer={question.correctAnswer}
           explanation={question.explanation || question.explanationAr}

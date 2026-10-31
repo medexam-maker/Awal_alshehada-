@@ -9,6 +9,14 @@ import { TWELVE_CONTRACT_SUBJECTS } from '../data/contractSubjects';
 import { QuestionType } from '../../shared/constants';
 import { SoundSettingsModal } from '../components/SoundSettingsModal';
 import {
+  playClick,
+  playSwoosh,
+  playBookmark,
+  playClear,
+  playModal,
+  playSubmit,
+} from '../utils/soundEffects';
+import {
   ArrowRight,
   ArrowLeft,
   CheckCircle,
@@ -133,6 +141,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
 
   const handleNext = () => {
     if (currentIndex < totalQuestions - 1) {
+      playSwoosh();
       setCurrentIndex(currentIndex + 1);
       setShowTrainingHint(false);
     }
@@ -140,12 +149,14 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
 
   const handlePrev = () => {
     if (currentIndex > 0) {
+      playSwoosh();
       setCurrentIndex(currentIndex - 1);
       setShowTrainingHint(false);
     }
   };
 
   const handleClearAnswer = () => {
+    playClear();
     setQuestionAnswer(currentQuestion.id, undefined);
   };
 
@@ -156,6 +167,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
     setIsSubmitting(false);
 
     if (res.success) {
+      playSubmit();
       setIsSubmitModalOpen(false);
       onFinishExam();
     } else {
@@ -265,6 +277,7 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
               examMode={activeAttempt.examMode as any}
               trainingSubMode={activeAttempt.trainingSubMode}
               isWeeklySimulation={Boolean(activeAttempt.isWeeklySimulation || activeAttempt.trainingSubMode === 'weekly')}
+              attemptId={activeAttempt.attemptId || (activeAttempt as any).id}
             />
           </div>
 
@@ -272,7 +285,10 @@ export const ExamAttempt: React.FC<ExamAttemptProps> = ({ onFinishExam, onExitEx
             <div className="pt-3 flex items-center justify-between text-xs border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => toggleFlagIndex(currentIndex)}
+                onClick={() => {
+                  playBookmark();
+                  toggleFlagIndex(currentIndex);
+                }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
                   isCurrentFlagged
                     ? 'bg-amber-100 text-amber-900 border border-amber-300'

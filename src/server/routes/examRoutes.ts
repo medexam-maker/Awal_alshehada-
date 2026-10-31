@@ -309,6 +309,7 @@ router.post('/attempts/:attemptId/questions/:attemptQuestionId/steps/:stepId', a
                     isCorrect: grading.isCorrect,
                     awardedMarks: grading.awardedMarks,
                     stepMaxMarks: grading.stepMaxMarks,
+                    canonicalOptionId: grading.canonicalOptionId,
                     matchedRuleId: grading.matchedRuleId
                 },
                 timestamp: new Date().toISOString()
@@ -332,7 +333,8 @@ router.post('/attempts/:attemptId/questions/:attemptQuestionId/steps/:stepId', a
                     stepId,
                     selectedOptionId: existingRow.selected_option_id,
                     isCorrect: existingRow.is_correct,
-                    awardedMarks: Number(existingRow.awarded_marks)
+                    awardedMarks: Number(existingRow.awarded_marks),
+                    canonicalOptionId: grading.canonicalOptionId
                 },
                 timestamp: new Date().toISOString()
             });
