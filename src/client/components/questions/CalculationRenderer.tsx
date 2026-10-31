@@ -1,19 +1,17 @@
 import React from 'react';
 import { Calculator } from 'lucide-react';
+import { MultiStepCalculationRenderer } from './MultiStepCalculationRenderer';
 
 interface CalculationProps {
-  content: {
-    prompt: string;
-    unit?: string;
-    tolerance?: number;
-    guidelines?: string;
-  };
-  answer?: {
-    value?: number | string;
-    workText?: string;
-  };
-  onChange: (ans: { value: number | string; workText?: string }) => void;
+  content: any;
+  answer?: any;
+  onChange: (ans: any) => void;
   isReadonly?: boolean;
+  examMode?: 'simulator' | 'training';
+  attemptId?: string;
+  attemptQuestionId?: string;
+  correctAnswer?: any;
+  explanation?: string;
 }
 
 export const CalculationRenderer: React.FC<CalculationProps> = ({
@@ -21,7 +19,32 @@ export const CalculationRenderer: React.FC<CalculationProps> = ({
   answer,
   onChange,
   isReadonly = false,
+  examMode = 'simulator',
+  attemptId,
+  attemptQuestionId,
+  correctAnswer,
+  explanation,
 }) => {
+  // Pattern 7: Check if this is a Multi-Step MCQ Calculation question
+  const isMultiStep = content?.mode === 'multi_step_mcq' || Array.isArray(content?.steps);
+
+  if (isMultiStep) {
+    return (
+      <MultiStepCalculationRenderer
+        content={content}
+        answer={answer}
+        onChange={onChange}
+        isReadonly={isReadonly}
+        examMode={examMode}
+        attemptId={attemptId}
+        attemptQuestionId={attemptQuestionId}
+        correctAnswer={correctAnswer}
+        explanation={explanation}
+      />
+    );
+  }
+
+  // Legacy Calculation (Mode: numeric_with_work)
   const value = answer?.value ?? '';
   const workText = answer?.workText ?? '';
 
@@ -91,3 +114,5 @@ export const CalculationRenderer: React.FC<CalculationProps> = ({
     </div>
   );
 };
+
+export default CalculationRenderer;

@@ -160,7 +160,18 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       return <ContourMapRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
 
     case QuestionType.CALCULATION:
-      return <CalculationRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <CalculationRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          examMode={examMode}
+          attemptQuestionId={question.id}
+          correctAnswer={question.correctAnswer}
+          explanation={question.explanation || question.explanationAr}
+        />
+      );
 
     case QuestionType.ORDERING:
       return (

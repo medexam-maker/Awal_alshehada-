@@ -27,6 +27,11 @@ export async function selectQuestions(
              FROM question_bank q
              JOIN training_set_questions tsq ON q.id = tsq.question_id
              WHERE tsq.training_set_id = $1 AND q.status = $2
+               AND (
+                 q.question_type != 'calculation'
+                 OR q.content->>'mode' != 'multi_step_mcq'
+                 OR (q.approved_content_hash IS NOT NULL AND q.approved_content_hash = q.canonical_content_hash)
+               )
              ORDER BY tsq.position ASC`,
             [trainingSetId, QuestionStatus.APPROVED]
         );
@@ -44,7 +49,12 @@ export async function selectQuestions(
         .map(entry => entry.type);
 
     const query = `SELECT * FROM question_bank
-                   WHERE subject_id = $1 AND bank_type = $2 AND status = $3 AND question_type = ANY($4::text[])`;
+                   WHERE subject_id = $1 AND bank_type = $2 AND status = $3 AND question_type = ANY($4::text[])
+                     AND (
+                       question_type != 'calculation'
+                       OR content->>'mode' != 'multi_step_mcq'
+                       OR (approved_content_hash IS NOT NULL AND approved_content_hash = canonical_content_hash)
+                     )`;
     const params: unknown[] = [subjectId, BankType.COMPREHENSIVE, QuestionStatus.APPROVED, supportedTypes];
 
     const allQuestionsRes = await client.query(query, params);

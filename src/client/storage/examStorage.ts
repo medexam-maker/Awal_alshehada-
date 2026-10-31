@@ -53,77 +53,159 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
+let storageMode: 'persisted' | 'memory_only' = 'persisted';
+const memoryFallbackAttempts = new Map<string, StoredAttempt>();
+let memoryActiveAttemptId: string | null = null;
+
 export const examStorage = {
+  getStorageStatus(): 'persisted' | 'memory_only' {
+    return storageMode;
+  },
+
   async saveLocalAttempt(attempt: StoredAttempt): Promise<void> {
-    const db = await openDatabase();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction([STORE_ATTEMPTS, STORE_METADATA], 'readwrite');
-      const attemptStore = tx.objectStore(STORE_ATTEMPTS);
-      const metaStore = tx.objectStore(STORE_METADATA);
+    try {
+      const db = await openDatabase();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction([STORE_ATTEMPTS, STORE_METADATA], 'readwrite');
+        const attemptStore = tx.objectStore(STORE_ATTEMPTS);
+        const metaStore = tx.objectStore(STORE_METADATA);
 
-      attemptStore.put(attempt);
-      metaStore.put({ key: 'active_attempt_id', value: attempt.attemptId });
+        attemptStore.put(attempt);
+        metaStore.put({ key: 'active_attempt_id', value: attempt.attemptId });
 
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+        tx.oncomplete = () => {
+          storageMode = 'persisted';
+          resolve();
+        };
+        tx.onerror = () => {
+          console.warn('[examStorage] IndexedDB write failed, falling back to memory_only:', tx.error);
+          storageMode = 'memory_only';
+          memoryFallbackAttempts.set(attempt.attemptId, attempt);
+          memoryActiveAttemptId = attempt.attemptId;
+          resolve();
+        };
+      });
+    } catch (err) {
+      console.warn('[examStorage] IndexedDB unavailable, using memory_only fallback:', err);
+      storageMode = 'memory_only';
+      memoryFallbackAttempts.set(attempt.attemptId, attempt);
+      memoryActiveAttemptId = attempt.attemptId;
+    }
   },
 
   async getLocalAttempt(attemptId: string): Promise<StoredAttempt | null> {
-    const db = await openDatabase();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_ATTEMPTS, 'readonly');
-      const store = tx.objectStore(STORE_ATTEMPTS);
-      const request = store.get(attemptId);
+    if (storageMode === 'memory_only') {
+      return memoryFallbackAttempts.get(attemptId) || null;
+    }
+    try {
+      const db = await openDatabase();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_ATTEMPTS, 'readonly');
+        const store = tx.objectStore(STORE_ATTEMPTS);
+        const request = store.get(attemptId);
 
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error);
-    });
+        request.onsuccess = () => resolve(request.result || memoryFallbackAttempts.get(attemptId) || null);
+        request.onerror = () => resolve(memoryFallbackAttempts.get(attemptId) || null);
+      });
+    } catch {
+      return memoryFallbackAttempts.get(attemptId) || null;
+    }
   },
 
   async getActiveAttemptId(): Promise<string | null> {
-    const db = await openDatabase();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_METADATA, 'readonly');
-      const store = tx.objectStore(STORE_METADATA);
-      const request = store.get('active_attempt_id');
+    if (storageMode === 'memory_only') {
+      return memoryActiveAttemptId;
+    }
+    try {
+      const db = await openDatabase();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_METADATA, 'readonly');
+        const store = tx.objectStore(STORE_METADATA);
+        const request = store.get('active_attempt_id');
 
-      request.onsuccess = () => resolve(request.result?.value || null);
-      request.onerror = () => reject(request.error);
-    });
+        request.onsuccess = () => resolve(request.result?.value || memoryActiveAttemptId);
+        request.onerror = () => resolve(memoryActiveAttemptId);
+      });
+    } catch {
+      return memoryActiveAttemptId;
+    }
   },
 
   async saveAnswer(attemptId: string, questionId: string, answer: any): Promise<void> {
-    const db = await openDatabase();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_ATTEMPTS, 'readwrite');
-      const store = tx.objectStore(STORE_ATTEMPTS);
-      const getReq = store.get(attemptId);
+    const memAttempt = memoryFallbackAttempts.get(attemptId);
+    if (memAttempt) {
+      memAttempt.answers = memAttempt.answers || {};
+      memAttempt.answers[questionId] = answer;
+      memAttempt.lastSavedAt = new Date().toISOString();
+    }
 
-      getReq.onsuccess = () => {
-        const attempt = getReq.result as StoredAttempt | undefined;
-        if (attempt) {
-          attempt.answers = attempt.answers || {};
-          attempt.answers[questionId] = answer;
-          attempt.lastSavedAt = new Date().toISOString();
-          store.put(attempt);
-        }
-      };
+    try {
+      const db = await openDatabase();
+      return new Promise((resolve) => {
+        const tx = db.transaction(STORE_ATTEMPTS, 'readwrite');
+        const store = tx.objectStore(STORE_ATTEMPTS);
+        const getReq = store.get(attemptId);
 
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+        getReq.onsuccess = () => {
+          const attempt = getReq.result as StoredAttempt | undefined;
+          if (attempt) {
+            attempt.answers = attempt.answers || {};
+            attempt.answers[questionId] = answer;
+            attempt.lastSavedAt = new Date().toISOString();
+            store.put(attempt);
+          }
+        };
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => {
+          storageMode = 'memory_only';
+          resolve();
+        };
+      });
+    } catch {
+      storageMode = 'memory_only';
+    }
+  },
+
+  /**
+   * Specifically saves or updates a step answer in a multi-step calculation question.
+   */
+  async saveStepAnswer(attemptId: string, questionId: string, stepId: string, selectedOptionId: string): Promise<void> {
+    const current = await this.getLocalAttempt(attemptId);
+    if (!current) return;
+
+    current.answers = current.answers || {};
+    const qAnswer = current.answers[questionId] || {};
+    const stepAnswers = qAnswer.step_answers || {};
+    stepAnswers[stepId] = selectedOptionId;
+
+    current.answers[questionId] = {
+      ...qAnswer,
+      step_answers: stepAnswers
+    };
+    current.lastSavedAt = new Date().toISOString();
+
+    await this.saveLocalAttempt(current);
   },
 
   async clearActiveAttempt(attemptId: string): Promise<void> {
-    const db = await openDatabase();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction([STORE_ATTEMPTS, STORE_METADATA], 'readwrite');
-      tx.objectStore(STORE_ATTEMPTS).delete(attemptId);
-      tx.objectStore(STORE_METADATA).delete('active_attempt_id');
+    memoryFallbackAttempts.delete(attemptId);
+    if (memoryActiveAttemptId === attemptId) {
+      memoryActiveAttemptId = null;
+    }
 
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    try {
+      const db = await openDatabase();
+      return new Promise((resolve) => {
+        const tx = db.transaction([STORE_ATTEMPTS, STORE_METADATA], 'readwrite');
+        tx.objectStore(STORE_ATTEMPTS).delete(attemptId);
+        tx.objectStore(STORE_METADATA).delete('active_attempt_id');
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    } catch {
+      // Ignored
+    }
   },
 };

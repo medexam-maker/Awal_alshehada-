@@ -36,26 +36,22 @@ app.use('/api/admin', adminRoutes);
 export { app };
 
 // Guard app.listen() so it only runs when server.ts is executed directly, never when imported as a module by serverless functions
-const isDirectExecution = (() => {
-  if (process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    return false;
-  }
-  if (!process.argv[1]) {
-    return false;
-  }
-  try {
-    const currentFilePath = fileURLToPath(import.meta.url);
-    const executedFilePath = path.resolve(process.argv[1]);
-    return currentFilePath === executedFilePath;
-  } catch {
-    return false;
-  }
-})();
+const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 async function startServer() {
-  if (!isDirectExecution || process.env.NODE_ENV === 'test') {
+  if (isServerless || process.env.NODE_ENV === 'test') {
     return;
   }
+
+  // Parse port from CLI flags --port 3000 or -p 3000 if process.env.PORT is not set
+  let cliPort: number | undefined;
+  const portFlagIdx = process.argv.findIndex((arg) => arg === '--port' || arg === '-p');
+  if (portFlagIdx !== -1 && process.argv[portFlagIdx + 1]) {
+    const parsed = Number(process.argv[portFlagIdx + 1]);
+    if (!isNaN(parsed) && parsed > 0) cliPort = parsed;
+  }
+
+  const PORT = Number(process.env.PORT) || cliPort || 3000;
 
   if (process.env.NODE_ENV !== 'production') {
     // Mount Vite middleware in development as required by the framework constitution

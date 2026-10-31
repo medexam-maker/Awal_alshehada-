@@ -219,6 +219,19 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS total_marks NUMERIC(8,2) DEFAULT 0;
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS obtained_marks NUMERIC(8,2);
+    ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS canonical_content_hash TEXT;
+    ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS approved_content_hash TEXT;
+
+    CREATE TABLE IF NOT EXISTS exam_step_answers (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      attempt_id TEXT NOT NULL,
+      attempt_question_id TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      selected_option_id TEXT NOT NULL,
+      is_correct BOOLEAN NOT NULL DEFAULT false,
+      awarded_marks NUMERIC(8,2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   const wrapper = new PGlitePoolWrapper(db);

@@ -29,6 +29,7 @@ export type InteractionMode =
   | 'map_with_subquestions'
   | 'tap_on_hotspot'
   | 'numeric_with_work'
+  | 'multi_step_mcq'
   | 'move_up_down_arrows'
   | 'select_from_preset_options'
   | 'word_block_explain'
@@ -224,19 +225,71 @@ export interface ContourMapAnswerTyped {
   subAnswers: Record<string, MultipleChoiceAnswer | FillBlankAnswer | ShortEssayAnswer | unknown>;
 }
 
-// --- 12. Calculation / Word Problem ---
-export interface CalculationContent {
+// --- 12. Calculation / Word Problem (Pattern 7: Legacy numeric_with_work & Multi-Step MCQ) ---
+export interface CalculationStepOption {
+  id: string;
+  label: string;
+}
+
+export interface CalculationStep {
+  id: string;
+  order: number;
+  prompt: string;
+  marks: number;
+  options: CalculationStepOption[];
+  explanation?: string;
+}
+
+export interface ConditionalCreditRule {
+  rule_id: string;
+  target_step_id: string;
+  awarded_option_id: string;
+  prerequisite_step_id: string;
+  prerequisite_option_id: string;
+  credit_fraction: number; // in [0, 1]
+  description?: string;
+}
+
+export interface MultiStepCalculationContent {
+  mode: 'multi_step_mcq';
+  prompt: string;
+  scenario?: string;
+  given_values?: Record<string, string | number>;
+  constants?: Record<string, string | number>;
+  steps: CalculationStep[];
+  solution_guide?: string;
+  media?: MediaReference[];
+}
+
+export interface MultiStepCalculationCorrectAnswer {
+  step_answers: Record<string, {
+    canonical_option_id: string;
+    marks: number;
+  }>;
+  conditional_credit_rules?: ConditionalCreditRule[];
+}
+
+export interface MultiStepCalculationStudentAnswer {
+  step_answers: Record<string, string>; // step_id -> selected_option_id
+}
+
+export interface LegacyCalculationContent {
+  mode?: 'numeric_with_work';
   prompt: string;
   media?: MediaReference[];
   expectedFormat?: string;
   unit?: string;
 }
-export interface CalculationAnswer {
+
+export interface LegacyCalculationAnswer {
   value: number | string;
   tolerance?: number;
   workText?: string;
   photoUrl?: string;
 }
+
+export type CalculationContent = LegacyCalculationContent | MultiStepCalculationContent;
+export type CalculationAnswer = LegacyCalculationAnswer | MultiStepCalculationStudentAnswer;
 
 // --- 13. Ordering ---
 export interface OrderingItem {

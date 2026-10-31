@@ -2,8 +2,9 @@ import { Router, Response, NextFunction } from 'express';
 import { pool } from '../db/index';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { QuestionType, BankType, QuestionStatus } from '../../shared/constants';
-import { validateQuestionContent, validateQuestionAnswer, validateMcqAnswer, validateTrueFalseAnswer, ContentSchemas, AnswerSchemas } from '../../shared/validation/schemas';
+import { validateQuestionContent, validateQuestionAnswer, validateMcqAnswer, validateTrueFalseAnswer, validateMultiStepCalculationContent, validateMultiStepCalculationCorrectAnswer, ContentSchemas, AnswerSchemas } from '../../shared/validation/schemas';
 import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
+import { buildCanonicalAssessmentPayload, computeCanonicalSha256Node } from '../../shared/canonicalHash';
 
 const router = Router();
 
@@ -216,13 +217,26 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
     }
     const subjectId = subjectRes.rows[0].id;
 
-    // 4. Insert into question_bank
+    // 4. Compute canonical assessment hash and handle initial status
     const marksValue = Number(allocatedMarks) || 5;
+    const canonicalPayload = buildCanonicalAssessmentPayload({
+      prompt: fullContent.prompt,
+      marks: marksValue,
+      content: fullContent,
+      correct_answer: normalizedCorrectAnswer,
+      explanation: explanationAr
+    });
+    const canonicalHash = computeCanonicalSha256Node(canonicalPayload);
+    const isPattern7 = questionType === QuestionType.CALCULATION && (fullContent?.mode === 'multi_step_mcq' || Array.isArray(fullContent?.steps));
+    // Pattern 7 questions require explicit human review and approval; cannot be auto-approved on insert
+    const initialStatus = isPattern7 ? QuestionStatus.DRAFT : status;
+    const approvedHash = (!isPattern7 && initialStatus === QuestionStatus.APPROVED) ? canonicalHash : null;
+
     const insertRes = await client.query(
       `INSERT INTO question_bank
-       (subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id, created_at`,
+       (subject_id, question_type, content, correct_answer, primary_interaction_mode, marks, bank_type, status, explanation, created_by, canonical_content_hash, approved_content_hash)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING id, created_at, canonical_content_hash, approved_content_hash`,
       [
         subjectId,
         questionType,
@@ -231,9 +245,11 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
         'large_cards',
         marksValue,
         bankType,
-        status,
+        initialStatus,
         explanationAr || null,
         req.user!.id,
+        canonicalHash,
+        approvedHash,
       ]
     );
 
@@ -378,6 +394,193 @@ router.delete('/questions/:id', async (req: AuthenticatedRequest, res: Response)
       error: { code: 'DATABASE_ERROR', message: 'Failed to delete question', details: {} },
       timestamp: new Date().toISOString(),
     });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/admin/questions/:id/approve — Human Review and Approval Sign-off
+router.post('/questions/:id/approve', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const questionId = req.params.id;
+  const { expectedHash } = req.body;
+  const client = await pool.connect();
+
+  try {
+    const qRes = await client.query('SELECT * FROM question_bank WHERE id = $1', [questionId]);
+    if (qRes.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Question not found in question bank' },
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    const q = qRes.rows[0];
+    const content = typeof q.content === 'string' ? JSON.parse(q.content) : q.content;
+    const ca = typeof q.correct_answer === 'string' ? JSON.parse(q.correct_answer) : q.correct_answer;
+
+    // Deep validation for Pattern 7 multi-step calculation
+    if (q.question_type === QuestionType.CALCULATION && (content?.mode === 'multi_step_mcq' || Array.isArray(content?.steps))) {
+      const contentValidation = validateMultiStepCalculationContent(content);
+      if (!contentValidation.valid) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid Pattern 7 content structure', details: contentValidation.errors },
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
+      const caValidation = validateMultiStepCalculationCorrectAnswer(ca, content);
+      if (!caValidation.valid) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid Pattern 7 correct answer or conditional credit rules', details: caValidation.errors },
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+    }
+
+    // Compute canonical assessment hash
+    const canonicalPayload = buildCanonicalAssessmentPayload({
+      prompt: content.prompt,
+      marks: Number(q.marks),
+      content,
+      correct_answer: ca,
+      explanation: q.explanation
+    });
+    const currentHash = computeCanonicalSha256Node(canonicalPayload);
+
+    // Concurrency / Stale Review check
+    if (expectedHash && expectedHash !== currentHash) {
+      res.status(409).json({
+        success: false,
+        error: {
+          code: 'HASH_MISMATCH',
+          message: 'The question content was modified during your review. Please inspect the updated question before signing approval.',
+          currentHash
+        },
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    // Atomic Approval Sign-off
+    const updateRes = await client.query(
+      `UPDATE question_bank
+       SET status = 'approved',
+           canonical_content_hash = $1,
+           approved_content_hash = $1,
+           approved_by = $2,
+           approved_at = NOW()
+       WHERE id = $3
+       RETURNING id, status, canonical_content_hash, approved_content_hash, approved_at`,
+      [currentHash, req.user!.id, questionId]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: updateRes.rows[0],
+      message: 'تم اعتماد السؤال وتوقيع هاش المحتوى بنجاح',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[admin/questions/approve] error:', err);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error while approving question' },
+      timestamp: new Date().toISOString()
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// PUT /api/admin/questions/:id — Update Question with Automatic Approval Invalidation
+router.put('/questions/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const questionId = req.params.id;
+  const { content, correctAnswer, marks, explanationAr, bankType } = req.body;
+  const client = await pool.connect();
+
+  try {
+    const qRes = await client.query('SELECT * FROM question_bank WHERE id = $1', [questionId]);
+    if (qRes.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Question not found' },
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
+    const existingQ = qRes.rows[0];
+    const newContent = content !== undefined ? content : (typeof existingQ.content === 'string' ? JSON.parse(existingQ.content) : existingQ.content);
+    const newCorrectAnswer = correctAnswer !== undefined ? correctAnswer : (typeof existingQ.correct_answer === 'string' ? JSON.parse(existingQ.correct_answer) : existingQ.correct_answer);
+    const marksValue = marks !== undefined ? Number(marks) : Number(existingQ.marks);
+    const explanation = explanationAr !== undefined ? explanationAr : existingQ.explanation;
+
+    // Validate if Pattern 7
+    if (existingQ.question_type === QuestionType.CALCULATION && (newContent?.mode === 'multi_step_mcq' || Array.isArray(newContent?.steps))) {
+      const cVal = validateMultiStepCalculationContent(newContent);
+      if (!cVal.valid) {
+        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid content', details: cVal.errors } });
+        return;
+      }
+      const caVal = validateMultiStepCalculationCorrectAnswer(newCorrectAnswer, newContent);
+      if (!caVal.valid) {
+        res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid correct answer or rules', details: caVal.errors } });
+        return;
+      }
+    }
+
+    // Compute updated canonical hash
+    const canonicalPayload = buildCanonicalAssessmentPayload({
+      prompt: newContent.prompt,
+      marks: marksValue,
+      content: newContent,
+      correct_answer: newCorrectAnswer,
+      explanation
+    });
+    const newHash = computeCanonicalSha256Node(canonicalPayload);
+
+    // Atomic update with Approval Invalidation: status -> 'draft', approved_content_hash -> NULL
+    const updateRes = await client.query(
+      `UPDATE question_bank
+       SET content = $1,
+           correct_answer = $2,
+           marks = $3,
+           explanation = $4,
+           bank_type = COALESCE($5, bank_type),
+           canonical_content_hash = $6,
+           approved_content_hash = NULL,
+           status = 'draft',
+           approved_by = NULL,
+           approved_at = NULL,
+           updated_at = NOW()
+       WHERE id = $7
+       RETURNING id, question_type, status, marks, canonical_content_hash, approved_content_hash, updated_at`,
+      [
+        JSON.stringify(newContent),
+        JSON.stringify(newCorrectAnswer),
+        marksValue,
+        explanation || null,
+        bankType || null,
+        newHash,
+        questionId
+      ]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: updateRes.rows[0],
+      message: 'تم تحديث السؤال بنجاح وإلغاء الاعتماد تلقائياً لإعادة المراجعة والتوقيع',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('[admin/questions:PUT] error:', err);
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Failed to update question' } });
   } finally {
     client.release();
   }

@@ -343,21 +343,38 @@ export function autoGrade(
                 caIds.every((id, idx) => id === saIds[idx]);
     obtainedMarks = isCorrect ? maxMarks : 0;
   } else if (questionType === QuestionType.CALCULATION) {
-    const ca = correctAnswer as { value?: number | string; tolerance?: number } | undefined;
-    const sa = studentAnswer as CalculationAnswer | undefined;
-    if (ca?.value !== undefined && sa?.value !== undefined) {
-      const numCa = typeof ca.value === 'number' ? ca.value : parseFloat(String(ca.value));
-      const numSa = typeof sa.value === 'number' ? sa.value : parseFloat(String(sa.value));
-      const tolerance = typeof ca.tolerance === 'number' ? ca.tolerance : (ca.tolerance ? parseFloat(String(ca.tolerance)) : 0);
-      if (!isNaN(numCa) && !isNaN(numSa)) {
-        isCorrect = Math.abs(numSa - numCa) <= tolerance;
-      } else {
-        const normCa = normalizeText(String(ca.value), { trimWhitespace: true, ignoreCase: true });
-        const normSa = normalizeText(String(sa.value), { trimWhitespace: true, ignoreCase: true });
-        isCorrect = Boolean(normCa && normCa === normSa);
+    const c = (content || {}) as Record<string, unknown>;
+    const caRaw = correctAnswer as Record<string, unknown> | undefined;
+    const saRaw = studentAnswer as Record<string, unknown> | undefined;
+
+    // Check if this is a Multi-Step MCQ Calculation (Pattern 7)
+    if (
+      c.mode === 'multi_step_mcq' ||
+      Array.isArray(c.steps) ||
+      (caRaw && 'step_answers' in caRaw) ||
+      (saRaw && 'step_answers' in saRaw)
+    ) {
+      const multiResult = gradeMultiStepCalculation(c, caRaw || {}, saRaw || {}, maxMarks);
+      isCorrect = multiResult.isCorrect;
+      obtainedMarks = multiResult.obtainedMarks;
+    } else {
+      // Legacy numeric_with_work calculation
+      const ca = correctAnswer as { value?: number | string; tolerance?: number } | undefined;
+      const sa = studentAnswer as { value?: number | string; tolerance?: number } | undefined;
+      if (ca?.value !== undefined && sa?.value !== undefined) {
+        const numCa = typeof ca.value === 'number' ? ca.value : parseFloat(String(ca.value));
+        const numSa = typeof sa.value === 'number' ? sa.value : parseFloat(String(sa.value));
+        const tolerance = typeof ca.tolerance === 'number' ? ca.tolerance : (ca.tolerance ? parseFloat(String(ca.tolerance)) : 0);
+        if (!isNaN(numCa) && !isNaN(numSa)) {
+          isCorrect = Math.abs(numSa - numCa) <= tolerance;
+        } else {
+          const normCa = normalizeText(String(ca.value), { trimWhitespace: true, ignoreCase: true });
+          const normSa = normalizeText(String(sa.value), { trimWhitespace: true, ignoreCase: true });
+          isCorrect = Boolean(normCa && normCa === normSa);
+        }
       }
+      obtainedMarks = isCorrect ? maxMarks : 0;
     }
-    obtainedMarks = isCorrect ? maxMarks : 0;
   } else if (questionType === QuestionType.EXPLAIN) {
     const c = (content || {}) as Record<string, unknown>;
     const ca = (correctAnswer || {}) as Record<string, unknown>;
@@ -401,5 +418,209 @@ export function autoGrade(
   return {
     obtainedMarks,
     gradingStatus: GradingStatus.AUTO_GRADED
+  };
+}
+
+export interface StepGradingResult {
+  stepId: string;
+  isCorrect: boolean;
+  awardedMarks: number;
+  maxMarks: number;
+  matchedRuleId?: string;
+  isConditionalCredit: boolean;
+}
+
+export interface MultiStepGradingOutcome {
+  isCorrect: boolean;
+  obtainedMarks: number;
+  maxMarks: number;
+  stepResults: StepGradingResult[];
+}
+
+/**
+ * Autogrades a full Multi-Step MCQ Calculation question (Pattern 7) deterministically.
+ */
+export function gradeMultiStepCalculation(
+  content: Record<string, unknown>,
+  correctAnswer: Record<string, unknown>,
+  studentAnswer: Record<string, unknown>,
+  totalMaxMarks: number
+): MultiStepGradingOutcome {
+  const steps = Array.isArray(content.steps) ? (content.steps as any[]) : [];
+  const stepAnswersMap = (correctAnswer.step_answers || {}) as Record<string, { canonical_option_id?: string; marks?: number }>;
+  const conditionalRules = Array.isArray(correctAnswer.conditional_credit_rules)
+    ? (correctAnswer.conditional_credit_rules as any[])
+    : [];
+
+  const rawStudentAnswers = (studentAnswer.step_answers || studentAnswer) as Record<string, unknown>;
+  const studentChoices: Record<string, string> = {};
+  if (rawStudentAnswers && typeof rawStudentAnswers === 'object') {
+    for (const [k, v] of Object.entries(rawStudentAnswers)) {
+      if (typeof v === 'string') {
+        studentChoices[k] = v;
+      }
+    }
+  }
+
+  let totalObtained = 0;
+  const stepResults: StepGradingResult[] = [];
+
+  for (const step of steps) {
+    const stepId = String(step.id || '');
+    const stepMaxMarks = typeof step.marks === 'number' && step.marks > 0
+      ? step.marks
+      : (steps.length > 0 ? totalMaxMarks / steps.length : 0);
+
+    const studentChoice = studentChoices[stepId];
+    const canonicalConfig = stepAnswersMap[stepId];
+    const canonicalOptionId = canonicalConfig?.canonical_option_id;
+
+    if (!studentChoice) {
+      stepResults.push({
+        stepId,
+        isCorrect: false,
+        awardedMarks: 0,
+        maxMarks: stepMaxMarks,
+        isConditionalCredit: false
+      });
+      continue;
+    }
+
+    // 1. Canonical Answer Precedence: Full Marks immediately
+    if (canonicalOptionId && studentChoice === canonicalOptionId) {
+      totalObtained += stepMaxMarks;
+      stepResults.push({
+        stepId,
+        isCorrect: true,
+        awardedMarks: stepMaxMarks,
+        maxMarks: stepMaxMarks,
+        isConditionalCredit: false
+      });
+      continue;
+    }
+
+    // 2. Conditional Credit Rules Evaluation
+    // Find matching rules for this step and selected option
+    const matchingRules = conditionalRules.filter((rule) => {
+      if (rule.target_step_id !== stepId) return false;
+      if (rule.awarded_option_id !== studentChoice) return false;
+
+      // Check prerequisite step condition in student answers
+      const prereqStepId = rule.prerequisite_step_id;
+      const prereqOptionId = rule.prerequisite_option_id;
+      return studentChoices[prereqStepId] === prereqOptionId;
+    });
+
+    if (matchingRules.length > 0) {
+      // Deterministic Resolution Rule: Highest Credit Fraction Wins (No stacking)
+      let bestRule = matchingRules[0];
+      for (let i = 1; i < matchingRules.length; i++) {
+        const currentFraction = Number(matchingRules[i].credit_fraction) || 0;
+        const bestFraction = Number(bestRule.credit_fraction) || 0;
+        if (currentFraction > bestFraction) {
+          bestRule = matchingRules[i];
+        }
+      }
+
+      const fraction = Math.min(1.0, Math.max(0.0, Number(bestRule.credit_fraction) || 0));
+      const stepAwarded = Math.min(stepMaxMarks, Math.round(fraction * stepMaxMarks * 100) / 100);
+      totalObtained += stepAwarded;
+
+      stepResults.push({
+        stepId,
+        isCorrect: fraction === 1.0,
+        awardedMarks: stepAwarded,
+        maxMarks: stepMaxMarks,
+        matchedRuleId: bestRule.rule_id,
+        isConditionalCredit: true
+      });
+    } else {
+      // Zero marks if no canonical or conditional match
+      stepResults.push({
+        stepId,
+        isCorrect: false,
+        awardedMarks: 0,
+        maxMarks: stepMaxMarks,
+        isConditionalCredit: false
+      });
+    }
+  }
+
+  const roundedTotal = Math.min(totalMaxMarks, Math.round(totalObtained * 100) / 100);
+  const isAllCorrect = stepResults.length > 0 && stepResults.every((s) => s.isCorrect && s.awardedMarks === s.maxMarks);
+
+  return {
+    isCorrect: isAllCorrect,
+    obtainedMarks: roundedTotal,
+    maxMarks: totalMaxMarks,
+    stepResults
+  };
+}
+
+/**
+ * Grades a single step commitment in Connected Training mode.
+ */
+export function gradeSingleStepCommitment(
+  stepId: string,
+  selectedOptionId: string,
+  questionSnapshot: Record<string, any>,
+  committedPreviousStepAnswers: Record<string, string>
+): { isCorrect: boolean; awardedMarks: number; stepMaxMarks: number; matchedRuleId?: string } {
+  const content = questionSnapshot.content || {};
+  const correctAnswer = questionSnapshot.correct_answer || {};
+  const steps = Array.isArray(content.steps) ? content.steps : [];
+  const targetStep = steps.find((s: any) => s.id === stepId);
+
+  const stepMaxMarks = targetStep && typeof targetStep.marks === 'number' && targetStep.marks > 0
+    ? targetStep.marks
+    : 1;
+
+  const stepAnswersMap = correctAnswer.step_answers || {};
+  const canonicalConfig = stepAnswersMap[stepId];
+  const canonicalOptionId = canonicalConfig?.canonical_option_id;
+
+  // 1. Canonical match
+  if (canonicalOptionId && selectedOptionId === canonicalOptionId) {
+    return {
+      isCorrect: true,
+      awardedMarks: stepMaxMarks,
+      stepMaxMarks
+    };
+  }
+
+  // 2. Conditional credit match
+  const conditionalRules = Array.isArray(correctAnswer.conditional_credit_rules)
+    ? correctAnswer.conditional_credit_rules
+    : [];
+
+  const matchingRules = conditionalRules.filter((rule: any) => {
+    if (rule.target_step_id !== stepId) return false;
+    if (rule.awarded_option_id !== selectedOptionId) return false;
+    const prereqStepId = rule.prerequisite_step_id;
+    const prereqOptionId = rule.prerequisite_option_id;
+    return committedPreviousStepAnswers[prereqStepId] === prereqOptionId;
+  });
+
+  if (matchingRules.length > 0) {
+    let bestRule = matchingRules[0];
+    for (let i = 1; i < matchingRules.length; i++) {
+      if ((Number(matchingRules[i].credit_fraction) || 0) > (Number(bestRule.credit_fraction) || 0)) {
+        bestRule = matchingRules[i];
+      }
+    }
+    const fraction = Math.min(1.0, Math.max(0.0, Number(bestRule.credit_fraction) || 0));
+    const awarded = Math.min(stepMaxMarks, Math.round(fraction * stepMaxMarks * 100) / 100);
+    return {
+      isCorrect: fraction === 1.0,
+      awardedMarks: awarded,
+      stepMaxMarks,
+      matchedRuleId: bestRule.rule_id
+    };
+  }
+
+  return {
+    isCorrect: false,
+    awardedMarks: 0,
+    stepMaxMarks
   };
 }

@@ -279,7 +279,30 @@ export async function finishExam(
 
         for (const aq of aqRes.rows) {
             const dbSnapshot = aq.question_snapshot;
-            const studentAnswer = answers[aq.question_id] || null;
+            let studentAnswer = answers[aq.question_id] || null;
+
+            // Pattern 7: Support Multi-Step Calculation and merge committed step answers
+            if (dbSnapshot.question_type === QuestionType.CALCULATION) {
+                const isMultiStep = dbSnapshot.content?.mode === 'multi_step_mcq' || Array.isArray(dbSnapshot.content?.steps);
+                if (isMultiStep) {
+                    const stepRows = await client.query(
+                        'SELECT step_id, selected_option_id FROM exam_step_answers WHERE attempt_question_id = $1 ORDER BY created_at ASC',
+                        [aq.id]
+                    );
+                    const committedMap: Record<string, string> = {};
+                    for (const sr of stepRows.rows) {
+                        committedMap[sr.step_id] = sr.selected_option_id;
+                    }
+
+                    const incomingSteps = (studentAnswer as any)?.step_answers || (typeof studentAnswer === 'object' && studentAnswer !== null ? studentAnswer : {});
+                    // Server-Wins: committed steps on server override client alternatives
+                    const mergedSteps: Record<string, string> = { ...incomingSteps, ...committedMap };
+
+                    if (Object.keys(mergedSteps).length > 0) {
+                        studentAnswer = { step_answers: mergedSteps };
+                    }
+                }
+            }
 
             let obtainedMarks = 0;
             let status: GradingStatus = GradingStatus.PENDING;
