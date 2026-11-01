@@ -7,6 +7,7 @@ import { apiClient } from '../../api/apiClient';
 import { MatchingRenderer } from '../../components/questions/MatchingRenderer';
 import { Pattern7AuthoringForm } from '../../components/admin/Pattern7AuthoringForm';
 import { Pattern8AuthoringForm, Pattern8FormFields } from '../../components/admin/Pattern8AuthoringForm';
+import { Pattern11AuthoringForm, Pattern11FormData } from '../../components/admin/Pattern11AuthoringForm';
 import {
   Settings,
   PlusCircle,
@@ -30,6 +31,9 @@ import {
   XCircle,
   FileCode,
   Check,
+  Copy,
+  Download,
+  Edit3,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -37,21 +41,415 @@ interface AdminDashboardProps {
 }
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
-  [QuestionType.TRUE_FALSE]: 'صح أو خطأ (True/False)',
-  [QuestionType.MULTIPLE_CHOICE]: 'اختيار من متعدد (Multiple Choice)',
-  [QuestionType.FILL_BLANK]: 'إكمال الفراغ (Fill in the Blank)',
-  [QuestionType.MATCHING]: 'المطابقة والتوصيل (Matching)',
-  [QuestionType.SHORT_ESSAY]: 'مقالي قصير (Short Essay)',
-  [QuestionType.LONG_ESSAY]: 'مقالي طويل وإنشاء (Long Essay)',
-  [QuestionType.EXPLAIN]: 'علل وفسر (Explain/Reason)',
-  [QuestionType.COMPARISON_TABLE]: 'جدول مقارنة (Comparison Table)',
-  [QuestionType.ODD_ONE_OUT]: 'استخرج الكلمة الشاذة (Odd One Out)',
-  [QuestionType.DIAGRAM_LABELING]: 'تسمية أجزاء الرسم التوضيحي (Diagram Labeling)',
-  [QuestionType.CONTOUR_MAP]: 'خريطة كنتورية وتضاريس (Contour Map)',
-  [QuestionType.CALCULATION]: 'مسألة حسابية وقوانين (Calculation)',
-  [QuestionType.ORDERING]: 'ترتيب تسلسلي وزمني (Ordering)',
-  [QuestionType.ARABIC_GRAMMAR]: 'إعراب وضبط نحوي (Arabic Grammar)',
-  [QuestionType.READING_COMPREHENSION]: 'قطعة وفهم واستيعاب (Reading Comprehension)',
+  [QuestionType.TRUE_FALSE]: '1. صح أو خطأ (True/False)',
+  [QuestionType.MULTIPLE_CHOICE]: '2. اختيار من متعدد (Multiple Choice)',
+  [QuestionType.FILL_BLANK]: '3. إكمال الفراغ (Fill in the Blank)',
+  [QuestionType.MATCHING]: '4. المطابقة والتوصيل (Matching)',
+  [QuestionType.SHORT_ESSAY]: '5. مقالي قصير (Short Essay - Pattern 8)',
+  [QuestionType.LONG_ESSAY]: '6. مقالي طويل وإنشاء (Long Essay)',
+  [QuestionType.EXPLAIN]: '7. علل وفسر (Explain/Reason)',
+  [QuestionType.COMPARISON_TABLE]: '8. جدول مقارنة (Comparison Table)',
+  [QuestionType.ODD_ONE_OUT]: '9. استخرج الكلمة الشاذة (Odd One Out)',
+  [QuestionType.DIAGRAM_LABELING]: '10. تسمية أجزاء الرسم التوضيحي (Diagram Labeling)',
+  [QuestionType.CONTOUR_MAP]: '11. خريطة كنتورية وتضاريس (Contour Map)',
+  [QuestionType.CALCULATION]: '12. مسألة حسابية وقوانين (Calculation - Pattern 7)',
+  [QuestionType.ORDERING]: '13. ترتيب تسلسلي وزمني (Ordering)',
+  [QuestionType.ARABIC_GRAMMAR]: '14. إعراب وضبط نحوي (Arabic Grammar)',
+  [QuestionType.READING_COMPREHENSION]: '15. قطعة وفهم واستيعاب (Reading Comprehension)',
+};
+
+const PATTERN_TEMPLATES: Record<string, string> = {
+  [QuestionType.TRUE_FALSE]: JSON.stringify(
+    [
+      {
+        questionType: 'true_false',
+        prompt: 'تتحرك الكواكب حول الشمس في مدارات إهليلجية.',
+        content: {
+          statement: 'تتحرك الكواكب حول الشمس في مدارات إهليلجية.'
+        },
+        correctAnswer: {
+          value: true
+        },
+        allocatedMarks: 5,
+        explanationAr: 'قانون كبلر الأول ينص على أن مدارات الكواكب إهليلجية والشمس في إحدى البؤرتين.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.MULTIPLE_CHOICE]: JSON.stringify(
+    [
+      {
+        questionType: 'multiple_choice',
+        prompt: 'ما هي عاصمة جمهورية السودان؟',
+        content: {
+          options: [
+            { id: 'opt1', text: 'الخرطوم' },
+            { id: 'opt2', text: 'أم درمان' },
+            { id: 'opt3', text: 'بورتسودان' },
+            { id: 'opt4', text: 'الأبيض' }
+          ]
+        },
+        correctAnswer: {
+          selectedOptionId: 'opt1'
+        },
+        allocatedMarks: 5,
+        explanationAr: 'تقع الخرطوم عند ملتقى النيلين الأزرق والأبيض وهي العاصمة الرسمية.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.FILL_BLANK]: JSON.stringify(
+    [
+      {
+        questionType: 'fill_blank',
+        prompt: 'أكمل الفراغ في الجملة التالية:',
+        content: {
+          textWithBlanks: 'عاصمة السودان هي [blank_1] وتشتهر بالنيلين',
+          blanks: [
+            {
+              id: 'blank_1',
+              correctValue: 'الخرطوم',
+              choices: ['الخرطوم', 'أم درمان', 'بحري']
+            }
+          ]
+        },
+        correctAnswer: {
+          answers: {
+            blank_1: 'الخرطوم'
+          }
+        },
+        allocatedMarks: 5,
+        explanationAr: 'الإجابة الصحيحة هي الخرطوم.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.MATCHING]: JSON.stringify(
+    [
+      {
+        questionType: 'matching',
+        prompt: 'صل بين المصطلح العلمي والتعريف المناسب له:',
+        content: {
+          pairs: [
+            { id: 'pair_1', source: 'السرعة', target: 'المعدل الزمني لتغير المسافة' },
+            { id: 'pair_2', source: 'التسارع', target: 'المعدل الزمني لتغير السرعة' },
+            { id: 'pair_3', source: 'القوة', target: 'مؤثر خارجي يغير الحالة الحركية للجسم' }
+          ],
+          distractors: [
+            { id: 'dist_1', target: 'كمية مادة الجسم' }
+          ],
+          scoring_type: 'partial'
+        },
+        correctAnswer: {
+          pairs: {
+            pair_1: 'target_pair_1',
+            pair_2: 'target_pair_2',
+            pair_3: 'target_pair_3'
+          }
+        },
+        allocatedMarks: 6,
+        explanationAr: 'توصيل كل كمية فيزيائية بمتغيرها المنهجي.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.SHORT_ESSAY]: JSON.stringify(
+    [
+      {
+        questionType: 'short_essay',
+        prompt: 'علل: تسمية عام الفيل بهذا الاسم.',
+        content: {
+          question_text: 'علل: تسمية عام الفيل بهذا الاسم.',
+          model_answer: 'بسبب محاولة أبرهة الحبشي هدم الكعبة المشرفة باستخدام جيش يتقدمه الفيل',
+          mandatory_keywords: ['أبرهة', 'هدم الكعبة', 'الفيل'],
+          hint: 'تذكر محاولة أبرهة وجيشه',
+          max_words: 30,
+          grading_mode: 'auto',
+          partial_threshold: 0.5
+        },
+        correctAnswer: {
+          model_answer: 'بسبب محاولة أبرهة الحبشي هدم الكعبة المشرفة باستخدام جيش يتقدمه الفيل',
+          mandatory_keywords: ['أبرهة', 'هدم الكعبة', 'الفيل']
+        },
+        allocatedMarks: 5,
+        explanationAr: 'يجب ذكر محاولة أبرهة الكنسية وهدم البيت الحرام بالفيل.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.LONG_ESSAY]: JSON.stringify(
+    [
+      {
+        questionType: 'long_essay',
+        prompt: 'اكتب مقالاً مفصلاً عن أسباب وآثار الثورة الصناعية في أوروبا.',
+        content: {
+          instructions: 'اكتب مقالاً متكاملاً يحتوي على مقدمة وعرض وعنصرين أساسيين على الأقل للأسباب والنتائج.'
+        },
+        correctAnswer: {
+          model_answer: 'المناخ السياسي المستقر، اكتشاف الآلة البخارية، وفرة الفحم والحديد، نمو التبادل التجاري وتغير البنية الاجتماعية.'
+        },
+        allocatedMarks: 15,
+        explanationAr: 'يراعى التسلسل التاريخي والسلامة اللغوية والأفكار الأساسية.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.EXPLAIN]: JSON.stringify(
+    [
+      {
+        questionType: 'explain',
+        prompt: 'علل: يطفو الجليد على سطح الماء في البحيرات والمتجمدات.',
+        content: {
+          instructions: 'اذكر السبب العلمي المنهجي الخاص بكثافة الماء وتكون الرابطة الهيدروجينية.'
+        },
+        correctAnswer: {
+          model_answer: 'لأن كثافة الجليد أقل من كثافة الماء السائل بسبب تمدد الماء عند التجمد وزيادة الحجم نتيجة التظليل الشبكي للروابط الهيدروجينية.'
+        },
+        allocatedMarks: 5,
+        explanationAr: 'ظاهرة شذوذ الماء عند 4 درجات مئوية.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.COMPARISON_TABLE]: JSON.stringify(
+    [
+      {
+        questionType: 'comparison_table',
+        prompt: 'قارن بين الخلايا النباتية والحيوانية من حيث الجدار الخلوي والبلاستيدات الخضراء.',
+        content: {
+          headers: ['وجه المقارنة', 'الخلية النباتية', 'الخلية الحيوانية'],
+          rows: [
+            { criteria: 'الجدار الخلوي', correct_col1: 'موجود (سليولوز)', correct_col2: 'غير موجود' },
+            { criteria: 'البلاستيدات الخضراء', correct_col1: 'موجودة', correct_col2: 'غير موجودة' }
+          ]
+        },
+        correctAnswer: {
+          table: [
+            ['موجود (سليولوز)', 'غير موجود'],
+            ['موجودة', 'غير موجودة']
+          ]
+        },
+        allocatedMarks: 8,
+        explanationAr: 'الخلية النباتية تتميز بالجدار الخلوي السليولوزي والبلاستيدات الخضراء.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.ODD_ONE_OUT]: JSON.stringify(
+    [
+      {
+        questionType: 'odd_one_out',
+        prompt: 'استخرج الكلمة الشاذة من المجموعات التالية مع بيان السبب:',
+        content: {
+          words: ['حديد', 'نحاس', 'ألومنيوم', 'خشب']
+        },
+        correctAnswer: 'خشب',
+        allocatedMarks: 5,
+        explanationAr: 'الخشب مادة غير موصلة ولا تنتمي للعناصر الفلزية.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.DIAGRAM_LABELING]: JSON.stringify(
+    [
+      {
+        questionType: 'diagram_labeling',
+        prompt: 'اكتب المسمى العلمي المقابل للأرقام الموضحة على رسم الخلية:',
+        content: {
+          imageUrl: '/assets/diagrams/cell_structure.png',
+          labels: [
+            { id: 'label_1', number: 1, correctText: 'النواة' },
+            { id: 'label_2', number: 2, correctText: 'الميتوكندريا' },
+            { id: 'label_3', number: 3, correctText: 'الغشاء الخلوي' }
+          ]
+        },
+        correctAnswer: {
+          label_1: 'النواة',
+          label_2: 'الميتوكندريا',
+          label_3: 'الغشاء الخلوي'
+        },
+        allocatedMarks: 6,
+        explanationAr: 'تحديد العضيات الخلوية الأساسية على الرسم التوضيحي.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.CONTOUR_MAP]: JSON.stringify(
+    [
+      {
+        questionType: 'contour_map',
+        prompt: 'من خلال الخريطة الكنتورية المرفقة، حدد اتجاه انحدار الوادي وقيمة الفاصل الكنتوري:',
+        content: {
+          mapCode: 'MAP_SUDAN_CONTOUR_01',
+          mapUrl: '/assets/maps/contour_01.png',
+          subQuestions: [
+            {
+              id: 'cm_1',
+              question: 'ما هي قيمة الفاصل الكنتوري؟',
+              unit: 'متر',
+              inputType: 'numeric',
+              numericTolerance: 1,
+              explanation: 'الفاصل الكنتوري هو الفرق في الارتفاع الرأسي بين خطي كنتور متتاليين.'
+            },
+            {
+              id: 'cm_2',
+              question: 'ما هو الاتجاه العام لانحدار الوادي؟',
+              unit: '',
+              inputType: 'direction8',
+              explanation: 'ينحدر الوادي من المرتفعات في الشمال الشرقي باتجاه المنخفضات في الجنوب الغربي.'
+            }
+          ]
+        },
+        correctAnswer: {
+          subAnswers: {
+            cm_1: '20',
+            cm_2: 'من الشمال الشرقي إلى الجنوب الغربي'
+          }
+        },
+        allocatedMarks: 8,
+        explanationAr: 'الفاصل الكنتوري يمثل الفرق بين خطي كنتور متتاليين.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.CALCULATION]: JSON.stringify(
+    [
+      {
+        questionType: 'calculation',
+        prompt: 'احسب القوة الكهرومغناطيسية المؤثرة على سلك مستقيم طوله 0.5m يحمل تياراً شدته 4A موضوع عمودياً في مجال مغناطيسي شدته 0.2T',
+        content: {
+          mode: 'multi_step_mcq',
+          scenario: 'سلك موصل طوله L = 0.5m يحمل تياراً I = 4A موضوع في مجال مغناطيسي B = 0.2T',
+          given_values: [
+            { symbol: 'L', value: 0.5, unit: 'm' },
+            { symbol: 'I', value: 4.0, unit: 'A' },
+            { symbol: 'B', value: 0.2, unit: 'T' }
+          ],
+          constants: [],
+          steps: [
+            {
+              step_id: 'step_1',
+              step_order: 1,
+              title: 'الخطوة 1: اختيار القانون المناسب',
+              prompt: 'حدد القانون المباشر لحساب القوة F:',
+              options: [
+                { option_id: 's1_opt1', text: 'F = I · L · B · sin(θ)' },
+                { option_id: 's1_opt2', text: 'F = I / (L · B)' },
+                { option_id: 's1_opt3', text: 'F = B · L / I' }
+              ]
+            },
+            {
+              step_id: 'step_2',
+              step_order: 2,
+              title: 'الخطوة 2: التعويض والحساب النهائي',
+              prompt: 'احسب قيمة القوة F بالنيوتن:',
+              options: [
+                { option_id: 's2_opt1', text: 'F = 0.4 N' },
+                { option_id: 's2_opt2', text: 'F = 4.0 N' },
+                { option_id: 's2_opt3', text: 'F = 1.0 N' }
+              ]
+            }
+          ]
+        },
+        correctAnswer: {
+          step_answers: {
+            step_1: 's1_opt1',
+            step_2: 's2_opt1'
+          },
+          conditional_credit_rules: [
+            {
+              rule_id: 'rule_1',
+              target_step_id: 'step_2',
+              awarded_option_id: 's2_opt2',
+              prerequisite_step_id: 'step_1',
+              prerequisite_option_id: 's1_opt2',
+              credit_fraction: 0.5
+            }
+          ]
+        },
+        allocatedMarks: 10,
+        explanationAr: 'F = I · L · B · sin(90°) = 4 · 0.5 · 0.2 · 1 = 0.4 N'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.ORDERING]: JSON.stringify(
+    [
+      {
+        questionType: 'ordering',
+        prompt: 'رتب الأحداث التاريخية التالية من الأقدم إلى الأحدث:',
+        content: {
+          items: [
+            { id: 's1', text: 'استقلال السودان عام 1956م' },
+            { id: 's2', text: 'ثورة أكتوبر المجيدة 1964م' },
+            { id: 's3', text: 'انتفاضة أبريل 1985م' }
+          ],
+          correctOrder: ['s1', 's2', 's3']
+        },
+        correctAnswer: {
+          order: ['s1', 's2', 's3']
+        },
+        allocatedMarks: 6,
+        explanationAr: 'الترتيب الزمني التاريخي لأحداث السودان الوطنية.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.ARABIC_GRAMMAR]: JSON.stringify(
+    [
+      {
+        questionType: 'arabic_grammar',
+        prompt: 'أعرب الكلمة الملونة في الجملة: إنّ المعلمينَ مخلصونَ في رسالتهم',
+        content: {
+          targetWord: 'مخلصونَ',
+          fullSentence: 'إنّ المعلمينَ مخلصونَ في رسالتهم'
+        },
+        correctAnswer: 'خبر إنّ مرفوع وعلامة رفعه الواو لأنه جمع مذكر سالم',
+        allocatedMarks: 5,
+        explanationAr: 'إنّ تنصب المبتدأ وترفع الخبر.'
+      }
+    ],
+    null,
+    2
+  ),
+  [QuestionType.READING_COMPREHENSION]: JSON.stringify(
+    [
+      {
+        questionType: 'reading_comprehension',
+        prompt: 'اقرأ النص الأدبي التالي ثم أجب عن الأسئلة:',
+        content: {
+          passage: 'كان نهر النيل العظيم شريان الحياة للقدماء والمحدثين...',
+          subQuestions: [
+            {
+              id: 'rc_1',
+              prompt: 'استخرج الفكرة الرئيسية للنص الفقري',
+              correctAnswer: 'أهمية نهر النيل التاريخية والحضارية'
+            }
+          ]
+        },
+        correctAnswer: {
+          rc_1: 'أهمية نهر النيل التاريخية والحضارية'
+        },
+        allocatedMarks: 10,
+        explanationAr: 'الفقرة تدور حول منزلة النيل في وجدان السودانيين.'
+      }
+    ],
+    null,
+    2
+  ),
 };
 
 const EXAMPLE_JSON_BULK = `[
@@ -551,7 +949,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   // ==========================================
   // TAB 2: QUESTION AUTHORING LOGIC
   // ==========================================
-  const [targetScope, setTargetScope] = useState<'both' | 'curriculum_review' | 'yearly_exam'>('both');
+  // Exam Type Selection States (امتحان تدريبي vs امتحان كامل)
+  const [examCategory, setExamCategory] = useState<'training' | 'full'>('training');
+  const [trainingKind, setTrainingKind] = useState<'comprehensive' | 'specific_year'>('comprehensive');
+  const [selectedExamYear, setSelectedExamYear] = useState<number>(2024);
+  const [targetScope, setTargetScope] = useState<'both' | 'curriculum_review' | 'yearly_exam'>('curriculum_review');
   const [authoringYear, setAuthoringYear] = useState<number>(2024);
   const [selectedPatternId, setSelectedPatternId] = useState<string>('');
 
@@ -561,6 +963,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [questionNumber, setQuestionNumber] = useState<number>(1);
   const [questionPart, setQuestionPart] = useState<string>('أ');
   const [explanationAr, setExplanationAr] = useState<string>('');
+
+  const handleExamCategoryChange = (cat: 'training' | 'full') => {
+    setExamCategory(cat);
+    if (cat === 'full') {
+      setTargetScope('yearly_exam');
+      setAuthoringYear(selectedExamYear);
+    } else {
+      if (trainingKind === 'comprehensive') {
+        setTargetScope('curriculum_review');
+        setAuthoringYear(2024);
+      } else {
+        setTargetScope('yearly_exam');
+        setAuthoringYear(selectedExamYear);
+      }
+    }
+  };
+
+  const handleTrainingKindChange = (kind: 'comprehensive' | 'specific_year') => {
+    setTrainingKind(kind);
+    if (kind === 'comprehensive') {
+      setTargetScope('curriculum_review');
+    } else {
+      setTargetScope('yearly_exam');
+      setAuthoringYear(selectedExamYear);
+    }
+  };
+
+  const handleYearChange = (year: number) => {
+    setSelectedExamYear(year);
+    setAuthoringYear(year);
+  };
+
+  const handleCopyTemplate = (qType: string) => {
+    const jsonStr = PATTERN_TEMPLATES[qType] || EXAMPLE_JSON_BULK;
+    navigator.clipboard.writeText(jsonStr);
+    showNotification(`تم نسخ قالب JSON لنمط (${QUESTION_TYPE_LABELS[qType] || qType}) بنجاح إلى الحافظة!`, 'success');
+  };
+
+  const handleDownloadTemplate = (qType: string) => {
+    const jsonStr = PATTERN_TEMPLATES[qType] || EXAMPLE_JSON_BULK;
+    const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `template_${qType}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showNotification(`تم تنزيل ملف القالب (template_${qType}.json) بنجاح!`, 'success');
+  };
+
+  const handleUseTemplateInBulk = (qType: string) => {
+    const jsonStr = PATTERN_TEMPLATES[qType] || EXAMPLE_JSON_BULK;
+    setBulkJsonText(jsonStr);
+    setActiveTab('bulk');
+    showNotification(`تم تحميل قالب نمط (${QUESTION_TYPE_LABELS[qType] || qType}) في واجهة الاستيراد الجماعي.`, 'info');
+  };
 
   // Type-specific states
   const [tfAnswer, setTfAnswer] = useState<boolean>(true);
@@ -617,6 +1076,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [calcMode, setCalcMode] = useState<'multi_step_mcq' | 'numeric_with_work'>('multi_step_mcq');
   const [pattern7Data, setPattern7Data] = useState<any>(null);
   const [pattern8Data, setPattern8Data] = useState<Pattern8FormFields | null>(null);
+  const [pattern11Data, setPattern11Data] = useState<Pattern11FormData | null>(null);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+
+  const handleEditQuestion = (q: AuthoredQuestion) => {
+    setEditingQuestionId(q.id);
+    setQuestionType(q.questionType);
+    setQuestionPrompt(q.prompt || (q.content as any)?.prompt || '');
+    setQuestionMarks(q.allocatedMarks || 5);
+    setQuestionNumber(q.questionNumber || 1);
+    setQuestionPart(q.partLabel || 'أ');
+    setExplanationAr(q.explanationAr || '');
+
+    if (q.questionType === QuestionType.CONTOUR_MAP) {
+      const c = (q.content || {}) as Record<string, any>;
+      const ca = (q.correctAnswer || {}) as Record<string, any>;
+      setPattern11Data({
+        prompt: q.prompt || c.prompt || '',
+        mapUrl: c.mapUrl || '',
+        mapCode: c.mapCode || '',
+        subQuestions: Array.isArray(c.subQuestions) ? c.subQuestions : [],
+        subAnswers: ca.subAnswers || (typeof ca === 'object' && ca !== null ? ca : {}),
+        totalMarks: q.allocatedMarks || 10,
+      });
+    }
+
+    setActiveTab('authoring');
+    showNotification(`تم فتح السؤال (رقم ${q.questionNumber} ${q.partLabel}) للتعديل وإدراج/تحديث الخريطة وتحديد المناطق.`, 'info');
+  };
+
+  const handleCancelEditing = () => {
+    setEditingQuestionId(null);
+    setPattern11Data(null);
+    setQuestionPrompt('');
+    setExplanationAr('');
+    showNotification('تم إلغاء وضع التعديل.', 'info');
+  };
 
   // Matching question states
   const [matchingPairs, setMatchingPairs] = useState<
@@ -807,13 +1302,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
           mandatory_keywords: [],
         };
       }
+    } else if (questionType === QuestionType.CONTOUR_MAP) {
+      if (pattern11Data) {
+        content = {
+          prompt: pattern11Data.prompt || questionPrompt,
+          mapUrl: pattern11Data.mapUrl,
+          mapCode: pattern11Data.mapCode,
+          subQuestions: pattern11Data.subQuestions,
+        };
+        correctAnswer = {
+          subAnswers: pattern11Data.subAnswers,
+        };
+        setQuestionMarks(pattern11Data.totalMarks || questionMarks);
+      } else {
+        content = {
+          prompt: questionPrompt.trim(),
+          mapUrl: '/assets/maps/contour_01.png',
+          mapCode: 'MAP_SUDAN_CONTOUR_01',
+          subQuestions: [
+            {
+              id: 'cm_1',
+              question: 'ما هي قيمة الفاصل الكنتوري؟',
+              unit: 'متر',
+              inputType: 'numeric',
+              numericTolerance: 1,
+            },
+          ],
+        };
+        correctAnswer = {
+          subAnswers: {
+            cm_1: blankAnswer || '20',
+          },
+        };
+      }
     } else {
       content = { instructions: questionPrompt };
       correctAnswer = blankAnswer || 'الإجابة النموذجية المعتمدة';
     }
 
-    const newQuestion: AuthoredQuestion = {
-      id: `q_auth_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    const targetQuestionId = editingQuestionId || `q_auth_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    const savedQuestion: AuthoredQuestion = {
+      id: targetQuestionId,
       subjectSlug: selectedSubjectSlug,
       patternId: selectedPatternId || undefined,
       questionNumber,
@@ -830,46 +1360,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       createdAt: new Date().toISOString(),
     };
 
-    const draftId = newQuestion.id;
-
     // 1. Maintain local draft/cache buffer
-    curriculumStorage.saveQuestion(newQuestion);
+    curriculumStorage.saveQuestion(savedQuestion);
     setQuestionsList(curriculumStorage.getQuestionsBySubject(selectedSubjectSlug));
 
-    // 2. Dispatch to central server PostgreSQL question management endpoint
-    apiClient
-      .request<{ id: string }>('/api/admin/questions', {
-        method: 'POST',
-        body: JSON.stringify({
-          subjectSlug: selectedSubjectSlug,
-          questionType,
-          prompt: questionPrompt,
-          content,
-          correctAnswer,
-          allocatedMarks: Number(questionMarks) || 5,
-          explanationAr,
-          examYear: targetScope === 'curriculum_review' ? undefined : authoringYear,
-        }),
-      })
-      .then((res) => {
-        if (res?.success && res.data?.id) {
-          // Reconcile local draft ID with the authoritative server-returned UUID
-          curriculumStorage.reconcileQuestionId(draftId, res.data.id);
-          setQuestionsList(curriculumStorage.getQuestionsBySubject(selectedSubjectSlug));
-          showNotification(`تم حفظ واعتماد السؤال بنجاح في قاعدة البيانات المركزية (PostgreSQL)!`, 'success');
-        } else {
-          showNotification(`تم حفظ السؤال في مسودة المتصفح المحلية (الخادم غير متصل أو يلزم حساب مسؤول).`, 'info');
-        }
-      })
-      .catch(() => {
-        showNotification(`تم حفظ السؤال كمسودة محلية بنجاح في المتصفح.`, 'info');
-      });
+    // 2. Dispatch to central server PostgreSQL
+    if (editingQuestionId) {
+      apiClient
+        .request<{ id: string }>(`/api/admin/questions/${editingQuestionId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            prompt: questionPrompt,
+            content,
+            correctAnswer,
+            allocatedMarks: Number(questionMarks) || 5,
+            explanationAr,
+          }),
+        })
+        .then((res) => {
+          if (res?.success) {
+            setQuestionsList(curriculumStorage.getQuestionsBySubject(selectedSubjectSlug));
+            showNotification(`تم حفظ التعديلات وتحديث الخريطة والبيانات بنجاح في قاعدة البيانات المركزية!`, 'success');
+          } else {
+            showNotification(`تم تحديث بيانات السؤال في مسودة المتصفح المحلية.`, 'info');
+          }
+        })
+        .catch(() => {
+          showNotification(`تم تحديث بيانات السؤال في مسودة المتصفح المحلية.`, 'info');
+        });
+      setEditingQuestionId(null);
+    } else {
+      apiClient
+        .request<{ id: string }>('/api/admin/questions', {
+          method: 'POST',
+          body: JSON.stringify({
+            subjectSlug: selectedSubjectSlug,
+            questionType,
+            prompt: questionPrompt,
+            content,
+            correctAnswer,
+            allocatedMarks: Number(questionMarks) || 5,
+            explanationAr,
+            examYear: targetScope === 'curriculum_review' ? undefined : authoringYear,
+          }),
+        })
+        .then((res) => {
+          if (res?.success && res.data?.id) {
+            // Reconcile local draft ID with the authoritative server-returned UUID
+            curriculumStorage.reconcileQuestionId(targetQuestionId, res.data.id);
+            setQuestionsList(curriculumStorage.getQuestionsBySubject(selectedSubjectSlug));
+            showNotification(`تم حفظ واعتماد السؤال بنجاح في قاعدة البيانات المركزية (PostgreSQL)!`, 'success');
+          } else {
+            showNotification(`تم حفظ السؤال في مسودة المتصفح المحلية (الخادم غير متصل أو يلزم حساب مسؤول).`, 'info');
+          }
+        })
+        .catch(() => {
+          showNotification(`تم حفظ السؤال كمسودة محلية بنجاح في المتصفح.`, 'info');
+        });
+    }
 
     // Reset prompt and feedback
     setQuestionPrompt('');
     setExplanationAr('');
     setBlankAnswer('');
     setGrammarAnswer('');
+    setPattern11Data(null);
   };
 
   const handleDeleteQuestion = async (qId: string) => {
@@ -1219,68 +1774,159 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               </p>
             </div>
 
-            {/* Scope & Year Selector */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 block">نطاق الاستخدام:</label>
-                <select
-                  value={targetScope}
-                  onChange={(e) => setTargetScope(e.target.value as any)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            {/* Editing Active Alert Banner */}
+            {editingQuestionId && (
+              <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs animate-fadeIn">
+                <div className="flex items-center gap-2.5 font-black text-amber-950">
+                  <Edit3 className="w-5 h-5 text-amber-700 shrink-0" />
+                  <div>
+                    <span className="block text-amber-900 font-extrabold text-sm">
+                      وضع تعديل السؤال المحفوظ (المعرف: <span className="font-mono text-xs">{editingQuestionId}</span>)
+                    </span>
+                    <span className="text-[11px] text-amber-800 font-medium">
+                      المرحلة المعتمدة: يمكنك الآن مراجعة الفروع، رفع صورة الخريطة، والنقر على الصورة لتحديد المناطق النموذجية تفاعلياً.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelEditing}
+                  className="px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold cursor-pointer shrink-0 transition-colors"
                 >
-                  <option value="both">عام (امتحانات السنوات ومراجعة المقرر معاً)</option>
-                  <option value="yearly_exam">امتحان سنة محددة خصيصاً (Past Exam)</option>
-                  <option value="curriculum_review">بنك مراجعة شاملة للمقرر فقط</option>
-                </select>
+                  إلغاء التعديل والعودة
+                </button>
+              </div>
+            )}
+
+            {/* Exam Type Selector (نوع الامتحان: تدريبي vs كامل + شامل vs سنة 2000-2026) */}
+            <div className="p-5 bg-gradient-to-r from-slate-50 to-emerald-50/40 rounded-3xl border border-slate-200 space-y-4 shadow-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
+                <div>
+                  <h3 className="text-xs font-black text-slate-900 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                    <span>تحديد نوع الامتحان وطريقة الحفظ المنفصلة:</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    اختر ما إذا كان هذا السؤال مخصصاً لامتحان تدريبي أو امتحان كامل رسمياً، وحدد النطاق والسنة.
+                  </p>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white rounded-xl border border-emerald-200 text-xs font-bold text-emerald-900 shadow-2xs">
+                  <span>وضع الحفظ المنفصل:</span>
+                  <span className="font-extrabold text-emerald-700">
+                    {examCategory === 'training'
+                      ? trainingKind === 'comprehensive'
+                        ? 'امتحان تدريبي (شامل للمقرر)'
+                        : `امتحان تدريبي (سنة ${selectedExamYear}م)`
+                      : `امتحان كامل (دورة ${selectedExamYear}م)`}
+                  </span>
+                </div>
               </div>
 
-              {targetScope !== 'curriculum_review' && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Main Exam Category */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-black text-slate-700 block">
-                    سنة دورة الامتحان (2000 - 2026):
-                  </label>
-                  <select
-                    value={authoringYear}
-                    onChange={(e) => setAuthoringYear(Number(e.target.value))}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    {curriculumStorage.getAllSupportedYears().map((yr) => (
-                      <option key={yr} value={yr}>
-                        دورة عام {yr}م
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+                  <label className="text-xs font-black text-slate-700 block">نوع الامتحان الرئيسي:</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleExamCategoryChange('training')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
+                        examCategory === 'training'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>امتحان تدريبي</span>
+                    </button>
 
-              {/* Blueprint Pattern Selector */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 block">
-                  ربط بنمط من هيكل ورقة الامتحان:
-                </label>
-                <select
-                  value={selectedPatternId}
-                  onChange={(e) => handleSelectPatternForAuthoring(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="">-- إدخال حر / اختر من الهيكل --</option>
-                  {blueprint.patterns.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      السؤال {p.questionNumber} {p.partLabel} - {p.title} ({p.allocatedMarks} درجات)
-                    </option>
-                  ))}
-                </select>
+                    <button
+                      type="button"
+                      onClick={() => handleExamCategoryChange('full')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
+                        examCategory === 'full'
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Layers className="w-4 h-4" />
+                      <span>امتحان كامل</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-Option for Training Exam */}
+                {examCategory === 'training' ? (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-slate-700 block">تخصيص الامتحان التدريبي:</label>
+                    <select
+                      value={trainingKind}
+                      onChange={(e) => handleTrainingKindChange(e.target.value as any)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    >
+                      <option value="comprehensive">شامل للمقرر (Curriculum Comprehensive)</option>
+                      <option value="specific_year">سنة محدودة (Specific Past Year)</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-slate-700 block">دورة الامتحان الكامل:</label>
+                    <div className="p-2 bg-amber-50 rounded-xl border border-amber-200 text-xs font-extrabold text-amber-900 flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>امتحان كامل رسمي بدورة محددة</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Year Selection Dropdown (2000 to 2026) */}
+                {(examCategory === 'full' || (examCategory === 'training' && trainingKind === 'specific_year')) ? (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-slate-700 block">
+                      اختر السنة الدورة (من 2000 حتى 2026):
+                    </label>
+                    <select
+                      value={selectedExamYear}
+                      onChange={(e) => handleYearChange(Number(e.target.value))}
+                      className="w-full bg-white border-2 border-emerald-500 rounded-xl px-3 py-2 text-xs font-black text-emerald-950 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    >
+                      {curriculumStorage.getAllSupportedYears().map((yr) => (
+                        <option key={yr} value={yr}>
+                          دورة عام {yr}م
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black text-slate-700 block">ربط بنمط من هيكل الورقة:</label>
+                    <select
+                      value={selectedPatternId}
+                      onChange={(e) => handleSelectPatternForAuthoring(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="">-- إدخال حر / اختر من الهيكل --</option>
+                      {blueprint.patterns.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          السؤال {p.questionNumber} {p.partLabel} - {p.title} ({p.allocatedMarks} درجات)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Pattern Type & Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 block">نوع النمط (من الـ 15 نمطاً):</label>
+            {/* Pattern Type Selection & Question Position */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+              <div className="space-y-1.5 md:col-span-1">
+                <label className="text-xs font-black text-slate-900 block">
+                  اختر نمط السؤال الإدخالي (من الـ 15 نمطاً):
+                </label>
                 <select
                   value={questionType}
                   onChange={(e) => setQuestionType(e.target.value as QuestionType)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-white border-2 border-indigo-500 rounded-xl px-3 py-2.5 text-xs font-black text-indigo-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
                   {Object.entries(QUESTION_TYPE_LABELS).map(([k, label]) => (
                     <option key={k} value={k}>
@@ -1291,39 +1937,97 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 block">موقع السؤال والفرع:</label>
+                <label className="text-xs font-black text-slate-700 block">موقع السؤال والفرع في الورقة:</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     min="1"
                     value={questionNumber}
                     onChange={(e) => setQuestionNumber(Number(e.target.value) || 1)}
-                    className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-center"
+                    className="w-20 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-center"
                     placeholder="رقم"
                   />
                   <input
                     type="text"
                     value={questionPart}
                     onChange={(e) => setQuestionPart(e.target.value)}
-                    className="w-20 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-center"
+                    className="w-20 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-center"
                     placeholder="أ/ب/ج"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 block">الدرجة المخصصة:</label>
+                <label className="text-xs font-black text-slate-700 block">الدرجة المخصصة للسؤال:</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     min="1"
                     value={questionMarks}
                     onChange={(e) => setQuestionMarks(Number(e.target.value) || 5)}
-                    className="w-24 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-center"
+                    className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-center"
                   />
-                  <span className="text-xs text-slate-500 font-bold">درجات</span>
+                  <span className="text-xs text-slate-600 font-bold">درجات</span>
                 </div>
               </div>
+            </div>
+
+            {/* Pattern Template Card (نموذج / قالب النمط التفاعلي مع أزرار نسخ وتنزيل كبيرة وملونة) */}
+            <div className="p-5 bg-gradient-to-br from-slate-900 to-indigo-950 rounded-3xl border border-slate-800 text-white space-y-4 shadow-md">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300">
+                    <FileCode className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white flex items-center gap-2">
+                      <span>نموذج / قالب JSON معتمد لنمط:</span>
+                      <span className="text-emerald-400 font-mono">
+                        {QUESTION_TYPE_LABELS[questionType] || questionType}
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      يمكنك نسخ أو تنزيل هذا القالب المعتمد للقياس عليه أو استخدامه في الاستيراد الجماعي
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyTemplate(questionType)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>نسخ القالب (JSON)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadTemplate(questionType)}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>تنزيل القالب (JSON)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleUseTemplateInBulk(questionType)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <FileCode className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>فتح في الاستيراد الجماعي</span>
+                  </button>
+                </div>
+              </div>
+
+              <pre
+                className="p-4 bg-slate-950 text-emerald-400 font-mono text-[11px] rounded-2xl overflow-x-auto leading-relaxed border border-slate-850 text-left max-h-48"
+                dir="ltr"
+              >
+                {PATTERN_TEMPLATES[questionType] || EXAMPLE_JSON_BULK}
+              </pre>
             </div>
 
             {/* Question Prompt */}
@@ -1784,6 +2488,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 />
               )}
 
+              {questionType === QuestionType.CONTOUR_MAP && (
+                <Pattern11AuthoringForm
+                  initialValues={
+                    pattern11Data || {
+                      prompt: questionPrompt,
+                      totalMarks: questionMarks,
+                    }
+                  }
+                  onChange={(data) => {
+                    setPattern11Data(data);
+                    if (data.prompt) setQuestionPrompt(data.prompt);
+                    if (data.totalMarks) setQuestionMarks(data.totalMarks);
+                  }}
+                />
+              )}
+
               {/* Fallback text answer for Essays, Explain, etc. */}
               {questionType !== QuestionType.TRUE_FALSE &&
                 questionType !== QuestionType.MULTIPLE_CHOICE &&
@@ -1792,7 +2512,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 questionType !== QuestionType.ODD_ONE_OUT &&
                 questionType !== QuestionType.CALCULATION &&
                 questionType !== QuestionType.MATCHING &&
-                questionType !== QuestionType.SHORT_ESSAY && (
+                questionType !== QuestionType.SHORT_ESSAY &&
+                questionType !== QuestionType.CONTOUR_MAP && (
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700 block">الحل النموذجي المعتمد:</label>
                     <input
@@ -1826,10 +2547,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               <button
                 type="button"
                 onClick={handleSaveAuthoredQuestion}
-                className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                className={`px-8 py-3 rounded-xl text-xs font-black shadow-md transition-all flex items-center gap-2 cursor-pointer ${
+                  editingQuestionId
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
               >
                 <Save className="w-4 h-4" />
-                <span>حفظ السؤال في بنك مادة {blueprint.name_ar}</span>
+                <span>
+                  {editingQuestionId
+                    ? `حفظ التعديلات وتحديث الخريطة والبيانات`
+                    : `حفظ السؤال في بنك مادة ${blueprint.name_ar}`}
+                </span>
               </button>
             </div>
           </div>
@@ -1929,6 +2658,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                           <span>توقيع الاعتماد</span>
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleEditQuestion(q)}
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        title="تعديل السؤال وإدراج/تحديث الخريطة وتحديد المناطق"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                        <span>تعديل الخريطة والبيانات</span>
+                      </button>
 
                       <button
                         type="button"
@@ -2127,39 +2866,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
             {bulkImportType === 'all_json' && (
               <>
 
-            {/* Scope & Year Selector */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-200">
-              <div className="space-y-1.5">
-                <label className="text-xs font-black text-slate-700 block">نطاق الأسئلة المستوردة:</label>
-                <select
-                  value={bulkScope}
-                  onChange={(e) => setBulkScope(e.target.value as any)}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="both">عام (امتحانات تدريب ومراجعة معاً)</option>
-                  <option value="yearly_exam">امتحان دورة سنة محددة (Past Exam)</option>
-                  <option value="curriculum_review">بنك مراجعة شاملة للمقرر فقط</option>
-                </select>
+            {/* Exam Type Selector for Bulk Import */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-800">تحديد نوع الامتحان للاستيراد الجماعي:</span>
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                  {bulkScope === 'curriculum_review' ? 'امتحان تدريبي (شامل للمقرر)' : `امتحان دورة سنة ${bulkYear}م`}
+                </span>
               </div>
 
-              {bulkScope !== 'curriculum_review' && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-black text-slate-700 block">
-                    سنة دورة الامتحان (2000 - 2026):
-                  </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-black text-slate-700 block">نوع ونطاق الامتحان:</label>
                   <select
-                    value={bulkYear}
-                    onChange={(e) => setBulkYear(Number(e.target.value))}
+                    value={bulkScope}
+                    onChange={(e) => setBulkScope(e.target.value as any)}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   >
-                    {curriculumStorage.getAllSupportedYears().map((yr) => (
-                      <option key={yr} value={yr}>
-                        دورة عام {yr}م
+                    <option value="both">امتحان تدريبي أو كامل (عام)</option>
+                    <option value="curriculum_review">امتحان تدريبي (شامل للمقرر)</option>
+                    <option value="yearly_exam">امتحان سنة محددة (Past Exam / Full Exam)</option>
+                  </select>
+                </div>
+
+                {bulkScope !== 'curriculum_review' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-black text-slate-700 block">
+                      اختر سنة الدورة (من 2000 حتى 2026):
+                    </label>
+                    <select
+                      value={bulkYear}
+                      onChange={(e) => setBulkYear(Number(e.target.value))}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {curriculumStorage.getAllSupportedYears().map((yr) => (
+                        <option key={yr} value={yr}>
+                          دورة عام {yr}م
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quick 15-Pattern Template Selector for Bulk Import */}
+            <div className="p-4 bg-indigo-950 text-white rounded-2xl border border-indigo-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-black">اختر نموذج/قالب لأي نمط من الـ 15 نمطاً لتحميل كوده تلقائياً:</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={questionType}
+                    onChange={(e) => {
+                      const newType = e.target.value as QuestionType;
+                      setQuestionType(newType);
+                      setBulkJsonText(PATTERN_TEMPLATES[newType] || EXAMPLE_JSON_BULK);
+                    }}
+                    className="bg-slate-900 border border-slate-700 text-emerald-400 font-bold text-xs rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    {Object.entries(QUESTION_TYPE_LABELS).map(([k, label]) => (
+                      <option key={k} value={k}>
+                        {label}
                       </option>
                     ))}
                   </select>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopyTemplate(questionType)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>نسخ</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadTemplate(questionType)}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>تنزيل</span>
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Example JSON Details */}
@@ -2167,7 +2961,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               <summary className="font-black text-slate-800 cursor-pointer flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-emerald-600" />
-                  <span>عرض مثال لهيكل ملف JSON المقبول للأنماط الـ 15 (اضغط للعرض)</span>
+                  <span>عرض مثال عام لهيكل ملف JSON المقبول (اضغط للعرض)</span>
                 </span>
                 <span className="text-[11px] text-slate-400 group-open:hidden">إظهار</span>
                 <span className="text-[11px] text-slate-400 hidden group-open:inline">إخفاء</span>

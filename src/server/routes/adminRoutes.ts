@@ -329,6 +329,87 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
 });
 
 /**
+ * PUT /api/admin/questions/:id
+ * Updates an existing centrally managed question (content, answers, marks, explanation).
+ */
+router.put('/questions/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const questionId = req.params.id;
+  const { prompt, content, correctAnswer, allocatedMarks, explanationAr } = req.body;
+
+  if (!questionId) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'Question ID parameter is required', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const check = await client.query('SELECT * FROM question_bank WHERE id = $1', [questionId]);
+    if (check.rows.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Question not found in database', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const currentQ = check.rows[0];
+    const newPrompt = prompt !== undefined ? prompt : currentQ.prompt;
+    const newContent = content !== undefined ? content : currentQ.content;
+    const newCorrectAnswer = correctAnswer !== undefined ? correctAnswer : currentQ.correct_answer;
+    const newMarks = allocatedMarks !== undefined ? Number(allocatedMarks) : currentQ.marks;
+    const newExplanation = explanationAr !== undefined ? explanationAr : currentQ.explanation;
+
+    await client.query(
+      `UPDATE question_bank
+       SET prompt = $1, content = $2, correct_answer = $3, marks = $4, explanation = $5, updated_at = NOW()
+       WHERE id = $6`,
+      [
+        newPrompt,
+        typeof newContent === 'object' ? JSON.stringify(newContent) : newContent,
+        typeof newCorrectAnswer === 'object' ? JSON.stringify(newCorrectAnswer) : newCorrectAnswer,
+        newMarks,
+        newExplanation,
+        questionId
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: questionId,
+        prompt: newPrompt,
+        content: newContent,
+        correctAnswer: newCorrectAnswer,
+        allocatedMarks: newMarks,
+        explanationAr: newExplanation,
+      },
+      message: 'تم تحديث بيانات السؤال والخريطة بنجاح',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[admin/questions:PUT] Error updating question:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to update question in database', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
+  }
+});
+
+/**
  * DELETE /api/admin/questions/:id
  * Deletes question or safely archives it if referenced by existing attempts (ON DELETE RESTRICT).
  */

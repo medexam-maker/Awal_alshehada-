@@ -82,6 +82,18 @@ export function autoGrade(
     };
   }
 
+  if (questionType === QuestionType.CONTOUR_MAP) {
+    const c = (content || {}) as Record<string, any>;
+    const ca = (correctAnswer || {}) as Record<string, any>;
+    const sa = (studentAnswer || {}) as Record<string, any>;
+
+    const contourResult = gradeContourMapQuestion(c, ca, sa, maxMarks);
+    return {
+      obtainedMarks: contourResult.obtainedMarks,
+      gradingStatus: GradingStatus.AUTO_GRADED,
+    };
+  }
+
   const registryEntry = QUESTION_TYPE_REGISTRY[questionType];
   
   if (registryEntry.grading === GradingStrategy.MANUAL) {
@@ -660,5 +672,325 @@ export function gradeSingleStepCommitment(
     awardedMarks: 0,
     stepMaxMarks,
     canonicalOptionId
+  };
+}
+
+// ==========================================
+// PATTERN 11: CONTOUR MAP AUTOGRADING ENGINE
+// ==========================================
+
+export interface ContourSubResult {
+  subQId: string;
+  studentAnswer: any;
+  correctAnswer: any;
+  isCorrect: boolean;
+  earnedFraction: number;
+  explanation?: string;
+}
+
+export interface ContourMapGradingOutcome {
+  isCorrect: boolean;
+  obtainedMarks: number;
+  maxMarks: number;
+  subResults: ContourSubResult[];
+}
+
+export function normalizeArabicContourText(text: string): string {
+  if (!text) return '';
+  let norm = String(text).trim();
+  // Strip diacritics
+  norm = norm.replace(/[\u064B-\u065F]/g, '');
+  // Unify Arabic letters: أ/إ/آ -> ا, ة -> ه, ى -> ي, ؤ -> و, ئ -> ي
+  norm = norm
+    .replace(/[أإآء]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي');
+  // Strip common directional prefix filler
+  norm = norm.replace(/(^|\s+)(من|الي|إلي|نحو|باتجاه|اتجاه)(\s+|$)/g, ' ');
+  // Strip leading definite article 'ال' at word boundaries
+  norm = norm.replace(/(^|\s+)ال/g, '$1');
+  // Compress whitespace
+  norm = norm.replace(/\s+/g, ' ').trim().toLowerCase();
+  return norm;
+}
+
+const EIGHT_DIRECTIONS = [
+  'شمال شرقي',
+  'شمال غربي',
+  'جنوب شرقي',
+  'جنوب غربي',
+  'شمال',
+  'جنوب',
+  'شرق',
+  'غرب'
+];
+
+/**
+ * Checks if a 2D point [x, y] is inside a polygon [[x,y], [x,y], ...]
+ */
+function isPointInPolygon(point: [number, number], vs: [number, number][]): boolean {
+  if (!Array.isArray(vs) || vs.length < 3) return false;
+  const x = point[0];
+  const y = point[1];
+  let inside = false;
+  for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+    const xi = vs[i][0];
+    const yi = vs[i][1];
+    const xj = vs[j][0];
+    const yj = vs[j][1];
+    const intersect = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Calculates Intersection over Union (IoU) of two polygons via bounding grid sampling.
+ */
+export function calculatePolygonIoU(polyA: [number, number][], polyB: [number, number][]): number {
+  if (!Array.isArray(polyA) || polyA.length < 3 || !Array.isArray(polyB) || polyB.length < 3) {
+    return 0;
+  }
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const pt of [...polyA, ...polyB]) {
+    if (Array.isArray(pt) && pt.length >= 2) {
+      if (pt[0] < minX) minX = pt[0];
+      if (pt[0] > maxX) maxX = pt[0];
+      if (pt[1] < minY) minY = pt[1];
+      if (pt[1] > maxY) maxY = pt[1];
+    }
+  }
+
+  if (minX >= maxX || minY >= maxY) return 0;
+
+  const steps = 30; // 30x30 = 900 points sampling
+  const stepX = (maxX - minX) / steps;
+  const stepY = (maxY - minY) / steps;
+
+  let inA = 0;
+  let inB = 0;
+  let inBoth = 0;
+
+  for (let i = 0; i <= steps; i++) {
+    const px = minX + i * stepX;
+    for (let j = 0; j <= steps; j++) {
+      const py = minY + j * stepY;
+      const pt: [number, number] = [px, py];
+      const insideA = isPointInPolygon(pt, polyA);
+      const insideB = isPointInPolygon(pt, polyB);
+
+      if (insideA) inA++;
+      if (insideB) inB++;
+      if (insideA && insideB) inBoth++;
+    }
+  }
+
+  const union = inA + inB - inBoth;
+  if (union <= 0) return 0;
+  return inBoth / union;
+}
+
+/**
+ * Extracts polygon point array from varied object shapes
+ */
+function extractPolygonPoints(raw: any): [number, number][] | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) {
+    if (raw.length >= 3 && Array.isArray(raw[0])) {
+      return raw as [number, number][];
+    }
+  }
+  if (typeof raw === 'object') {
+    if (Array.isArray(raw.polygon) && raw.polygon.length >= 3) {
+      return raw.polygon as [number, number][];
+    }
+    if (Array.isArray(raw.points) && raw.points.length >= 3) {
+      return raw.points as [number, number][];
+    }
+    if (Array.isArray(raw.regions) && raw.regions.length > 0) {
+      const first = raw.regions[0];
+      if (Array.isArray(first?.polygon) && first.polygon.length >= 3) {
+        return first.polygon as [number, number][];
+      }
+    }
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return extractPolygonPoints(parsed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Autogrades Pattern 11 (CONTOUR_MAP) question deterministically
+ */
+export function gradeContourMapQuestion(
+  content: Record<string, any>,
+  correctAnswer: Record<string, any>,
+  studentAnswer: Record<string, any>,
+  totalMaxMarks: number
+): ContourMapGradingOutcome {
+  const subQuestions: any[] = Array.isArray(content.subQuestions)
+    ? content.subQuestions
+    : Array.isArray(content.questions)
+      ? content.questions
+      : [];
+  const correctSubAnswers: Record<string, any> =
+    correctAnswer.subAnswers || (typeof correctAnswer === 'object' ? correctAnswer : {});
+
+  const studentSubAnswers: Record<string, any> =
+    studentAnswer.subAnswers || (typeof studentAnswer === 'object' ? studentAnswer : {});
+
+  // Fallback for legacy JSON questions without subQuestions array
+  if (subQuestions.length === 0) {
+    const keys = Array.from(
+      new Set([...Object.keys(correctSubAnswers), ...Object.keys(studentSubAnswers)])
+    );
+    if (keys.length === 0) {
+      return {
+        isCorrect: false,
+        obtainedMarks: 0,
+        maxMarks: totalMaxMarks,
+        subResults: []
+      };
+    }
+
+    let correctCount = 0;
+    const subResults: ContourSubResult[] = [];
+
+    for (const k of keys) {
+      const rawStudent = studentSubAnswers[k];
+      const rawCorrect = correctSubAnswers[k];
+      const normS = normalizeArabicContourText(rawStudent);
+      const normC = normalizeArabicContourText(rawCorrect);
+
+      let isMatch = false;
+      if (normS && normC && normS === normC) {
+        isMatch = true;
+      } else if (normS && normC && (normS.includes(normC) || normC.includes(normS))) {
+        isMatch = true;
+      }
+
+      if (isMatch) correctCount++;
+
+      subResults.push({
+        subQId: k,
+        studentAnswer: rawStudent,
+        correctAnswer: rawCorrect,
+        isCorrect: isMatch,
+        earnedFraction: isMatch ? 1 : 0
+      });
+    }
+
+    const obtained = Math.round(((correctCount / keys.length) * totalMaxMarks) * 100) / 100;
+    return {
+      isCorrect: correctCount === keys.length,
+      obtainedMarks: Math.min(totalMaxMarks, obtained),
+      maxMarks: totalMaxMarks,
+      subResults
+    };
+  }
+
+  // Multi-branch standard Contour Map grading
+  const totalUnits = subQuestions.length;
+  let correctUnits = 0;
+  const subResults: ContourSubResult[] = [];
+
+  for (const sq of subQuestions) {
+    const qId = sq.id;
+    const rawStudent = studentSubAnswers[qId];
+    const rawCorrect = correctSubAnswers[qId] !== undefined ? correctSubAnswers[qId] : sq.correctValue;
+    const inputType = sq.inputType || (typeof rawCorrect === 'number' || (!isNaN(Number(rawCorrect)) && rawCorrect !== '') ? 'numeric' : 'text');
+    const explanation = sq.explanation || undefined;
+
+    let isBranchCorrect = false;
+    let earnedFraction = 0;
+
+    if (rawStudent !== undefined && rawStudent !== null && rawStudent !== '') {
+      if (inputType === 'numeric') {
+        const numStudent = parseFloat(String(rawStudent).replace(/[^0-9.-]/g, ''));
+        const numCorrect = parseFloat(String(rawCorrect).replace(/[^0-9.-]/g, ''));
+        const tolerance = typeof sq.numericTolerance === 'number' ? sq.numericTolerance : 0;
+
+        if (!isNaN(numStudent) && !isNaN(numCorrect)) {
+          if (Math.abs(numStudent - numCorrect) <= tolerance) {
+            isBranchCorrect = true;
+            earnedFraction = 1;
+          }
+        }
+      } else if (inputType === 'direction8') {
+        const normS = normalizeArabicContourText(rawStudent);
+        const normC = normalizeArabicContourText(rawCorrect);
+
+        if (normS && normC && normS === normC) {
+          isBranchCorrect = true;
+          earnedFraction = 1;
+        } else {
+          // Check if both resolve to the same 8-direction canonical tag (longest first)
+          const foundS = EIGHT_DIRECTIONS.find(d => normS.includes(normalizeArabicContourText(d)));
+          const foundC = EIGHT_DIRECTIONS.find(d => normC.includes(normalizeArabicContourText(d)));
+          if (foundS && foundC && foundS === foundC) {
+            isBranchCorrect = true;
+            earnedFraction = 1;
+          }
+        }
+      } else if (inputType === 'mapOverlay') {
+        const polyStudent = extractPolygonPoints(rawStudent);
+        const polyCorrect = extractPolygonPoints(rawCorrect);
+        const threshold = typeof sq.overlayMatchThreshold === 'number' ? sq.overlayMatchThreshold : 0.7;
+
+        if (polyStudent && polyCorrect) {
+          const iou = calculatePolygonIoU(polyStudent, polyCorrect);
+          if (iou >= threshold) {
+            isBranchCorrect = true;
+            earnedFraction = 1;
+          } else if (iou >= threshold * 0.75) {
+            // Partial credit if close
+            isBranchCorrect = false;
+            earnedFraction = Math.round((iou / threshold) * 50) / 100;
+          }
+        }
+      } else {
+        // Fallback text matching
+        const normS = normalizeArabicContourText(rawStudent);
+        const normC = normalizeArabicContourText(rawCorrect);
+
+        if (normS && normC && (normS === normC || normS.includes(normC) || normC.includes(normS))) {
+          isBranchCorrect = true;
+          earnedFraction = 1;
+        }
+      }
+    }
+
+    correctUnits += earnedFraction;
+
+    subResults.push({
+      subQId: qId,
+      studentAnswer: rawStudent,
+      correctAnswer: rawCorrect,
+      isCorrect: isBranchCorrect,
+      earnedFraction,
+      explanation
+    });
+  }
+
+  const obtainedMarks = totalUnits > 0
+    ? Math.min(totalMaxMarks, Math.round(((correctUnits / totalUnits) * totalMaxMarks) * 100) / 100)
+    : 0;
+
+  const isAllCorrect = subResults.length > 0 && subResults.every(s => s.isCorrect);
+
+  return {
+    isCorrect: isAllCorrect,
+    obtainedMarks,
+    maxMarks: totalMaxMarks,
+    subResults
   };
 }

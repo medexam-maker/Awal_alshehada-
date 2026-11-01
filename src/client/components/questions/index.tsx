@@ -159,7 +159,18 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       return <DiagramLabelingRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
 
     case QuestionType.CONTOUR_MAP:
-      return <ContourMapRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <ContourMapRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+          autoSaveKey={attemptId ? `${attemptId}_${question.id}` : undefined}
+          attemptId={attemptId}
+        />
+      );
 
     case QuestionType.CALCULATION:
       return (

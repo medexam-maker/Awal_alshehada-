@@ -1,6 +1,7 @@
 import { QuestionType } from '../../shared/constants';
 import { SubjectExamBlueprint, AuthoredQuestion } from '../types/curriculum';
 import { TWELVE_CONTRACT_SUBJECTS } from '../data/contractSubjects';
+import { JEBEL_MARRA_CONTOUR_MAP_SVG_URL } from '../../shared/contourUtils';
 
 /**
  * Creates default authentic Sudanese Secondary Certificate blueprints for each of the 12 subjects.
@@ -1106,6 +1107,85 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
       examYear: 2024,
       status: 'approved',
       createdAt: '2026-01-01T00:00:00.000Z',
+    }
+  );
+
+  // Geography Starter Questions (Pattern 11: CONTOUR_MAP)
+  questions.push(
+    {
+      id: 'geo_contour_sudan_2024_01',
+      subjectSlug: 'geography',
+      patternId: 'geography_q1_a',
+      questionNumber: 1,
+      partLabel: 'أ',
+      questionType: QuestionType.CONTOUR_MAP,
+      prompt: 'من خلال الخريطة الكنتورية الطوبوغرافية المرفقة لإقليم جبل مرة والأنهر الموسمية الممتدة بشرق دارفور، اقرأ البيانات والارتفاعات بعناية ثم أجب عن الفروع المنهجية الأربعة التالية:',
+      content: {
+        mapCode: 'MAP_SUDAN_CONTOUR_GEO_2024',
+        mapUrl: JEBEL_MARRA_CONTOUR_MAP_SVG_URL,
+        prompt: 'من خلال الخريطة الكنتورية الطوبوغرافية المرفقة لإقليم جبل مرة والأنهر الموسمية الممتدة بشرق دارفور، اقرأ البيانات والارتفاعات بعناية ثم أجب عن الفروع المنهجية الأربعة التالية:',
+        subQuestions: [
+          {
+            id: 'cm_1',
+            question: 'ما هي قيمة الفاصل الكنتوري الرأسي بين خطوط الارتفاع المتساوية على الخريطة؟',
+            unit: 'متر',
+            inputType: 'numeric',
+            numericTolerance: 1,
+            hint: 'الفاصل الرأسي = (الفرق بين قيمتي خطين رئيسيين متجاورين) ÷ (عدد الفواصل بينهما)',
+            explanation: 'طريقة الحل المنهجية: طرح المنسوبين الرئيسيّين (1200م - 1000م = 200م) ثم القسمة على عدد الفواصل (10) = 20 متراً.'
+          },
+          {
+            id: 'cm_2',
+            question: 'ما هو الاتجاه العام لانحدار وادي الملوك وجريان الخور الرئيسي في الخريطة؟',
+            unit: '',
+            inputType: 'direction8',
+            options: ['جنوب غربي', 'شمال شرقي', 'جنوب شرقي', 'شمال غربي'],
+            explanation: 'تتجه مجاري المياه الموسمية انحداراً من قمم المرتفعات الشمالية الشرقية نحو المنخفضات السهلية في الجنوب الغربي.'
+          },
+          {
+            id: 'cm_3',
+            question: 'حدد وظلل منطقة التل المخروطي البركاني بالقطاع الأوسط لخريطة جبل مرة.',
+            unit: '',
+            inputType: 'mapOverlay',
+            overlayMatchThreshold: 0.6,
+            explanation: 'تُمثل المنطقة المحددة بالخطوط المغلقة متقاربة الارتفاع بالقطاع الأوسط القمة البركانية للتل المخروطي البالغ منسوبها 1500م.'
+          },
+          {
+            id: 'cm_4',
+            question: 'صف الظاهرة التضاريسية التي تمثلها الخطوط الكنتورية المغلقة ذات المنسوب المتزايد للداخل.',
+            unit: '',
+            inputType: 'text',
+            options: ['تل مخروطي بركاني', 'هضبة شديدة الانحدار', 'حافة جرف صخري', 'خانق نهري عميق'],
+            explanation: 'الخطوط الكنتورية الدائرية أو البيضاوية المغلقة التي ترتفع مناسيبها نحو الداخل تُعبر عن ظاهرة التل المخروطي البركاني.'
+          }
+        ]
+      },
+      correctAnswer: {
+        subAnswers: {
+          cm_1: '20',
+          cm_2: 'جنوب غربي',
+          cm_3: {
+            regions: [
+              {
+                polygon: [
+                  [35, 25],
+                  [65, 25],
+                  [70, 50],
+                  [50, 65],
+                  [30, 45]
+                ]
+              }
+            ]
+          },
+          cm_4: 'تل مخروطي بركاني'
+        }
+      },
+      allocatedMarks: 10,
+      explanationAr: 'خريطة كنتورية طوبوغرافية معتمدة لإقليم جبل مرة بدارفور تقيس مهارات حساب الفاصل، تحليل الاتجاه الجغرافي، التحديد المكاني، ووصف الظواهر التضاريسية.',
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2024-05-10T15:00:00Z'
     }
   );
 
