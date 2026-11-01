@@ -463,11 +463,25 @@ export function autoGrade(
       }
     }
 
-    if (correctSeq.length > 0) {
-      if (studentSeq.length === correctSeq.length) {
-        isCorrect = correctSeq.every((word, idx) =>
+    const flattenWords = (list: string[]): string[] => {
+      const result: string[] = [];
+      for (const item of list) {
+        if (typeof item === 'string') {
+          const parts = item.trim().split(/\s+/).filter(Boolean);
+          result.push(...parts);
+        }
+      }
+      return result;
+    };
+
+    const flatCorrect = flattenWords(correctSeq);
+    const flatStudent = flattenWords(studentSeq);
+
+    if (flatCorrect.length > 0) {
+      if (flatStudent.length === flatCorrect.length) {
+        isCorrect = flatCorrect.every((word, idx) =>
           normalizeText(word, { trimWhitespace: true, ignoreDiacritics: true }) ===
-          normalizeText(studentSeq[idx] || '', { trimWhitespace: true, ignoreDiacritics: true })
+          normalizeText(flatStudent[idx] || '', { trimWhitespace: true, ignoreDiacritics: true })
         );
       } else {
         isCorrect = false;

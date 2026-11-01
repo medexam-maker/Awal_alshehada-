@@ -170,12 +170,16 @@ export const MatchingRenderer: React.FC<MatchingRendererProps> = ({
       newConnections[selectedSourceId] = targetCardId;
       onChange({ connections: newConnections });
 
-      // Play audio feedback
-      const isCorrect = checkIsPairCorrect(selectedSourceId, targetCardId);
-      if (isCorrect) {
-        playFeedbackSound('correct');
+      // Play audio feedback (only in training mode)
+      if (examMode === 'simulator') {
+        playWaterDrop();
       } else {
-        playFeedbackSound('incorrect');
+        const isCorrect = checkIsPairCorrect(selectedSourceId, targetCardId);
+        if (isCorrect) {
+          playFeedbackSound('correct');
+        } else {
+          playFeedbackSound('incorrect');
+        }
       }
 
       setSelectedSourceId(null);
@@ -250,18 +254,22 @@ export const MatchingRenderer: React.FC<MatchingRendererProps> = ({
               const isConnected = Boolean(connectedTargetId);
               const matchBadgeNum = isConnected ? connectedSourceIds.indexOf(source.id) + 1 : null;
 
-              const isCorrectTraining = isConnected && checkIsPairCorrect(source.id, connectedTargetId!);
-              const isIncorrectTraining = isConnected && !isCorrectTraining;
+              const isCorrectTraining = isTraining && isConnected && checkIsPairCorrect(source.id, connectedTargetId!);
+              const isIncorrectTraining = isTraining && isConnected && !isCorrectTraining;
 
               let cardStyle = 'bg-white text-slate-800 border-slate-200 hover:border-indigo-300 hover:bg-slate-50 shadow-2xs';
 
               if (isSelected) {
                 cardStyle = 'bg-indigo-600 text-white border-indigo-700 shadow-xl scale-[1.02] ring-2 ring-indigo-300';
               } else if (isConnected) {
-                if (isCorrectTraining) {
-                  cardStyle = 'bg-emerald-500 text-white border-emerald-600 shadow-sm';
-                } else if (isIncorrectTraining) {
-                  cardStyle = 'bg-rose-500 text-white border-rose-600 shadow-sm';
+                if (isTraining) {
+                  if (isCorrectTraining) {
+                    cardStyle = 'bg-emerald-500 text-white border-emerald-600 shadow-sm';
+                  } else if (isIncorrectTraining) {
+                    cardStyle = 'bg-rose-500 text-white border-rose-600 shadow-sm';
+                  }
+                } else {
+                  cardStyle = 'bg-indigo-50 border-indigo-400 text-indigo-950 font-bold shadow-xs';
                 }
               }
 
@@ -332,8 +340,8 @@ export const MatchingRenderer: React.FC<MatchingRendererProps> = ({
               const isConnected = Boolean(connectedSourceId);
               const matchBadgeNum = isConnected ? connectedSourceIds.indexOf(connectedSourceId) + 1 : null;
 
-              const isCorrectTraining = isConnected && checkIsPairCorrect(connectedSourceId, target.id);
-              const isIncorrectTraining = isConnected && !isCorrectTraining;
+              const isCorrectTraining = isTraining && isConnected && checkIsPairCorrect(connectedSourceId, target.id);
+              const isIncorrectTraining = isTraining && isConnected && !isCorrectTraining;
 
               const isSelectableForTarget = Boolean(selectedSourceId && !isConnected);
 
@@ -342,10 +350,14 @@ export const MatchingRenderer: React.FC<MatchingRendererProps> = ({
               if (isSelectableForTarget) {
                 cardStyle = 'bg-indigo-50/80 border-indigo-400 text-indigo-950 hover:bg-indigo-100/80 hover:border-indigo-500 scale-[1.01] shadow-md ring-2 ring-indigo-200';
               } else if (isConnected) {
-                if (isCorrectTraining) {
-                  cardStyle = 'bg-emerald-500 text-white border-emerald-600 shadow-sm';
-                } else if (isIncorrectTraining) {
-                  cardStyle = 'bg-rose-500 text-white border-rose-600 shadow-sm';
+                if (isTraining) {
+                  if (isCorrectTraining) {
+                    cardStyle = 'bg-emerald-500 text-white border-emerald-600 shadow-sm';
+                  } else if (isIncorrectTraining) {
+                    cardStyle = 'bg-rose-500 text-white border-rose-600 shadow-sm';
+                  }
+                } else {
+                  cardStyle = 'bg-indigo-500 text-white border-indigo-600 shadow-sm';
                 }
               }
 

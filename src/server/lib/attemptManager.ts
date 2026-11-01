@@ -1,6 +1,6 @@
 import { pool } from '../db/index';
 import { selectQuestions } from './questionSelection';
-import { createClientSnapshot, createDbSnapshot } from './snapshot';
+import { createClientSnapshot, createDbSnapshot, createSnapshotPair } from './snapshot';
 import { autoGrade } from './scoringEngine';
 import { ExamMode, BankType, GradingStatus, QuestionType } from '../../shared/constants';
 import { validateQuestionAnswer, validateMcqAnswer } from '../../shared/validation/schemas';
@@ -145,8 +145,7 @@ export async function startExam(
 
             for (let i = 0; i < questions.length; i++) {
                 const q = questions[i];
-                const dbSnapshot = createDbSnapshot(q);
-                const clientSnapshot = createClientSnapshot(q, examMode, i + 1, isWeeklySimulation);
+                const { dbSnapshot, clientSnapshot } = createSnapshotPair(q, examMode, i + 1, isWeeklySimulation);
 
                 eaqValues.push(attemptId, q.id, i + 1, q.marks, JSON.stringify(dbSnapshot));
                 const eaqOffset = eaqValues.length - 5;

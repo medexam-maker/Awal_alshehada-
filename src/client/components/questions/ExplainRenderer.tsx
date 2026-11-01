@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { playFeedbackSound } from '../../utils/soundManager';
+import { playWaterDrop } from '../../utils/soundEffects';
 
 export interface ExplainRendererProps {
   questionId?: string;
@@ -72,15 +73,10 @@ function processExplainContent(
   correctAnswer: any,
   seedStr: string
 ): { correctOrder: string[]; initialBank: Chunk[] } {
-  // 1. If snapshot already provided pre-computed shuffledBank and correctOrder, use them directly!
-  if (
-    Array.isArray(content?.shuffledBank) &&
-    content.shuffledBank.length > 0 &&
-    Array.isArray(content?.correctOrder) &&
-    content.correctOrder.length > 0
-  ) {
+  // 1. If snapshot already provided pre-computed shuffledBank, use it directly!
+  if (Array.isArray(content?.shuffledBank) && content.shuffledBank.length > 0) {
     const rawBank = content.shuffledBank as Chunk[];
-    const rawOrder = content.correctOrder as string[];
+    const rawOrder = Array.isArray(content?.correctOrder) ? (content.correctOrder as string[]) : [];
     return {
       correctOrder: rawOrder,
       initialBank: deduplicateChunkIds(rawBank),
@@ -163,6 +159,7 @@ const WordBlockExplainRenderer: React.FC<ExplainRendererProps> = ({
   onChange,
   isReadonly = false,
   correctAnswer,
+  examMode = 'training',
 }) => {
   const questionKey = questionId || content?.id || content?.prompt || content?.targetPhenomenon || 'explain_q';
   const prevQuestionKeyRef = useRef<string | null>(null);
@@ -172,7 +169,8 @@ const WordBlockExplainRenderer: React.FC<ExplainRendererProps> = ({
     return processExplainContent(content, correctAnswer, questionKey);
   }, [content?.prompt, content?.targetPhenomenon, content?.id, questionKey, Boolean(content?.shuffledBank)]);
 
-  const hasChunks = correctOrder.length > 0;
+  const hasChunks = initialBank.length > 0;
+  const isFreeMode = examMode === 'simulator' || correctOrder.length === 0;
 
   // Active State
   const [bank, setBank] = useState<Chunk[]>([]);
@@ -240,9 +238,25 @@ const WordBlockExplainRenderer: React.FC<ExplainRendererProps> = ({
     };
   }, []);
 
-  // Handle Chunk Click in Bank (Immediate Step-by-Step Validation)
+  // Handle Chunk Click in Bank
   const handleChunkClick = (chunk: Chunk) => {
     if (isReadonly || successChunkId || errorChunkId) return;
+
+    if (isFreeMode) {
+      playWaterDrop();
+      const nextAnswer = [...constructedAnswer, chunk];
+      const nextBank = bank.filter((c) => c.id !== chunk.id);
+
+      setConstructedAnswer(nextAnswer);
+      setBank(nextBank);
+
+      onChange({
+        sequence: nextAnswer.map((c) => c.text),
+        chunkIds: nextAnswer.map((c) => c.id),
+        text: nextAnswer.map((c) => c.text).join(' '),
+      });
+      return;
+    }
 
     const expectedNextId = correctOrder[constructedAnswer.length];
     const clickedId = chunk.id;
@@ -355,7 +369,7 @@ const WordBlockExplainRenderer: React.FC<ExplainRendererProps> = ({
     });
   };
 
-  const isCompleted = hasChunks && constructedAnswer.length === correctOrder.length;
+  const isCompleted = !isFreeMode && hasChunks && correctOrder.length > 0 && constructedAnswer.length === correctOrder.length;
 
   // Fallback: Free-text textarea if no chunks exist
   if (!hasChunks) {

@@ -647,6 +647,14 @@ async function runFillBlankVerification() {
       return { rows: [{ id: params[0] }] };
     }
 
+    if (q.includes('FROM subjects')) {
+      return { rows: [{ id: params[0] }] };
+    }
+
+    if (q.includes('COUNT(*)')) {
+      return { rows: [{ cnt: 3 }] };
+    }
+
     if (q.includes('FROM exam_attempts ea') && q.includes('status = \'active\'')) {
       const found = testDb.exam_attempts.find(
         (a) => a.user_id === params[0] && a.subject_id === params[1] && a.status === 'active'
