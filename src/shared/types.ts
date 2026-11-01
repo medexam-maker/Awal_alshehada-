@@ -142,6 +142,8 @@ export interface ExplainContent {
   correctSequence?: string[];
   distractorWords?: string[];
   validReasons?: string[];
+  /** select_reason_from_list mode: candidate reasons (ids only; correct ids live in correct_answer.selectedReasonIds) */
+  reasonOptions?: Array<{ id: string; text: string }>;
   allowFreeText?: boolean;
   topicChoiceOptions?: TopicChoiceOption[];
 }

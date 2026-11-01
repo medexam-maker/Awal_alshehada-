@@ -16,6 +16,7 @@ export interface ExplainRendererProps {
     words?: string[];
     allowFreeText?: boolean;
     correctAnswer?: any;
+    reasonOptions?: Array<{ id: string; text: string }>;
   };
   answer?: any;
   onChange: (ans: any) => void;
@@ -155,7 +156,7 @@ function processExplainContent(
   return { correctOrder, initialBank };
 }
 
-export const ExplainRenderer: React.FC<ExplainRendererProps> = ({
+const WordBlockExplainRenderer: React.FC<ExplainRendererProps> = ({
   questionId,
   content,
   answer,
@@ -496,3 +497,74 @@ export const ExplainRenderer: React.FC<ExplainRendererProps> = ({
     </div>
   );
 };
+
+
+/**
+ * select_reason_from_list mode: student ticks every valid reason.
+ * Answer shape: { selectedReasonIds: string[], text: string }
+ */
+const ReasonListExplainRenderer: React.FC<ExplainRendererProps> = ({
+  content,
+  answer,
+  onChange,
+  isReadonly = false,
+  correctAnswer,
+  examMode = 'training',
+}) => {
+  const options = content.reasonOptions || [];
+  const selected: string[] = Array.isArray(answer?.selectedReasonIds) ? answer.selectedReasonIds.map(String) : [];
+  const correctIds: string[] | null =
+    examMode === 'training' && Array.isArray(correctAnswer?.selectedReasonIds)
+      ? correctAnswer.selectedReasonIds.map(String)
+      : null;
+
+  const toggle = (id: string) => {
+    if (isReadonly) return;
+    const next = selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id];
+    onChange({
+      selectedReasonIds: next,
+      text: options.filter((o) => next.includes(o.id)).map((o) => o.text).join(' '),
+    });
+  };
+
+  return (
+    <div className="space-y-3" dir="rtl">
+      <div className="text-xs font-bold text-slate-600 px-1">اختر جميع الأسباب الصحيحة:</div>
+      {options.map((o) => {
+        const isSel = selected.includes(o.id);
+        const showFeedback = isReadonly && correctIds !== null;
+        const isRight = correctIds?.includes(o.id);
+        const cls = showFeedback
+          ? isRight
+            ? 'bg-emerald-50 border-emerald-400 text-emerald-900'
+            : isSel
+            ? 'bg-rose-50 border-rose-400 text-rose-900'
+            : 'bg-white border-slate-200 text-slate-700'
+          : isSel
+          ? 'bg-indigo-50 border-indigo-400 text-indigo-900'
+          : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50';
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="checkbox"
+            aria-checked={isSel}
+            disabled={isReadonly}
+            onClick={() => toggle(o.id)}
+            className={`w-full text-right p-4 rounded-2xl border-2 font-semibold text-sm md:text-base transition-all cursor-pointer ${cls}`}
+          >
+            {o.text}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+export const ExplainRenderer: React.FC<ExplainRendererProps> = (props) => {
+  if (Array.isArray(props.content?.reasonOptions) && props.content.reasonOptions.length > 0) {
+    return <ReasonListExplainRenderer {...props} />;
+  }
+  return <WordBlockExplainRenderer {...props} />;
+};
+

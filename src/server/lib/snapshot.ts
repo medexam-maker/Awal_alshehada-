@@ -149,6 +149,30 @@ export function createClientSnapshot(
         }
     }
 
+    // EXPLAIN — select_reason_from_list mode (ID-to-ID selection, no word-block chunks)
+    if (
+        row.question_type === 'explain' &&
+        Array.isArray(rawContentObj.reasonOptions) &&
+        (rawContentObj.reasonOptions as unknown[]).length > 0
+    ) {
+        const rawCa = (row.correct_answer && typeof row.correct_answer === 'object') ? (row.correct_answer as Record<string, unknown>) : {};
+        const options = (rawContentObj.reasonOptions as Array<Record<string, unknown>>).map((o) => ({
+            id: String(o.id),
+            text: String(o.text ?? ''),
+        }));
+        snap.content = {
+            prompt: promptText,
+            targetPhenomenon: rawContentObj.targetPhenomenon || promptText,
+            reasonOptions: options,
+        };
+        if (examMode === ExamMode.TRAINING) {
+            snap.correctAnswer = { selectedReasonIds: Array.isArray(rawCa.selectedReasonIds) ? rawCa.selectedReasonIds : [] };
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+        }
+        return snap;
+    }
+
     // Special Deterministic Snapshot handling for EXPLAIN & WORD_BLOCK_EXPLAIN
     if (row.question_type === 'explain' || row.question_type === 'word_block_explain') {
         const rawSeq = Array.isArray(rawContentObj.correctSequence)

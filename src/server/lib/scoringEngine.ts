@@ -425,6 +425,27 @@ export function autoGrade(
   } else if (questionType === QuestionType.EXPLAIN) {
     const c = (content || {}) as Record<string, unknown>;
     const ca = (correctAnswer || {}) as Record<string, unknown>;
+
+    // select_reason_from_list: ID-to-ID selection, proportional credit, wrong picks cancel right picks
+    if (Array.isArray(c.reasonOptions) && c.reasonOptions.length > 0) {
+      const correctIds = new Set<string>(
+        (Array.isArray(ca.selectedReasonIds) ? ca.selectedReasonIds : []).map((x: unknown) => String(x))
+      );
+      if (correctIds.size === 0) {
+        return { obtainedMarks: 0, gradingStatus: GradingStatus.MANUAL_PENDING };
+      }
+      const saObj = (studentAnswer && typeof studentAnswer === 'object') ? (studentAnswer as Record<string, unknown>) : {};
+      const picked = new Set<string>(
+        (Array.isArray(saObj.selectedReasonIds) ? saObj.selectedReasonIds : []).map((x: unknown) => String(x))
+      );
+      let right = 0;
+      let wrong = 0;
+      picked.forEach((id) => (correctIds.has(id) ? right++ : wrong++));
+      const ratio = Math.max(0, right - wrong) / correctIds.size;
+      obtainedMarks = Math.min(1, ratio) * maxMarks;
+      obtainedMarks = Math.max(0, Math.min(obtainedMarks, maxMarks));
+      return { obtainedMarks, gradingStatus: GradingStatus.AUTO_GRADED };
+    }
     const sa = studentAnswer as Record<string, unknown> | string[] | undefined;
 
     const correctSeqRaw = ca?.correctSequence || c?.correctSequence || ca?.sequence || ca?.words || c?.words;

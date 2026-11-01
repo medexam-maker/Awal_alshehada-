@@ -24,6 +24,11 @@
 | **2.5** | Dual-Mode Resilience (Live + Standalone Curriculum) | `docs/contracts/WEB_MOBILE_CONTRACT.md` §10 | `src/client/data/demoCurriculum.ts`<br>`src/client/context/ExamContext.tsx` | ✅ Done |
 | **2.6** | Pattern 01: Multiple Choice Lifecycle (Input, Save, Display, Grading) | Owner Approved Architecture | `src/client/pages/admin/AdminDashboard.tsx`<br>`src/server/routes/adminRoutes.ts`<br>`src/client/components/questions/MultipleChoiceRenderer.tsx`<br>`src/server/lib/scoringEngine.ts`<br>`scripts/verifyMCQPattern.ts` | ✅ Done |
 | **2.6** | Pattern 02: True / False Lifecycle (Input, Save, Display, Grading) | Owner Approved Architecture | `src/client/pages/admin/AdminDashboard.tsx`<br>`src/server/routes/adminRoutes.ts`<br>`src/client/components/questions/TrueFalseRenderer.tsx`<br>`src/server/lib/scoringEngine.ts`<br>`scripts/verifyTrueFalsePattern.ts` | ✅ Done |
+| **2.6** | Pattern 07: Explain / Justify (Word-Block + select_reason_from_list) | `docs/contracts/QUESTION_TYPES_CONTRACT.md` §7 | `src/shared/types.ts`<br>`src/server/lib/snapshot.ts`<br>`src/server/lib/scoringEngine.ts`<br>`src/client/components/questions/ExplainRenderer.tsx`<br>`scripts/verifyExplainPattern.ts`<br>`tests/pattern7.test.ts` | ✅ Done |
+| **2.6** | Matching / Ordering / Long Essay Verification Suites | `docs/contracts/QUESTION_TYPES_CONTRACT.md` | `scripts/verifyMatchingOrderingEssayPatterns.ts` | ✅ Done |
+| **2.6** | Pattern 08: Short Structured Essay Lifecycle | Owner Approved Architecture | `src/client/pages/admin/AdminDashboard.tsx`<br>`src/server/routes/adminRoutes.ts`<br>`src/client/components/questions/ShortEssayRenderer.tsx`<br>`src/server/lib/scoringEngine.ts`<br>`tests/pattern8_shortEssay.test.ts` | ✅ Done |
+| **2.6** | Pattern 11: Contour Map (CONTOUR_MAP) Lifecycle | Owner Approved Architecture | `src/shared/contourUtils.ts`<br>`src/client/components/questions/ContourMapRenderer.tsx`<br>`src/server/lib/scoringEngine.ts`<br>`tests/pattern11_contourMap.test.ts` | ✅ Done |
 
-*(Updated: 2026-10-17 — Patterns 01 (MCQ) & 02 (True/False) Complete with Full Verification Suites)*
+*(Updated: 2026-11-01 — Explain (word-block + select_reason_from_list) Done; Matching/Ordering/Long Essay verification Done; Patterns 7, 8, 11 Done (tests pass))*
+
 
