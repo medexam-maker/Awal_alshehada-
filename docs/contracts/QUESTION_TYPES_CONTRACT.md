@@ -482,7 +482,7 @@ Correct Answer (Server only):
   - "minGroups": minimum number of concept groups required (default min(2, keywordGroups.length)).
 
 Runtime Snapshots:
-- In Training mode: "trainingChoices" and "correctAnswer.selectedItemIds" are present for zero-latency local feedback.
+- In Training mode: "trainingChoices" and "correctAnswer.selectedItemIds" are present for zero-latency local feedback. The author writes all three reason choices in any order and marks the correct one with `correctAnswer.reasoning.correctChoiceId`; the system shuffles the choices per attempt.
 - In Simulator mode: "trainingChoices", "keywordGroups", and answer keys are strictly stripped. "reasoning.prompt" is ALWAYS present so the student provides free-text justification without revealing stage-1 correctness.
 
 Student Answer:

@@ -741,6 +741,34 @@ export function createSnapshotPair(
             marks: row.marks,
             explanation: row.explanation,
         };
+    } else if (row.question_type === 'odd_one_out') {
+        const rawReasoning = rawContentObj.reasoning as Record<string, unknown> | undefined;
+        let finalReasoning = rawReasoning;
+        if (rawReasoning && Array.isArray(rawReasoning.trainingChoices) && rawReasoning.trainingChoices.length > 0) {
+            const shuffledChoices = [...rawReasoning.trainingChoices];
+            for (let i = shuffledChoices.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffledChoices[i], shuffledChoices[j]] = [shuffledChoices[j], shuffledChoices[i]];
+            }
+            finalReasoning = {
+                ...rawReasoning,
+                trainingChoices: shuffledChoices,
+            };
+        }
+
+        dbSnapshot = {
+            id: row.id,
+            subject_id: row.subject_id,
+            question_type: row.question_type,
+            content: {
+                ...rawContentObj,
+                ...(finalReasoning ? { reasoning: finalReasoning } : {}),
+            },
+            correct_answer: row.correct_answer,
+            primary_interaction_mode: row.primary_interaction_mode,
+            marks: row.marks,
+            explanation: row.explanation,
+        };
     } else {
         dbSnapshot = createDbSnapshot(row);
     }

@@ -464,7 +464,6 @@ export function autoGrade(
               if (typeof kw !== 'string' || !kw.trim()) return false;
               const normKw = normalizeArabicText(kw);
               if (!normKw) return false;
-              if (normUserText.includes(normKw)) return true;
               const kwWords = normKw.split(/\s+/).filter(Boolean);
               if (kwWords.length === 0) return false;
               return kwWords.every((kwWord) =>
