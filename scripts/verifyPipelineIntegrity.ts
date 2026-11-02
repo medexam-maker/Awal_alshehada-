@@ -92,4 +92,148 @@ t('E.1 training snapshot still carries correctAnswer', () => {
   const s: any = createSnapshotPair(ROWS.true_false, ExamMode.TRAINING, 1).clientSnapshot;
   assert.deepStrictEqual(s.correctAnswer, { value: true });
 });
+
+console.log('--- F. Simulator coverage for Patterns 7, 8, 11 ---');
+
+// F.1 Pattern 7 (Calculation / Multi-step)
+const calcRow = mk('calculation', {
+  mode: 'multi_step_mcq',
+  prompt: 'مسألة حسابية',
+  steps: [
+    { id: 's1', order: 1, prompt: 'الخطوة 1', marks: 2, options: [{ id: 'opt_1a', label: '10' }, { id: 'opt_1b', label: '20' }] },
+    { id: 's2', order: 2, prompt: 'الخطوة 2', marks: 2, options: [{ id: 'opt_2a', label: '100' }, { id: 'opt_2b', label: '200' }] }
+  ]
+}, {
+  step_answers: {
+    s1: { canonical_option_id: 'opt_1a', marks: 2 },
+    s2: { canonical_option_id: 'opt_2a', marks: 2 }
+  },
+  conditional_credit_rules: [
+    {
+      rule_id: 'r_s2',
+      target_step_id: 's2',
+      awarded_option_id: 'opt_2b',
+      prerequisite_step_id: 's1',
+      prerequisite_option_id: 'opt_1b',
+      credit_fraction: 0.5
+    }
+  ]
+});
+
+const CALC_LEAK_MARKERS = [
+  'correctAnswer', 'SECRET_EXPLANATION', 'step_answers', 'stepAnswers',
+  'conditional_credit_rules', 'conditionalCreditRules', 'canonical_option_id',
+  'canonicalOptionId', 'awarded_option_id', 'awardedOptionId', 'prerequisite_option_id',
+  'prerequisiteOptionId'
+];
+
+t('F.1.a calculation: no answer keys in simulator client snapshot', () => {
+  const { clientSnapshot } = createSnapshotPair(calcRow, ExamMode.SIMULATOR, 1);
+  const json = JSON.stringify(clientSnapshot);
+  const leaks = CALC_LEAK_MARKERS.filter((k) => json.includes(k));
+  assert.deepStrictEqual(leaks, [], `calculation leaked: ${leaks.join(', ')}`);
+});
+
+t('F.1.b calculation: perfect answer scores full marks, wrong scores 0', () => {
+  const { dbSnapshot } = createSnapshotPair(calcRow, ExamMode.SIMULATOR, 1);
+  const perfectAns = { step_answers: { s1: 'opt_1a', s2: 'opt_2a' } };
+  const rPerfect = autoGrade('calculation' as any, (dbSnapshot as any).content, (dbSnapshot as any).correct_answer, perfectAns, 4).obtainedMarks;
+  assert.strictEqual(rPerfect, 4);
+
+  const rWrong = autoGrade('calculation' as any, (dbSnapshot as any).content, (dbSnapshot as any).correct_answer, { step_answers: { s1: 'opt_1b', s2: 'opt_1a' } }, 4).obtainedMarks;
+  assert.strictEqual(rWrong, 0);
+});
+
+// F.2 Pattern 8 (Short Essay / Pattern 8)
+const essayRow = mk('short_essay', {
+  prompt: 'علل: تسمية عام الفيل بهذا الاسم.',
+  question_text: 'علل: تسمية عام الفيل بهذا الاسم.',
+  model_answer: 'SECRET_MODEL_SHORT_ESSAY',
+  mandatory_keywords: ['SECRET_KEYWORD_ABRAHA'],
+  hint: 'SECRET_HINT',
+  max_words: 30,
+  grading_mode: 'auto',
+  partial_threshold: 0.5
+}, {
+  model_answer: 'SECRET_MODEL_SHORT_ESSAY',
+  mandatory_keywords: ['SECRET_KEYWORD_ABRAHA']
+});
+
+const ESSAY_LEAK_MARKERS = [
+  'correctAnswer', 'SECRET_EXPLANATION', 'SECRET_MODEL_SHORT_ESSAY',
+  'SECRET_KEYWORD_ABRAHA', 'SECRET_HINT', 'model_answer', 'modelAnswer',
+  'mandatory_keywords', 'mandatoryKeywords'
+];
+
+t('F.2.a short_essay: no answer keys in simulator client snapshot', () => {
+  const { clientSnapshot } = createSnapshotPair(essayRow, ExamMode.SIMULATOR, 1);
+  const json = JSON.stringify(clientSnapshot);
+  const leaks = ESSAY_LEAK_MARKERS.filter((k) => json.includes(k));
+  assert.deepStrictEqual(leaks, [], `short_essay leaked: ${leaks.join(', ')}`);
+});
+
+t('F.2.b short_essay: perfect answer scores full marks, wrong scores 0', () => {
+  const { dbSnapshot } = createSnapshotPair(essayRow, ExamMode.SIMULATOR, 1);
+  const perfectAns = { text: 'بسبب محاولة SECRET_KEYWORD_ABRAHA هدم الكعبة' };
+  const rPerfect = autoGrade('short_essay' as any, (dbSnapshot as any).content, (dbSnapshot as any).correct_answer, perfectAns, 4).obtainedMarks;
+  assert.strictEqual(rPerfect, 4);
+
+  const wrongAns = { text: 'بسبب تجارة القوافل' };
+  const rWrong = autoGrade('short_essay' as any, (dbSnapshot as any).content, (dbSnapshot as any).correct_answer, wrongAns, 4).obtainedMarks;
+  assert.strictEqual(rWrong, 0);
+});
+
+// F.3 Pattern 11 (Contour Map / CONTOUR_MAP)
+const contourRow = mk('contour_map', {
+  mapCode: 'MAP_SUDAN_CONTOUR_01',
+  prompt: 'أجب عن الفروع التالية:',
+  subQuestions: [
+    { id: 'cm_1', question: 'الفاصل الكنتوري', inputType: 'numeric' },
+    { id: 'cm_2', question: 'اتجاه انحدار الوادي', inputType: 'direction8' },
+    { id: 'cm_3', question: 'منطقة التل', inputType: 'mapOverlay' }
+  ]
+}, {
+  subAnswers: {
+    cm_1: 'SECRET_INTERVAL_20',
+    cm_2: 'SECRET_SOUTH_WEST',
+    cm_3: { polygon: [[10, 10], [50, 10], [50, 50], [10, 50]] }
+  }
+});
+
+const CONTOUR_LEAK_MARKERS = [
+  'correctAnswer', 'SECRET_EXPLANATION', 'SECRET_INTERVAL_20',
+  'SECRET_SOUTH_WEST', 'subAnswers', 'sub_answers', 'correctValue',
+  'correct_value', 'polygon'
+];
+
+t('F.3.a contour_map: no answer keys in simulator client snapshot', () => {
+  const { clientSnapshot } = createSnapshotPair(contourRow, ExamMode.SIMULATOR, 1);
+  const json = JSON.stringify(clientSnapshot);
+  const leaks = CONTOUR_LEAK_MARKERS.filter((k) => json.includes(k));
+  assert.deepStrictEqual(leaks, [], `contour_map leaked: ${leaks.join(', ')}`);
+});
+
+t('F.3.b contour_map: perfect answer scores full marks, wrong scores 0', () => {
+  const { dbSnapshot } = createSnapshotPair(contourRow, ExamMode.SIMULATOR, 1);
+  const perfectAns = {
+    subAnswers: {
+      cm_1: 'SECRET_INTERVAL_20',
+      cm_2: 'SECRET_SOUTH_WEST',
+      cm_3: { polygon: [[10, 10], [50, 10], [50, 50], [10, 50]] }
+    }
+  };
+  const rPerfect = autoGrade('contour_map' as any, (dbSnapshot as any).content, (dbSnapshot as any).correct_answer, perfectAns, 4).obtainedMarks;
+  assert.strictEqual(rPerfect, 4);
+
+  const wrongAns = {
+    subAnswers: {
+      cm_1: '9999',
+      cm_2: 'خطأ',
+      cm_3: { polygon: [[90, 90], [95, 90], [95, 95], [90, 95]] }
+    }
+  };
+  const rWrong = autoGrade('contour_map' as any, (dbSnapshot as any).content, (dbSnapshot as any).correct_answer, wrongAns, 4).obtainedMarks;
+  assert.strictEqual(rWrong, 0);
+});
+
 console.log(`\n${passed} passed`);
