@@ -18,11 +18,11 @@ export const BankType = {
 } as const;
 export type BankType = typeof BankType[keyof typeof BankType];
 
-export const ExamMode = {
+export type ExamMode = 'training' | 'simulator';
+export const ExamMode: { readonly TRAINING: ExamMode; readonly SIMULATOR: ExamMode } = {
   TRAINING: 'training',
   SIMULATOR: 'simulator',
-} as const;
-export type ExamMode = typeof ExamMode[keyof typeof ExamMode];
+};
 
 export const QuestionStatus = {
   DRAFT: 'draft',

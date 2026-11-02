@@ -155,11 +155,15 @@ export interface ExplainAnswer {
 }
 
 // --- 8. Comparison Table Completion ---
+export interface ComparisonTableOption {
+  id: string;
+  text: string;
+}
 export interface ComparisonTableCell {
   id: string;
   value: string | null;
-  correctValue: string;
-  options?: string[];
+  correctValue?: string;
+  options?: string[] | ComparisonTableOption[];
   tolerance?: number;
 }
 export interface ComparisonTableRow {
@@ -184,13 +188,34 @@ export interface OddOneOutItem {
 export interface ServerOddOneOutItem extends OddOneOutItem {
   isOdd?: boolean;
 }
+export interface OddOneOutReasoningChoice {
+  id: string;
+  text: string;
+}
+export interface OddOneOutReasoningContent {
+  prompt: string;
+  marksFraction?: number;
+  trainingChoices?: OddOneOutReasoningChoice[];
+}
+export interface OddOneOutReasoningCorrectAnswer {
+  correctChoiceId?: string;
+  keywordGroups?: string[][];
+  minGroups?: number;
+}
 export interface OddOneOutContent {
   prompt: string;
   passage?: string;
   items: (OddOneOutItem | ServerOddOneOutItem)[];
+  reasoning?: OddOneOutReasoningContent;
 }
 export interface OddOneOutAnswer {
   selectedItemIds: string[];
+  reasonChoiceId?: string;
+  reasonText?: string;
+}
+export interface OddOneOutCorrectAnswer {
+  selectedItemIds: string[];
+  reasoning?: OddOneOutReasoningCorrectAnswer;
 }
 
 // --- 10. Diagram Labeling ---

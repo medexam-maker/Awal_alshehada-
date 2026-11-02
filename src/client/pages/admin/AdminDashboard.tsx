@@ -241,22 +241,70 @@ const PATTERN_TEMPLATES: Record<string, string> = {
     [
       {
         questionType: 'comparison_table',
-        prompt: 'قارن بين الخلايا النباتية والحيوانية من حيث الجدار الخلوي والبلاستيدات الخضراء.',
+        prompt: 'قارن بين الإقليم الصحراوي وإقليم السافانا الغنية وفق المعايير الموضحة بالجدول:',
         content: {
-          headers: ['وجه المقارنة', 'الخلية النباتية', 'الخلية الحيوانية'],
+          tableHeaders: ['الصحراوي', 'السافانا الغنية'],
           rows: [
-            { criteria: 'الجدار الخلوي', correct_col1: 'موجود (سليولوز)', correct_col2: 'غير موجود' },
-            { criteria: 'البلاستيدات الخضراء', correct_col1: 'موجودة', correct_col2: 'غير موجودة' }
+            {
+              id: 'r1',
+              label: 'كمية الأمطار السنوية',
+              cells: [
+                {
+                  id: 'c11',
+                  value: null,
+                  options: [
+                    { id: 'c11_opt1', text: 'نادرة وأقل من 100 ملم' },
+                    { id: 'c11_opt2', text: 'متوسطة بين 300 و500 ملم' },
+                    { id: 'c11_opt3', text: 'غزيرة تفوق 800 ملم' }
+                  ]
+                },
+                {
+                  id: 'c12',
+                  value: null,
+                  options: [
+                    { id: 'c12_opt1', text: 'غزيرة تفوق 700 ملم' },
+                    { id: 'c12_opt2', text: 'جافة ونادرة' },
+                    { id: 'c12_opt3', text: 'أمطار شتوية إعصارية' }
+                  ]
+                }
+              ]
+            },
+            {
+              id: 'r2',
+              label: 'الغطاء النباتي السائد',
+              cells: [
+                {
+                  id: 'c21',
+                  value: null,
+                  options: [
+                    { id: 'c21_opt1', text: 'شجيرات شوكية ونباتات عصيرية' },
+                    { id: 'c21_opt2', text: 'غابات كثيفة دائمة الخضرة' },
+                    { id: 'c21_opt3', text: 'حشائش استبس قصيرة كثيفة' }
+                  ]
+                },
+                {
+                  id: 'c22',
+                  value: null,
+                  options: [
+                    { id: 'c22_opt1', text: 'حشائش طويلة وأشجار متباعدة' },
+                    { id: 'c22_opt2', text: 'نباتات عصيرية نادرة' },
+                    { id: 'c22_opt3', text: 'أشجار البلوط والصنوبر' }
+                  ]
+                }
+              ]
+            }
           ]
         },
         correctAnswer: {
-          table: [
-            ['موجود (سليولوز)', 'غير موجود'],
-            ['موجودة', 'غير موجودة']
-          ]
+          cells: {
+            c11: 'c11_opt1',
+            c12: 'c12_opt1',
+            c21: 'c21_opt1',
+            c22: 'c22_opt1'
+          }
         },
-        allocatedMarks: 8,
-        explanationAr: 'الخلية النباتية تتميز بالجدار الخلوي السليولوزي والبلاستيدات الخضراء.'
+        allocatedMarks: 4,
+        explanationAr: 'مقارنة دقيقة للخصائص المناخية والنباتية وفق مقرر الجغرافيا.'
       }
     ],
     null,
@@ -266,13 +314,38 @@ const PATTERN_TEMPLATES: Record<string, string> = {
     [
       {
         questionType: 'odd_one_out',
-        prompt: 'استخرج الكلمة الشاذة من المجموعات التالية مع بيان السبب:',
+        prompt: 'استخرج الكلمة الشاذة من بين الأدوات والمكونات البصرية التالية ثم علّل اختيارك:',
         content: {
-          words: ['حديد', 'نحاس', 'ألومنيوم', 'خشب']
+          items: [
+            { id: 'i1', text: 'التلسكوب' },
+            { id: 'i2', text: 'العدسة المحدبة' },
+            { id: 'i3', text: 'المرآة المستوية' },
+            { id: 'i4', text: 'العدسة المقعرة' }
+          ],
+          reasoning: {
+            prompt: 'علل سبب استبعادك لهذه الكلمة:',
+            marksFraction: 0.5,
+            trainingChoices: [
+              { id: 'r1', text: 'لأنه جهاز بصري مركب من عدة أجزاء بينما البقية عناصر بصرية منفردة' },
+              { id: 'r2', text: 'لأنه أداة فلكية لا تستخدم في المعامل الفيزيائية' },
+              { id: 'r3', text: 'لأنه يعتمد على المرايا المقعرة فقط في تجميع الضوء' }
+            ]
+          }
         },
-        correctAnswer: 'خشب',
-        allocatedMarks: 5,
-        explanationAr: 'الخشب مادة غير موصلة ولا تنتمي للعناصر الفلزية.'
+        correctAnswer: {
+          selectedItemIds: ['i1'],
+          reasoning: {
+            correctChoiceId: 'r1',
+            keywordGroups: [
+              ['جهاز', 'اداة'],
+              ['مركب', 'مركبة', 'عدة'],
+              ['بصرية']
+            ],
+            minGroups: 2
+          }
+        },
+        allocatedMarks: 4,
+        explanationAr: 'التلسكوب جهاز بصري مركب، بينما بقية الأدوات قطع بصرية مفردة.'
       }
     ],
     null,

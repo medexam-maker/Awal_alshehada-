@@ -2,6 +2,7 @@ import { QuestionType } from '../../shared/constants';
 import { SubjectExamBlueprint, AuthoredQuestion } from '../types/curriculum';
 import { TWELVE_CONTRACT_SUBJECTS } from '../data/contractSubjects';
 import { JEBEL_MARRA_CONTOUR_MAP_SVG_URL } from '../../shared/contourUtils';
+import { DEMO_ODD_ONE_OUT, DEMO_COMPARISON_TABLE } from '../../shared/batch1DemoQuestions';
 
 /**
  * Creates default authentic Sudanese Secondary Certificate blueprints for each of the 12 subjects.
@@ -1186,6 +1187,40 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
       examYear: 2024,
       status: 'approved',
       createdAt: '2024-05-10T15:00:00Z'
+    },
+    {
+      id: DEMO_ODD_ONE_OUT.row.id,
+      subjectSlug: DEMO_ODD_ONE_OUT.subjectSlug,
+      patternId: 'physics_q1_b',
+      questionNumber: 1,
+      partLabel: 'ب',
+      questionType: DEMO_ODD_ONE_OUT.row.question_type,
+      prompt: DEMO_ODD_ONE_OUT.row.content.prompt,
+      content: DEMO_ODD_ONE_OUT.row.content,
+      correctAnswer: DEMO_ODD_ONE_OUT.row.correct_answer,
+      allocatedMarks: DEMO_ODD_ONE_OUT.row.marks,
+      explanationAr: DEMO_ODD_ONE_OUT.row.explanation,
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: DEMO_COMPARISON_TABLE.row.id,
+      subjectSlug: DEMO_COMPARISON_TABLE.subjectSlug,
+      patternId: 'geography_q2_b',
+      questionNumber: 2,
+      partLabel: 'ب',
+      questionType: DEMO_COMPARISON_TABLE.row.question_type,
+      prompt: DEMO_COMPARISON_TABLE.row.content.prompt,
+      content: DEMO_COMPARISON_TABLE.row.content,
+      correctAnswer: DEMO_COMPARISON_TABLE.row.correct_answer,
+      allocatedMarks: DEMO_COMPARISON_TABLE.row.marks,
+      explanationAr: DEMO_COMPARISON_TABLE.row.explanation,
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
     }
   );
 

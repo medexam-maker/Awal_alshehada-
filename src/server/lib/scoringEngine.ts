@@ -1,6 +1,6 @@
 import { QuestionType, GradingStrategy, GradingStatus } from '../../shared/constants';
 import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
-import { matchKeywords } from '../../shared/keywordMatcher';
+import { matchKeywords, normalizeArabicText, tokenMatchesWord } from '../../shared/keywordMatcher';
 import {
   FillBlankContent, FillBlankAnswer,
   MatchingAnswer, ComparisonTableContent, ComparisonTableAnswer,
@@ -289,23 +289,55 @@ export function autoGrade(
 
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.COMPARISON_TABLE) {
-    const c = content as ComparisonTableContent;
-    const sa = studentAnswer as ComparisonTableAnswer | undefined;
+    const c = (content || {}) as ComparisonTableContent;
+    const ca = (correctAnswer || {}) as any;
+    const sa = (studentAnswer || {}) as ComparisonTableAnswer | undefined;
     let totalUnits = 0;
     let correctUnits = 0;
+
     for (const row of c.rows || []) {
-        for (const cell of row.cells || []) {
-            if (cell.value === null) {
-                totalUnits++;
-                if (sa?.cells && sa.cells[cell.id]) {
-                    const saVal = normalizeText(sa.cells[cell.id], { trimWhitespace: true });
-                    const caVal = normalizeText(cell.correctValue || '', { trimWhitespace: true });
-                    if (saVal && saVal === caVal) correctUnits++;
+      for (const cell of row.cells || []) {
+        // Only interactive cells (cell.value === null) are graded.
+        // Prefilled (non-interactive) cells (cell.value !== null) are excluded from total.
+        if (cell.value === null) {
+          totalUnits++;
+          const saVal = sa?.cells ? sa.cells[cell.id] : undefined;
+          if (saVal !== undefined && saVal !== null && saVal !== '') {
+            if (Array.isArray(cell.options) && cell.options.length > 0) {
+              const firstOpt = cell.options[0];
+              const isObjectOptions = typeof firstOpt === 'object' && firstOpt !== null && 'id' in firstOpt;
+              if (isObjectOptions) {
+                // Must be an option ID belonging specifically to this cell
+                const allowedIds = new Set((cell.options as any[]).map((o: any) => String(o.id)));
+                if (allowedIds.has(String(saVal))) {
+                  const expectedId = String(ca.cells?.[cell.id] ?? (cell as any).correctOptionId ?? cell.correctValue ?? '');
+                  if (expectedId && String(saVal) === expectedId) {
+                    correctUnits++;
+                  }
                 }
+              } else {
+                // Legacy string options
+                const normSa = normalizeText(String(saVal), { trimWhitespace: true });
+                const normCa = normalizeText(String(cell.correctValue || ca.cells?.[cell.id] || ''), { trimWhitespace: true });
+                if (normCa && normSa === normCa) {
+                  correctUnits++;
+                }
+              }
+            } else {
+              // Legacy cell without options
+              const normSa = normalizeText(String(saVal), { trimWhitespace: true });
+              const normCa = normalizeText(String(cell.correctValue || ca.cells?.[cell.id] || ''), { trimWhitespace: true });
+              if (normCa && normSa === normCa) {
+                correctUnits++;
+              }
             }
+          }
         }
+      }
     }
+
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
+    isCorrect = totalUnits > 0 && correctUnits === totalUnits;
   } else if (questionType === QuestionType.ORDERING) {
     const c = (content || {}) as Record<string, any>;
     const ca = (correctAnswer || {}) as Record<string, any>;
@@ -381,14 +413,84 @@ export function autoGrade(
     }
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.ODD_ONE_OUT) {
-    const ca = correctAnswer as OddOneOutAnswer;
-    const sa = studentAnswer as OddOneOutAnswer | undefined;
-    const caIds = (ca?.selectedItemIds || []).slice().sort();
-    const saIds = (sa?.selectedItemIds || []).slice().sort();
-    isCorrect = caIds.length > 0 &&
-                caIds.length === saIds.length &&
-                caIds.every((id, idx) => id === saIds[idx]);
-    obtainedMarks = isCorrect ? maxMarks : 0;
+    const c = (content || {}) as any;
+    const ca = (correctAnswer || {}) as any;
+    const sa = (studentAnswer || {}) as any;
+
+    const caIds = (ca?.selectedItemIds || (ca?.selectedItem ? [ca.selectedItem] : [])).map(String).sort();
+    const saIds = (sa?.selectedItemIds || (sa?.selectedItem ? [sa.selectedItem] : [])).map(String).sort();
+
+    const stage1Correct = caIds.length > 0 &&
+                          caIds.length === saIds.length &&
+                          caIds.every((id: string, idx: number) => id === saIds[idx]);
+
+    const hasReasoning = Boolean(c?.reasoning || ca?.reasoning);
+
+    if (!hasReasoning) {
+      isCorrect = stage1Correct;
+      obtainedMarks = isCorrect ? maxMarks : 0;
+    } else {
+      if (!stage1Correct) {
+        // Wrong odd item => 0 even with perfect text or choice
+        isCorrect = false;
+        obtainedMarks = 0;
+      } else {
+        const marksFraction = typeof c.reasoning?.marksFraction === 'number'
+          ? c.reasoning.marksFraction
+          : 0.5;
+        const stage1Marks = maxMarks * (1 - marksFraction);
+
+        let reasonCorrect = false;
+        if (sa?.reasonChoiceId) {
+          const correctChoiceId = ca.reasoning?.correctChoiceId;
+          if (correctChoiceId && sa.reasonChoiceId === correctChoiceId) {
+            reasonCorrect = true;
+          }
+        } else if (typeof sa?.reasonText === 'string' && sa.reasonText.trim().length > 0) {
+          const keywordGroups: string[][] = Array.isArray(ca.reasoning?.keywordGroups)
+            ? ca.reasoning.keywordGroups
+            : [];
+          const minGroups = typeof ca.reasoning?.minGroups === 'number'
+            ? ca.reasoning.minGroups
+            : Math.min(2, keywordGroups.length);
+
+          let matchedGroupsCount = 0;
+          const normUserText = normalizeArabicText(sa.reasonText);
+          const userTokens = normUserText.split(/\s+/).filter(Boolean);
+
+          for (const group of keywordGroups) {
+            if (!Array.isArray(group) || group.length === 0) continue;
+            const groupMatched = group.some((kw) => {
+              if (typeof kw !== 'string' || !kw.trim()) return false;
+              const normKw = normalizeArabicText(kw);
+              if (!normKw) return false;
+              if (normUserText.includes(normKw)) return true;
+              const kwWords = normKw.split(/\s+/).filter(Boolean);
+              if (kwWords.length === 0) return false;
+              return kwWords.every((kwWord) =>
+                userTokens.some((uToken) => tokenMatchesWord(uToken, kwWord))
+              );
+            });
+            if (groupMatched) {
+              matchedGroupsCount++;
+            }
+          }
+
+          if (matchedGroupsCount >= minGroups) {
+            reasonCorrect = true;
+          }
+        }
+
+        if (reasonCorrect) {
+          obtainedMarks = maxMarks;
+          isCorrect = true;
+        } else {
+          obtainedMarks = stage1Marks;
+          isCorrect = false;
+        }
+        obtainedMarks = Math.max(0, Math.min(maxMarks, obtainedMarks));
+      }
+    }
   } else if (questionType === QuestionType.CALCULATION) {
     const c = (content || {}) as Record<string, unknown>;
     const caRaw = correctAnswer as Record<string, unknown> | undefined;

@@ -36,8 +36,76 @@ export const ContentSchemas = {
   short_essay: { type: 'object', required: ['prompt'] },
   long_essay: { type: 'object', required: ['prompt'] },
   explain: { type: 'object', required: ['prompt'] },
-  comparison_table: { type: 'object', required: ['prompt', 'tableHeaders', 'rows'] },
-  odd_one_out: { type: 'object', required: ['prompt', 'items'] },
+  comparison_table: {
+    type: 'object',
+    required: ['prompt', 'tableHeaders', 'rows'],
+    properties: {
+      prompt: { type: 'string', minLength: 1 },
+      tableHeaders: { type: 'array', items: { type: 'string' } },
+      rows: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['id', 'cells'],
+          properties: {
+            id: { type: 'string' },
+            label: { type: 'string' },
+            cells: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['id'],
+                properties: {
+                  id: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  odd_one_out: {
+    type: 'object',
+    required: ['prompt', 'items'],
+    properties: {
+      prompt: { type: 'string', minLength: 1 },
+      passage: { type: 'string' },
+      items: {
+        type: 'array',
+        minItems: 2,
+        items: {
+          type: 'object',
+          required: ['id', 'text'],
+          properties: {
+            id: { type: 'string' },
+            text: { type: 'string' },
+          },
+        },
+      },
+      reasoning: {
+        type: 'object',
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', minLength: 1 },
+          marksFraction: { type: 'number', minimum: 0, maximum: 1 },
+          trainingChoices: {
+            type: 'array',
+            minItems: 3,
+            maxItems: 3,
+            items: {
+              type: 'object',
+              required: ['id', 'text'],
+              properties: {
+                id: { type: 'string' },
+                text: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   diagram_labeling: { type: 'object', required: ['prompt', 'diagram', 'labels'] },
   contour_map: { type: 'object', required: ['prompt', 'mapImage', 'subQuestions'] },
   calculation: { type: 'object', required: ['prompt'] },
@@ -70,7 +138,18 @@ export const AnswerSchemas = {
   long_essay: { type: 'object', required: ['text'] },
   explain: { type: 'object' },
   comparison_table: { type: 'object', required: ['cells'] },
-  odd_one_out: { type: 'object', required: ['selectedItemIds'] },
+  odd_one_out: {
+    type: 'object',
+    required: ['selectedItemIds'],
+    properties: {
+      selectedItemIds: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      reasonChoiceId: { type: 'string' },
+      reasonText: { type: 'string' },
+    },
+  },
   diagram_labeling: { type: 'object', required: ['labels'] },
   contour_map: { type: 'object', required: ['subAnswers'] },
   calculation: { type: 'object', required: ['value'] },
@@ -119,6 +198,58 @@ export function validateQuestionContent(type: keyof typeof ContentSchemas, conte
     const raw = content as Record<string, unknown>;
     if (raw.mode === 'multi_step_mcq' || Array.isArray(raw.steps)) {
       return validateMultiStepCalculationContent(content);
+    }
+  }
+
+  // Deep validation for odd_one_out
+  if (type === 'odd_one_out' && content && typeof content === 'object') {
+    const rawContent = content as any;
+    if (rawContent.reasoning?.trainingChoices && Array.isArray(rawContent.reasoning.trainingChoices)) {
+      const seenIds = new Set<string>();
+      for (const ch of rawContent.reasoning.trainingChoices) {
+        if (ch && typeof ch.id === 'string') {
+          if (seenIds.has(ch.id)) {
+            return {
+              valid: false,
+              errors: [`Duplicate choice ID '${ch.id}' in reasoning trainingChoices`],
+            };
+          }
+          seenIds.add(ch.id);
+        }
+      }
+    }
+  }
+
+  // Deep validation for comparison_table:
+  // Each cell with options must have exactly 3 options with unique IDs
+  if (type === 'comparison_table' && content && typeof content === 'object') {
+    const rawContent = content as any;
+    if (Array.isArray(rawContent.rows)) {
+      for (const r of rawContent.rows) {
+        if (r && Array.isArray(r.cells)) {
+          for (const c of r.cells) {
+            if (c && Array.isArray(c.options)) {
+              if (c.options.length !== 3) {
+                return {
+                  valid: false,
+                  errors: [`Cell '${c.id || 'unknown'}' options must contain exactly 3 choices`],
+                };
+              }
+              const seenIds = new Set<string>();
+              for (const opt of c.options) {
+                const optId = (opt && typeof opt === 'object' && 'id' in opt) ? opt.id : opt;
+                if (seenIds.has(String(optId))) {
+                  return {
+                    valid: false,
+                    errors: [`Duplicate option ID '${optId}' in cell '${c.id}'`],
+                  };
+                }
+                seenIds.add(String(optId));
+              }
+            }
+          }
+        }
+      }
     }
   }
 

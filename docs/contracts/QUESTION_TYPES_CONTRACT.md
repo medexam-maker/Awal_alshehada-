@@ -1,7 +1,7 @@
 # QUESTION_TYPES_CONTRACT.md
 
 Contract: 2 — Question Types & Question Domain
-Version: 1.1.0
+Version: 1.2.0
 Status: Approved Architectural Contract
 Depends On: PROJECT_CONSTITUTION.md v1.1.0
 Normative Owner: This contract is the sole normative owner of supported question-type definitions.
@@ -435,22 +435,28 @@ Exact correction behavior is reserved.
 
 ID: "comparison_table"
 
-Purpose: complete structured comparisons between defined entities and criteria.
+Purpose: complete structured comparisons between defined entities and criteria using a 3-option dropdown per interactive cell.
 
 Content defines:
+- "tableHeaders": column entity headers.
+- "rows": comparison criteria rows, each containing "id", "label", and "cells".
+- "cells": cell definitions where:
+  - Interactive cells: "value: null", exactly 3 "options: [{ id, text }]" with unique IDs within the cell.
+  - Prefilled cells: "value: string", excluded from grading units.
+- Legacy format: "cells: [{ value: null, correctValue: string, options: string[] }]" remains backward-compatible.
 
-- rows;
-- columns;
-- comparison criteria;
-- stable identifiers.
+Option Shuffling & Snapshot:
+- Options are shuffled at attempt initialization and persisted in the server DB snapshot.
+- Resuming or rebuilding client snapshots preserves the persisted option order.
+- In Simulator mode, answer keys ("correctValue", "correctOptionId") and explanations are stripped.
 
-Student answer is a structured table representation.
+Student Answer:
+- type ComparisonTableAnswer = { cells: Record<string, string> }; mapping cell ID to selected option ID.
 
-Partial credit is supported.
-
-Any numeric tolerance required by a future comparison rule must be part of the grading configuration, not an uncontrolled property of the submitted student answer.
-
-The Exam Engine owns scoring.
+Grading:
+- Proportional credit per interactive cell: (N_correct / N_interactive) * maxMarks.
+- Option IDs submitted outside the cell's defined options are treated as incorrect.
+- Legacy text cells are graded via normalized string comparison against "correctValue".
 
 ---
 
@@ -458,25 +464,38 @@ The Exam Engine owns scoring.
 
 ID: "odd_one_out"
 
-Purpose: identify the item that does not belong.
+Purpose: identify the anomalous item from a group and justify the reasoning (two-stage evaluation).
 
 Content defines:
+- "prompt": instruction text.
+- "items": array of selectable items [{ id, text }].
+- "reasoning" (optional):
+  - "prompt": question/label for stage 2 (e.g. "علّل:").
+  - "marksFraction": fraction of marks allocated to reasoning (0..1, default 0.5).
+  - "trainingChoices": exactly 3 candidate justification options [{ id, text }] for Training mode.
 
-- item identifiers;
-- displayed item data;
-- instructional metadata where required.
+Correct Answer (Server only):
+- "selectedItemIds": string[] identifying the odd item(s).
+- "reasoning":
+  - "correctChoiceId": ID of the correct choice from "trainingChoices".
+  - "keywordGroups": string[][] defining mandatory semantic concept groups with synonyms.
+  - "minGroups": minimum number of concept groups required (default min(2, keywordGroups.length)).
 
-Student answer:
+Runtime Snapshots:
+- In Training mode: "trainingChoices" and "correctAnswer.selectedItemIds" are present for zero-latency local feedback.
+- In Simulator mode: "trainingChoices", "keywordGroups", and answer keys are strictly stripped. "reasoning.prompt" is ALWAYS present so the student provides free-text justification without revealing stage-1 correctness.
 
-type OddOneOutAnswer = string;
+Student Answer:
+- type OddOneOutAnswer = { selectedItemIds: string[]; reasonChoiceId?: string; reasonText?: string };
 
-Validation:
-
-- selected identifier must exist.
-
-Grading uses the canonical "correct_answer".
-
-Any instructional "isOdd" metadata inside content must not become a second grading authority.
+Grading:
+- Stage 1 incorrect: scores 0 marks regardless of stage 2.
+- Stage 1 correct: receives base share = maxMarks * (1 - marksFraction).
+- Stage 2 evaluation:
+  - If "reasonChoiceId" is submitted (Training mode): exact ID-to-ID match with "correctChoiceId".
+  - If "reasonText" is submitted (Simulator mode): Arabic morphological and synonym evaluation via Pattern-8 keywordMatcher. Each keyword group is matched if any member keyword is present; stage 2 is correct if matched groups >= minGroups.
+  - If stage 2 is correct: adds maxMarks * marksFraction (totaling full marks).
+- Legacy questions without reasoning score full marks on correct odd item and 0 on incorrect.
 
 ---
 

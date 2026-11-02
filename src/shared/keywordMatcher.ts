@@ -63,7 +63,7 @@ export function stripArabicPrefixes(str: string): string {
 /**
  * Checks whether a normalized token matches a keyword word.
  */
-function tokenMatchesWord(token: string, word: string): boolean {
+export function tokenMatchesWord(token: string, word: string): boolean {
   if (!token || !word) return false;
 
   const normToken = normalizeArabicText(token);

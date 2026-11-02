@@ -517,6 +517,91 @@ export function createClientSnapshot(
         return snap;
     }
 
+    // 10. ODD_ONE_OUT
+    if (row.question_type === 'odd_one_out') {
+        const rawItems = Array.isArray(rawContentObj.items) ? rawContentObj.items : [];
+        const cleanItems = rawItems.map((it: any) => ({
+            id: String(it?.id ?? ''),
+            text: String(it?.text ?? ''),
+        }));
+
+        if (examMode === ExamMode.TRAINING) {
+            const cleanReasoning = rawContentObj.reasoning ? {
+                prompt: (rawContentObj.reasoning as any).prompt,
+                marksFraction: (rawContentObj.reasoning as any).marksFraction,
+                trainingChoices: Array.isArray((rawContentObj.reasoning as any).trainingChoices)
+                    ? (rawContentObj.reasoning as any).trainingChoices.map((c: any) => ({ id: String(c.id), text: String(c.text) }))
+                    : undefined,
+            } : undefined;
+
+            snap.content = {
+                prompt: promptText,
+                ...(rawContentObj.passage ? { passage: rawContentObj.passage } : {}),
+                items: cleanItems,
+                ...(cleanReasoning ? { reasoning: cleanReasoning } : {}),
+            };
+            const rawCa = (row.correct_answer && typeof row.correct_answer === 'object') ? (row.correct_answer as Record<string, unknown>) : {};
+            snap.correctAnswer = {
+                selectedItemIds: Array.isArray(rawCa.selectedItemIds) ? rawCa.selectedItemIds : [],
+                ...(rawCa.reasoning && typeof rawCa.reasoning === 'object' && (rawCa.reasoning as any).correctChoiceId ? {
+                    reasoning: { correctChoiceId: (rawCa.reasoning as any).correctChoiceId }
+                } : {}),
+            };
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+        } else {
+            // SIMULATOR: prompt and marksFraction always present, strip trainingChoices, keywordGroups, correctChoiceId, correctAnswer, explanation
+            const cleanReasoning = rawContentObj.reasoning ? {
+                prompt: (rawContentObj.reasoning as any).prompt,
+                marksFraction: (rawContentObj.reasoning as any).marksFraction,
+            } : undefined;
+
+            snap.content = {
+                prompt: promptText,
+                ...(rawContentObj.passage ? { passage: rawContentObj.passage } : {}),
+                items: cleanItems,
+                ...(cleanReasoning ? { reasoning: cleanReasoning } : {}),
+            };
+        }
+        return snap;
+    }
+
+    // 11. COMPARISON_TABLE
+    if (row.question_type === 'comparison_table') {
+        if (examMode === ExamMode.TRAINING) {
+            snap.content = row.content;
+            snap.correctAnswer = row.correct_answer;
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+        } else {
+            // SIMULATOR: strip correctValue, correctOptionId, explanation, correctAnswer; normalize options to {id, text}
+            const rawRows = Array.isArray(rawContentObj.rows) ? rawContentObj.rows : [];
+            const cleanRows = rawRows.map((r: any) => ({
+                id: String(r?.id ?? ''),
+                label: String(r?.label ?? ''),
+                cells: Array.isArray(r?.cells) ? r.cells.map((c: any) => {
+                    const cleanCell: Record<string, any> = {
+                        id: String(c?.id ?? ''),
+                        value: c?.value !== undefined ? c.value : null,
+                    };
+                    if (Array.isArray(c?.options)) {
+                        cleanCell.options = c.options.map((o: any) => ({
+                            id: String(typeof o === 'object' && o !== null ? o.id : o),
+                            text: String(typeof o === 'object' && o !== null ? (o.text ?? o.id) : o),
+                        }));
+                    }
+                    return cleanCell;
+                }) : [],
+            }));
+            snap.content = {
+                prompt: promptText,
+                tableHeaders: Array.isArray(rawContentObj.tableHeaders) ? rawContentObj.tableHeaders : [],
+                rows: cleanRows,
+            };
+        }
+        return snap;
+    }
+
     // Fallback for all other types (e.g. calculation, contour map)
     if (examMode === ExamMode.TRAINING) {
         snap.content = row.content;
@@ -622,6 +707,36 @@ export function createSnapshotPair(
             question_type: row.question_type,
             content: dbMatchingContent,
             correct_answer: { pairs: mergedPairsMap },
+            primary_interaction_mode: row.primary_interaction_mode,
+            marks: row.marks,
+            explanation: row.explanation,
+        };
+    } else if (row.question_type === 'comparison_table') {
+        const rawRows = Array.isArray(rawContentObj.rows) ? rawContentObj.rows : [];
+        const rowsWithShuffledOptions = rawRows.map((r: any) => ({
+            ...r,
+            cells: Array.isArray(r?.cells) ? r.cells.map((c: any) => {
+                if (Array.isArray(c?.options) && c.options.length > 0) {
+                    const shuffled = [...c.options];
+                    for (let i = shuffled.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                    }
+                    return { ...c, options: shuffled };
+                }
+                return c;
+            }) : [],
+        }));
+
+        dbSnapshot = {
+            id: row.id,
+            subject_id: row.subject_id,
+            question_type: row.question_type,
+            content: {
+                ...rawContentObj,
+                rows: rowsWithShuffledOptions,
+            },
+            correct_answer: row.correct_answer,
             primary_interaction_mode: row.primary_interaction_mode,
             marks: row.marks,
             explanation: row.explanation,
