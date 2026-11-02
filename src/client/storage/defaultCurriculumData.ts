@@ -555,13 +555,61 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
       questionNumber: 2,
       partLabel: 'أ',
       questionType: QuestionType.ARABIC_GRAMMAR,
-      prompt: 'أعرب الكلمة الموضوع بين خطين في الجملة: (إنَّ المعلمينَ _مخلصونَ_ في أداء رسالتهم السامية):',
+      prompt: 'حلل المكونات النحوية للكلمتين المحددين في الجملة الشاهدة:',
       content: {
-        targetWord: 'مخلصونَ',
-        fullSentence: 'إنَّ المعلمينَ مخلصونَ في أداء رسالتهم السامية',
+        prompt: 'أعرب المكونات النحوية للكلمات المستهدفة:',
+        sentence: 'إنَّ المعلمينَ مخلصونَ في أداء رسالتهم السامية',
+        targetWord: 'المعلمينَ - مخلصونَ',
+        components: [
+          {
+            id: 'comp_1',
+            label: 'الموقع الإعرابي لـ (المعلمينَ)',
+            points: 3,
+            choices: [
+              { id: 'ch_1a', text: 'اسم (إنَّ) منصوب' },
+              { id: 'ch_1b', text: 'خبر (إنَّ) مرفوع' },
+              { id: 'ch_1c', text: 'فاعل مرفوع' },
+            ],
+            hints: [
+              { level: 1, text: 'لاحظ الحرف النواسخ (إنَّ) الذي ينصب المبتدأ ويرفع الخبر.' },
+            ],
+          },
+          {
+            id: 'comp_2',
+            label: 'علامة إعراب (المعلمينَ)',
+            points: 2,
+            choices: [
+              { id: 'ch_2a', text: 'الياء لأنه جمع مذكر سالم' },
+              { id: 'ch_2b', text: 'الفتحة الظاهرة' },
+              { id: 'ch_2c', text: 'الكسرة' },
+            ],
+            hints: [
+              { level: 1, text: 'الكلمة تدل على الجمع المذكر السالم وتنتهي بـ (ين).' },
+            ],
+          },
+          {
+            id: 'comp_3',
+            label: 'الموقع الإعرابي وعلامته لـ (مخلصونَ)',
+            points: 5,
+            choices: [
+              { id: 'ch_3a', text: 'خبر (إنَّ) مرفوع وعلامة رفعه الواو' },
+              { id: 'ch_3b', text: 'نعت مرفوع وعلامة رفعه الضمة' },
+              { id: 'ch_3c', text: 'حال منصوبة وعلامة نصبها الفتحة' },
+            ],
+            hints: [
+              { level: 1, text: 'هذه الكلمة تتم معنى الجملة مع حرف النسخ إنَّ.' },
+            ],
+          },
+        ],
       },
-      correctAnswer: 'خبر إن مرفوع وعلامة رفعه الواو لأنه جمع مذكر سالم',
-      allocatedMarks: 5,
+      correctAnswer: {
+        components: {
+          comp_1: 'ch_1a',
+          comp_2: 'ch_2a',
+          comp_3: 'ch_3a',
+        },
+      },
+      allocatedMarks: 10,
       explanationAr: 'اسم إنّ (المعلمين) منصوب بالياء، و(مخلصون) خبر إنّ مرفوع وعلامة رفعه الواو لأنه جمع مذكر سالم.',
       examScope: 'both',
       examYear: 2024,
