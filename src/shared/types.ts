@@ -390,6 +390,12 @@ export interface ArabicGrammarAnswer {
   words?: Record<string, GrammarAnswer>;
 }
 
+export interface ArabicGrammarCorrectAnswer {
+  components?: Record<string, string>;
+  analysis?: Record<string, string>;
+  words?: Record<string, GrammarAnswer>;
+}
+
 // --- 15. Reading Comprehension + Summary ---
 export type ReadingSubQuestion =
   | { id: string; type: typeof QuestionType.MULTIPLE_CHOICE; prompt: string; content: MultipleChoiceContent; correctAnswer: MultipleChoiceAnswer }

@@ -396,17 +396,13 @@ export function autoGrade(
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.ARABIC_GRAMMAR) {
     const c = content as ArabicGrammarContent;
-    const ca = correctAnswer as ArabicGrammarAnswer;
-    const sa = (studentAnswer || {}) as ArabicGrammarAnswer & Record<string, any>;
+    const ca = (correctAnswer || {}) as ArabicGrammarAnswer & Record<string, string>;
+    const sa = (studentAnswer || {}) as ArabicGrammarAnswer & Record<string, string>;
 
     if (Array.isArray(c.components) && c.components.length > 0) {
       // C1 Component-based Adaptive Grammar Lab scoring
-      const caComponents = (ca.components && typeof ca.components === 'object')
-        ? (ca.components as Record<string, string>)
-        : (ca as Record<string, any>);
-      const saComponents = (sa.components && typeof sa.components === 'object')
-        ? (sa.components as Record<string, string>)
-        : (sa as Record<string, any>);
+      const caComponents = ca.components || (ca as Record<string, string>);
+      const saComponents = sa.components || (sa as Record<string, string>);
 
       let totalComponentPoints = 0;
       let earnedComponentPoints = 0;
@@ -415,10 +411,14 @@ export function autoGrade(
         const compPoints = typeof comp.points === 'number' && comp.points >= 0 ? comp.points : 1;
         totalComponentPoints += compPoints;
 
-        const correctChoiceId = caComponents?.[comp.id] ?? (ca as any)[comp.id];
-        const studentChoiceId = saComponents?.[comp.id] ?? (sa as any)[comp.id];
+        const correctChoiceId = caComponents?.[comp.id];
+        const studentChoiceId = saComponents?.[comp.id];
+
+        // Choice validation: Student choice must exist in comp.choices to be eligible for points
+        const isChoiceValid = Array.isArray(comp.choices) && comp.choices.some((ch) => ch.id === studentChoiceId);
 
         if (
+          isChoiceValid &&
           correctChoiceId !== undefined &&
           studentChoiceId !== undefined &&
           String(correctChoiceId) === String(studentChoiceId)

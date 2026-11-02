@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PlusCircle, Trash2, Award, HelpCircle, BookOpen, Layers } from 'lucide-react';
 import { GrammarComponent, GrammarChoice, GrammarHint } from '../../../shared/types';
 
@@ -18,51 +18,70 @@ interface Pattern14AuthoringFormProps {
   }) => void;
 }
 
+const DEFAULT_COMPONENTS: GrammarComponent[] = [
+  {
+    id: 'comp_1',
+    label: 'الموقع الإعرابي',
+    points: 2,
+    choices: [
+      { id: 'c1_1', text: 'فاعل مرفوع' },
+      { id: 'c1_2', text: 'مفعول به منصوب' },
+      { id: 'c1_3', text: 'مبتدأ مرفوع' },
+    ],
+    hints: [{ level: 1, text: 'لاحظ الكلمة التي تسبق الاسم المحدد في الجملة.' }],
+  },
+  {
+    id: 'comp_2',
+    label: 'علامة الإعراب',
+    points: 1,
+    choices: [
+      { id: 'c2_1', text: 'الضمة الظاهرة' },
+      { id: 'c2_2', text: 'الواو لأنه جمع مذكر سالم' },
+      { id: 'c2_3', text: 'الألف لأنه مثنى' },
+    ],
+    hints: [{ level: 1, text: 'انتبه لنوع اسم الكلمة (مفرد أم جمع أم مثنى).' }],
+  },
+];
+
+const DEFAULT_CORRECT: Record<string, string> = {
+  comp_1: 'c1_1',
+  comp_2: 'c2_1',
+};
+
 export const Pattern14AuthoringForm: React.FC<Pattern14AuthoringFormProps> = ({
   initialPrompt = 'أعرب الكلمات أو المكونات النحوية المحددة:',
   initialSentence = '',
   initialTargetWord = '',
   initialComponents,
-  initialCorrectComponents = {},
+  initialCorrectComponents,
   onChange,
 }) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [sentence, setSentence] = useState(initialSentence);
   const [targetWord, setTargetWord] = useState(initialTargetWord);
 
-  const [components, setComponents] = useState<GrammarComponent[]>(
-    initialComponents || [
-      {
-        id: 'comp_1',
-        label: 'الموقع الإعرابي',
-        points: 2,
-        choices: [
-          { id: 'c1_1', text: 'فاعل مرفوع' },
-          { id: 'c1_2', text: 'مفعول به منصوب' },
-          { id: 'c1_3', text: 'مبتدأ مرفوع' },
-        ],
-        hints: [{ level: 1, text: 'لاحظ الكلمة التي تسبق الاسم المحدد في الجملة.' }],
-      },
-      {
-        id: 'comp_2',
-        label: 'علامة الإعراب',
-        points: 1,
-        choices: [
-          { id: 'c2_1', text: 'الضمة الظاهرة' },
-          { id: 'c2_2', text: 'الواو لأنه جمع مذكر سالم' },
-          { id: 'c2_3', text: 'الألف لأنه مثنى' },
-        ],
-        hints: [{ level: 1, text: 'انتبه لنوع اسم الكلمة (مفرد أم جمع أم مثنى).' }],
-      },
-    ]
-  );
-
-  const [correctComponents, setCorrectComponents] = useState<Record<string, string>>(
-    initialCorrectComponents || {
-      comp_1: 'c1_1',
-      comp_2: 'c2_1',
+  const [components, setComponents] = useState<GrammarComponent[]>(() => {
+    if (Array.isArray(initialComponents) && initialComponents.length > 0) {
+      return initialComponents;
     }
-  );
+    return DEFAULT_COMPONENTS;
+  });
+
+  const [correctComponents, setCorrectComponents] = useState<Record<string, string>>(() => {
+    if (initialCorrectComponents && typeof initialCorrectComponents === 'object' && Object.keys(initialCorrectComponents).length > 0) {
+      return initialCorrectComponents;
+    }
+    if (Array.isArray(initialComponents) && initialComponents.length > 0) {
+      const derivedMap: Record<string, string> = {};
+      initialComponents.forEach((c) => {
+        if (c.choices && c.choices.length > 0) {
+          derivedMap[c.id] = c.choices[0].id;
+        }
+      });
+      return derivedMap;
+    }
+    return DEFAULT_CORRECT;
+  });
 
   const totalMarks = useMemo(() => {
     return components.reduce((sum, c) => sum + (Number(c.points) || 0), 0);
@@ -86,6 +105,11 @@ export const Pattern14AuthoringForm: React.FC<Pattern14AuthoringFormProps> = ({
       totalMarks: total,
     });
   };
+
+  // Emit initial state on mount so saving without field edits works immediately
+  useEffect(() => {
+    emitChanges(components, correctComponents, prompt, sentence, targetWord);
+  }, []);
 
   const handleAddComponent = () => {
     const newCompId = `comp_${Date.now()}`;
@@ -139,19 +163,21 @@ export const Pattern14AuthoringForm: React.FC<Pattern14AuthoringFormProps> = ({
 
   const handleRemoveChoice = (compIdx: number, choiceIdx: number) => {
     const comp = components[compIdx];
-    if (comp.choices.length <= 2) return; // Keep at least 2 choices
+    if (comp.choices.length <= 2) return; // Keep at least 2 choices per component
 
     const choiceToRemove = comp.choices[choiceIdx];
     const newChoices = comp.choices.filter((_, idx) => idx !== choiceIdx);
+
+    const nextComponents = components.map((c, idx) => (idx === compIdx ? { ...c, choices: newChoices } : c));
 
     const nextCorrect = { ...correctComponents };
     if (choiceToRemove && nextCorrect[comp.id] === choiceToRemove.id) {
       nextCorrect[comp.id] = newChoices[0].id;
     }
 
+    setComponents(nextComponents);
     setCorrectComponents(nextCorrect);
-    handleUpdateComponent(compIdx, { choices: newChoices });
-    emitChanges(components, nextCorrect, prompt, sentence, targetWord);
+    emitChanges(nextComponents, nextCorrect, prompt, sentence, targetWord);
   };
 
   const handleUpdateChoice = (compIdx: number, choiceIdx: number, text: string) => {
@@ -355,7 +381,7 @@ export const Pattern14AuthoringForm: React.FC<Pattern14AuthoringFormProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRemoveChoice(compIdx, choiceIdx)}
-                          className="text-slate-400 hover:text-rose-600 p-1 rounded"
+                          className="text-slate-400 hover:text-rose-600 p-1 rounded cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

@@ -1260,13 +1260,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       });
     }
 
+    if (q.questionType === QuestionType.ARABIC_GRAMMAR) {
+      const c = (q.content || {}) as Record<string, unknown>;
+      const ca = (q.correctAnswer || {}) as Record<string, unknown>;
+      const rawComponents = Array.isArray(c.components) ? c.components : [];
+      if (rawComponents.length > 0) {
+        const correctMap = (ca.components && typeof ca.components === 'object')
+          ? (ca.components as Record<string, string>)
+          : (typeof ca === 'object' && ca !== null ? (ca as Record<string, string>) : {});
+
+        setPattern14Data({
+          prompt: q.prompt || (c.prompt as string) || '',
+          sentence: (c.sentence as string) || '',
+          targetWord: (c.targetWord as string) || '',
+          components: rawComponents,
+          correctComponents: correctMap,
+          totalMarks: q.allocatedMarks || rawComponents.reduce((sum: number, comp: any) => sum + (Number(comp.points) || 0), 0),
+        });
+      }
+    }
+
     setActiveTab('authoring');
-    showNotification(`تم فتح السؤال (رقم ${q.questionNumber} ${q.partLabel}) للتعديل وإدراج/تحديث الخريطة وتحديد المناطق.`, 'info');
+    showNotification(`تم فتح السؤال (رقم ${q.questionNumber} ${q.partLabel}) للتعديل.`, 'info');
   };
 
   const handleCancelEditing = () => {
     setEditingQuestionId(null);
     setPattern11Data(null);
+    setPattern14Data(null);
     setQuestionPrompt('');
     setExplanationAr('');
     showNotification('تم إلغاء وضع التعديل.', 'info');

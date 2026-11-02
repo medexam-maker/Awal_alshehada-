@@ -1,4 +1,5 @@
 import Ajv, { ErrorObject } from 'ajv';
+import { ArabicGrammarContent, ArabicGrammarAnswer, ArabicGrammarCorrectAnswer } from '../types';
 
 export const ajv = new Ajv({ allErrors: true });
 
@@ -299,55 +300,68 @@ export function validateQuestionContent(type: keyof typeof ContentSchemas, conte
 
   // Deep validation for arabic_grammar components
   if (type === 'arabic_grammar' && content && typeof content === 'object') {
-    const rawContent = content as any;
-    if (Array.isArray(rawContent.components)) {
-      const seenComponentIds = new Set<string>();
-      for (const comp of rawContent.components) {
-        if (!comp || typeof comp !== 'object') {
-          return { valid: false, errors: ['Grammar component must be an object'] };
-        }
-        if (!comp.id || typeof comp.id !== 'string') {
-          return { valid: false, errors: ['Grammar component is missing a valid id'] };
-        }
-        if (seenComponentIds.has(comp.id)) {
-          return { valid: false, errors: [`Duplicate component ID '${comp.id}' in arabic_grammar components`] };
-        }
-        seenComponentIds.add(comp.id);
+    const rawContent = content as ArabicGrammarContent & { allocatedMarks?: number; totalMarks?: number; marks?: number };
 
-        if (typeof comp.points === 'number' && comp.points < 0) {
-          return { valid: false, errors: [`Component '${comp.id}' points cannot be negative`] };
-        }
+    if (!Array.isArray(rawContent.components) || rawContent.components.length === 0) {
+      return { valid: false, errors: ['arabic_grammar question must contain at least 1 component'] };
+    }
 
-        if (Array.isArray(comp.choices)) {
-          if (comp.choices.length < 2) {
-            return { valid: false, errors: [`Component '${comp.id}' must contain at least 2 choices`] };
+    const seenComponentIds = new Set<string>();
+    let sumPoints = 0;
+
+    for (const comp of rawContent.components) {
+      if (!comp || typeof comp !== 'object') {
+        return { valid: false, errors: ['Grammar component must be an object'] };
+      }
+      if (!comp.id || typeof comp.id !== 'string') {
+        return { valid: false, errors: ['Grammar component is missing a valid id'] };
+      }
+      if (seenComponentIds.has(comp.id)) {
+        return { valid: false, errors: [`Duplicate component ID '${comp.id}' in arabic_grammar components`] };
+      }
+      seenComponentIds.add(comp.id);
+
+      if (typeof comp.points !== 'number' || comp.points < 0) {
+        return { valid: false, errors: [`Component '${comp.id}' points must be a non-negative number`] };
+      }
+      sumPoints += comp.points;
+
+      if (!Array.isArray(comp.choices) || comp.choices.length < 2) {
+        return { valid: false, errors: [`Component '${comp.id}' must contain at least 2 choices`] };
+      }
+
+      const seenChoiceIds = new Set<string>();
+      for (const choice of comp.choices) {
+        if (!choice || typeof choice !== 'object' || !choice.id || typeof choice.id !== 'string') {
+          return { valid: false, errors: [`Choice in component '${comp.id}' is missing a valid id`] };
+        }
+        if (seenChoiceIds.has(choice.id)) {
+          return { valid: false, errors: [`Duplicate choice ID '${choice.id}' in component '${comp.id}'`] };
+        }
+        seenChoiceIds.add(choice.id);
+      }
+
+      if (Array.isArray(comp.hints)) {
+        for (const hint of comp.hints) {
+          if (!hint || typeof hint !== 'object') {
+            return { valid: false, errors: [`Hint in component '${comp.id}' must be an object`] };
           }
-          const seenChoiceIds = new Set<string>();
-          for (const choice of comp.choices) {
-            if (!choice || typeof choice !== 'object' || !choice.id || typeof choice.id !== 'string') {
-              return { valid: false, errors: [`Choice in component '${comp.id}' is missing a valid id`] };
-            }
-            if (seenChoiceIds.has(choice.id)) {
-              return { valid: false, errors: [`Duplicate choice ID '${choice.id}' in component '${comp.id}'`] };
-            }
-            seenChoiceIds.add(choice.id);
+          if (typeof hint.level !== 'number') {
+            return { valid: false, errors: [`Hint level in component '${comp.id}' must be a number`] };
           }
-        }
-
-        if (Array.isArray(comp.hints)) {
-          for (const hint of comp.hints) {
-            if (!hint || typeof hint !== 'object') {
-              return { valid: false, errors: [`Hint in component '${comp.id}' must be an object`] };
-            }
-            if (typeof hint.level !== 'number') {
-              return { valid: false, errors: [`Hint level in component '${comp.id}' must be a number`] };
-            }
-            if (!hint.text || typeof hint.text !== 'string' || !hint.text.trim()) {
-              return { valid: false, errors: [`Hint text in component '${comp.id}' must be non-empty`] };
-            }
+          if (!hint.text || typeof hint.text !== 'string' || !hint.text.trim()) {
+            return { valid: false, errors: [`Hint text in component '${comp.id}' must be non-empty`] };
           }
         }
       }
+    }
+
+    const expectedTotal = rawContent.allocatedMarks ?? rawContent.totalMarks ?? rawContent.marks;
+    if (typeof expectedTotal === 'number' && expectedTotal > 0 && sumPoints !== expectedTotal) {
+      return {
+        valid: false,
+        errors: [`Sum of component points (${sumPoints}) does not match total allocated marks (${expectedTotal})`],
+      };
     }
   }
 
@@ -780,4 +794,78 @@ export function validateMultiStepCalculationAnswer(
   }
 
   return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validates C1 Arabic Grammar correct answer against question content.
+ */
+export function validateArabicGrammarCorrectAnswer(
+  correctAnswer: unknown,
+  content: unknown
+): ValidationResult {
+  if (!correctAnswer || typeof correctAnswer !== 'object') {
+    return { valid: false, errors: ['Correct answer must be an object'] };
+  }
+  const ca = correctAnswer as ArabicGrammarCorrectAnswer;
+  const caComponents = ca.components;
+  if (!caComponents || typeof caComponents !== 'object') {
+    return { valid: false, errors: ['Correct answer must contain a components object'] };
+  }
+
+  if (content && typeof content === 'object') {
+    const c = content as ArabicGrammarContent;
+    if (Array.isArray(c.components)) {
+      for (const comp of c.components) {
+        const correctChoiceId = caComponents[comp.id];
+        if (!correctChoiceId || typeof correctChoiceId !== 'string') {
+          return { valid: false, errors: [`Missing correct choice ID for component '${comp.id}'`] };
+        }
+        const exists = comp.choices.some((ch) => ch.id === correctChoiceId);
+        if (!exists) {
+          return {
+            valid: false,
+            errors: [`Correct answer choice '${correctChoiceId}' for component '${comp.id}' does not exist in choices`],
+          };
+        }
+      }
+    }
+  }
+
+  return { valid: true, errors: [] };
+}
+
+/**
+ * Validates C1 Arabic Grammar student answer against question content.
+ */
+export function validateArabicGrammarStudentAnswer(
+  studentAnswer: unknown,
+  content: unknown
+): ValidationResult {
+  if (!studentAnswer || typeof studentAnswer !== 'object') {
+    return { valid: false, errors: ['Student answer must be an object'] };
+  }
+  const sa = studentAnswer as ArabicGrammarAnswer;
+  const saComponents = sa.components;
+  if (!saComponents || typeof saComponents !== 'object') {
+    return { valid: false, errors: ['Student answer must contain a components map'] };
+  }
+
+  if (content && typeof content === 'object') {
+    const c = content as ArabicGrammarContent;
+    if (Array.isArray(c.components)) {
+      const compMap = new Map(c.components.map((comp) => [comp.id, comp]));
+      for (const [compId, choiceId] of Object.entries(saComponents)) {
+        if (!compMap.has(compId)) {
+          return { valid: false, errors: [`Invalid component ID '${compId}' in student answer`] };
+        }
+        const comp = compMap.get(compId)!;
+        const exists = comp.choices.some((ch) => ch.id === choiceId);
+        if (!exists) {
+          return { valid: false, errors: [`Invalid choice ID '${choiceId}' for component '${compId}' in student answer`] };
+        }
+      }
+    }
+  }
+
+  return { valid: true, errors: [] };
 }

@@ -604,54 +604,65 @@ export function createClientSnapshot(
 
     // 12. ARABIC_GRAMMAR
     if (row.question_type === 'arabic_grammar') {
-        const components = Array.isArray(rawContentObj.components)
-            ? (rawContentObj.components as any[]).map((c) => ({
+        const rawComponents = Array.isArray(rawContentObj.components)
+            ? (rawContentObj.components as Array<Record<string, unknown>>)
+            : [];
+
+        const components = rawComponents.map((c) => {
+            const rawChoices = Array.isArray(c.choices) ? (c.choices as Array<Record<string, unknown>>) : [];
+            const cleanChoices = rawChoices.map((ch) => ({
+                id: String(ch.id || ''),
+                text: String(ch.text || ''),
+            }));
+
+            const rawHints = Array.isArray(c.hints) ? (c.hints as Array<Record<string, unknown>>) : undefined;
+            const cleanHints = rawHints
+                ? rawHints.map((h) => ({
+                      level: Number(h.level || 1),
+                      text: String(h.text || ''),
+                  }))
+                : undefined;
+
+            return {
                 id: String(c.id || ''),
                 label: String(c.label || ''),
                 points: Number(c.points || 0),
-                choices: Array.isArray(c.choices)
-                    ? c.choices.map((ch: any) => ({
-                        id: String(ch.id || ''),
-                        text: String(ch.text || ''),
-                      }))
-                    : [],
-                ...(Array.isArray(c.hints)
-                    ? {
-                        hints: c.hints.map((h: any) => ({
-                            level: Number(h.level || 1),
-                            text: String(h.text || ''),
-                        })),
-                      }
-                    : {}),
-              }))
-            : undefined;
+                choices: cleanChoices,
+                ...(cleanHints ? { hints: cleanHints } : {}),
+            };
+        });
 
         if (examMode === ExamMode.TRAINING) {
             snap.content = {
                 prompt: promptText,
-                ...(rawContentObj.passage ? { passage: rawContentObj.passage } : {}),
-                ...(rawContentObj.sentence ? { sentence: rawContentObj.sentence } : {}),
-                ...(rawContentObj.targetWord ? { targetWord: rawContentObj.targetWord } : {}),
-                ...(rawContentObj.mode ? { mode: rawContentObj.mode } : {}),
-                ...(rawContentObj.words ? { words: rawContentObj.words } : {}),
-                ...(components ? { components } : {}),
+                ...(rawContentObj.passage ? { passage: String(rawContentObj.passage) } : {}),
+                ...(rawContentObj.sentence ? { sentence: String(rawContentObj.sentence) } : {}),
+                ...(rawContentObj.targetWord ? { targetWord: String(rawContentObj.targetWord) } : {}),
+                ...(rawContentObj.mode ? { mode: String(rawContentObj.mode) } : {}),
+                ...(components.length > 0 ? { components } : {}),
             };
             snap.correctAnswer = row.correct_answer;
             snap.explanation = row.explanation ?? null;
             snap.explanationAr = row.explanation ?? null;
         } else {
-            // SIMULATOR: strip hints, no correctAnswer, no explanation
-            const simComponents = components
-                ? components.map(({ hints, ...rest }) => rest)
-                : undefined;
+            // SIMULATOR: Strictly scrub hints, correctAnswer, explanation, and any answer keys
+            const simComponents = components.map(({ hints, ...rest }) => ({
+                id: rest.id,
+                label: rest.label,
+                points: rest.points,
+                choices: rest.choices.map((ch) => ({
+                    id: ch.id,
+                    text: ch.text,
+                })),
+            }));
+
             snap.content = {
                 prompt: promptText,
-                ...(rawContentObj.passage ? { passage: rawContentObj.passage } : {}),
-                ...(rawContentObj.sentence ? { sentence: rawContentObj.sentence } : {}),
-                ...(rawContentObj.targetWord ? { targetWord: rawContentObj.targetWord } : {}),
-                ...(rawContentObj.mode ? { mode: rawContentObj.mode } : {}),
-                ...(rawContentObj.words ? { words: rawContentObj.words } : {}),
-                ...(simComponents ? { components: simComponents } : {}),
+                ...(rawContentObj.passage ? { passage: String(rawContentObj.passage) } : {}),
+                ...(rawContentObj.sentence ? { sentence: String(rawContentObj.sentence) } : {}),
+                ...(rawContentObj.targetWord ? { targetWord: String(rawContentObj.targetWord) } : {}),
+                ...(rawContentObj.mode ? { mode: String(rawContentObj.mode) } : {}),
+                ...(simComponents.length > 0 ? { components: simComponents } : {}),
             };
         }
         return snap;

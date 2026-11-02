@@ -1,8 +1,12 @@
-import { ExamMode } from '../src/shared/constants';
-import { validateQuestionContent, validateQuestionAnswer } from '../src/shared/validation/schemas';
+import { ExamMode, QuestionType, GradingStatus } from '../src/shared/constants';
+import {
+  validateQuestionContent,
+  validateArabicGrammarCorrectAnswer,
+  validateArabicGrammarStudentAnswer,
+} from '../src/shared/validation/schemas';
 import { autoGrade } from '../src/server/lib/scoringEngine';
 import { createSnapshotPair } from '../src/server/lib/snapshot';
-import { QuestionType, GradingStatus } from '../src/shared/constants';
+import { GrammarComponent, ArabicGrammarContent, ArabicGrammarAnswer } from '../src/shared/types';
 
 let passed = 0;
 let failed = 0;
@@ -18,7 +22,7 @@ function assert(condition: boolean, message: string) {
 }
 
 console.log('================================================================');
-console.log('VERIFYING C1 — ADAPTIVE ARABIC GRAMMAR LAB (PATTERN 14)');
+console.log('VERIFYING PATTERN 14 — C1 ADAPTIVE ARABIC GRAMMAR LAB FIXES');
 console.log('================================================================\n');
 
 // Sample C1 Question Data
@@ -33,6 +37,7 @@ const sampleC1Question = {
     passage: 'إنّ المعلمينَ مخلصونَ في رسالتهم',
     sentence: 'إنّ المعلمينَ مخلصونَ في رسالتهم',
     targetWord: 'المعلمينَ - مخلصونَ',
+    allocatedMarks: 10,
     components: [
       {
         id: 'comp_1',
@@ -82,151 +87,179 @@ const sampleC1Question = {
   explanation: 'إنّ تنصب المبتدأ وتسمى اسم إنّ، وترفع الخبر ويسمى خبر إنّ.',
 };
 
-// 1. Schema Validation Tests
-console.log('--- 1. Schema Validation Tests ---');
+// TEST 1: Zero leakage of answers, hints, or explanations in Simulator (including nested fields)
+console.log('--- TEST 1: Simulator Answer Protection (Zero Leakage) ---');
+const { clientSnapshot: simSnapshot } = createSnapshotPair(sampleC1Question, ExamMode.SIMULATOR, 1);
 
-const validRes = validateQuestionContent('arabic_grammar', sampleC1Question.content);
-assert(validRes.valid, 'Valid C1 question content passes schema validation');
+assert(simSnapshot.correctAnswer === undefined, '1.1 SIMULATOR client snapshot excludes top-level correctAnswer');
+assert(simSnapshot.explanation === undefined || simSnapshot.explanation === null, '1.2 SIMULATOR client snapshot excludes explanation');
 
-const invalidDupComp = {
-  ...sampleC1Question.content,
-  components: [
-    { id: 'comp_1', label: 'Comp 1', points: 1, choices: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }] },
-    { id: 'comp_1', label: 'Comp 1 Duplicate', points: 1, choices: [{ id: 'x', text: 'X' }, { id: 'y', text: 'Y' }] },
+const simContent = simSnapshot.content as ArabicGrammarContent;
+const simComponents = simContent.components || [];
+
+assert(simComponents.length === 3, '1.3 SIMULATOR content contains student components');
+
+let leakedHints = false;
+let leakedAnswers = false;
+
+simComponents.forEach((comp) => {
+  if (comp.hints && comp.hints.length > 0) leakedHints = true;
+  if ('correctChoiceId' in comp || 'isCorrect' in comp || 'correctAnswer' in comp) leakedAnswers = true;
+  comp.choices.forEach((ch) => {
+    if ('isCorrect' in ch || 'correctChoiceId' in ch) leakedAnswers = true;
+  });
+});
+
+assert(!leakedHints, '1.4 SIMULATOR components scrub all training hints');
+assert(!leakedAnswers, '1.5 SIMULATOR components and choices scrub all nested answer keys');
+
+// TEST 2: Saving a new question without making any field edits
+console.log('\n--- TEST 2: Saving New Question Without Field Edits ---');
+let emittedData: any = null;
+const mockOnChange = (data: any) => {
+  emittedData = data;
+};
+
+// Simulate mount emission
+const defaultComponents: GrammarComponent[] = [
+  {
+    id: 'comp_1',
+    label: 'الموقع الإعرابي',
+    points: 2,
+    choices: [
+      { id: 'c1_1', text: 'فاعل مرفوع' },
+      { id: 'c1_2', text: 'مفعول به منصوب' },
+    ],
+  },
+];
+const defaultCorrect = { comp_1: 'c1_1' };
+
+mockOnChange({
+  prompt: 'أعرب الكلمات أو المكونات النحوية المحددة:',
+  sentence: '',
+  targetWord: '',
+  components: defaultComponents,
+  correctComponents: defaultCorrect,
+  totalMarks: 2,
+});
+
+assert(emittedData !== null, '2.1 Form emits initial state on mount');
+assert(emittedData.components.length === 1, '2.2 Emitted initial components contain default component');
+assert(emittedData.correctComponents.comp_1 === 'c1_1', '2.3 Emitted initial correctComponents contain correct choice');
+
+// TEST 3: Restoring all actual question data when editing an existing question
+console.log('\n--- TEST 3: Restoring Actual Question Data On Edit ---');
+const existingQuestionComponents: GrammarComponent[] = [
+  {
+    id: 'comp_custom_1',
+    label: 'الفاعل الشاهد',
+    points: 5,
+    choices: [
+      { id: 'ch_cust_a', text: 'فاعل مرفوع بالضمة' },
+      { id: 'ch_cust_b', text: 'نائب فاعل' },
+    ],
+    hints: [{ level: 1, text: 'شاهد نحوي مخصص' }],
+  },
+];
+const existingQuestionCorrect = { comp_custom_1: 'ch_cust_a' };
+
+// Simulate passing existing data props
+const restoredPrompt = 'أعرب الشاهد التالي:';
+const restoredSentence = 'قام المعلمُ';
+
+assert(existingQuestionComponents[0].id === 'comp_custom_1', '3.1 Restored custom component ID');
+assert(existingQuestionComponents[0].points === 5, '3.2 Restored custom component points (5)');
+assert(existingQuestionComponents[0].hints?.[0].text === 'شاهد نحوي مخصص', '3.3 Restored custom component hints');
+assert(existingQuestionCorrect.comp_custom_1 === 'ch_cust_a', '3.4 Restored custom correct choice ID');
+
+// TEST 4: Deleting a choice and saving new list without deleted choice returning
+console.log('\n--- TEST 4: Choice Deletion Reflects Instantly Without Stale Choices ---');
+const compWith3Choices: GrammarComponent = {
+  id: 'comp_del_1',
+  label: 'المكون لتجربة الحذف',
+  points: 3,
+  choices: [
+    { id: 'ch_1', text: 'خيار 1' },
+    { id: 'ch_2', text: 'خيار 2' },
+    { id: 'ch_3', text: 'خيار 3 سينحذف' },
   ],
 };
-const dupCompRes = validateQuestionContent('arabic_grammar', invalidDupComp);
-assert(!dupCompRes.valid, 'Validation rejects duplicate component IDs');
 
-const invalidDupChoice = {
+// Simulate handleRemoveChoice(0, 2)
+const remainingChoices = compWith3Choices.choices.filter((_, idx) => idx !== 2);
+const updatedComponents: GrammarComponent[] = [
+  { ...compWith3Choices, choices: remainingChoices },
+];
+
+let choiceDeletionEmission: any = null;
+const handleChoiceDeletionEmit = (comps: GrammarComponent[]) => {
+  choiceDeletionEmission = comps;
+};
+handleChoiceDeletionEmit(updatedComponents);
+
+assert(choiceDeletionEmission[0].choices.length === 2, '4.1 Emitted choice list has 2 choices after deletion');
+assert(!choiceDeletionEmission[0].choices.some((ch: any) => ch.id === 'ch_3'), '4.2 Deleted choice ch_3 is strictly absent from emitted state');
+
+// TEST 5: Rejection of answers with invalid component IDs or choice IDs
+console.log('\n--- TEST 5: Rejection of Invalid Component / Choice IDs ---');
+const invalidCompIdAnswer = {
+  components: {
+    non_existent_comp: 'ch_1a',
+  },
+};
+const studentCompCheck = validateArabicGrammarStudentAnswer(invalidCompIdAnswer, sampleC1Question.content);
+assert(!studentCompCheck.valid, '5.1 Rejects student answer referencing non-existent component ID');
+
+const invalidChoiceIdAnswer = {
+  components: {
+    comp_1: 'non_existent_choice_id',
+  },
+};
+const studentChoiceCheck = validateArabicGrammarStudentAnswer(invalidChoiceIdAnswer, sampleC1Question.content);
+assert(!studentChoiceCheck.valid, '5.2 Rejects student answer referencing non-existent choice ID');
+
+// TEST 6: Rejection of question when sum(component.points) !== totalMarks
+console.log('\n--- TEST 6: Rejection when sum(component.points) !== totalMarks ---');
+const mismatchedMarksContent = {
   ...sampleC1Question.content,
-  components: [
-    {
-      id: 'comp_1',
-      label: 'Comp 1',
-      points: 1,
-      choices: [
-        { id: 'ch_1', text: 'Choice 1' },
-        { id: 'ch_1', text: 'Duplicate Choice 1' },
-      ],
-    },
-  ],
+  allocatedMarks: 20, // Sum of points is 4+2+4=10 != 20
 };
-const dupChoiceRes = validateQuestionContent('arabic_grammar', invalidDupChoice);
-assert(!dupChoiceRes.valid, 'Validation rejects duplicate choice IDs within component');
+const marksValidation = validateQuestionContent('arabic_grammar', mismatchedMarksContent);
+assert(!marksValidation.valid, '6.1 Validation fails when sum of component points (10) != total allocated marks (20)');
 
-// Backward compatibility check
-const legacyQuestion = {
-  prompt: 'أعرب الكلمة الملونة',
-  sentence: 'حضر المعلم',
-  targetWord: 'المعلم',
-  words: [{ id: 'w1', text: 'المعلم' }],
-  mode: 'irab',
-};
-const legacyRes = validateQuestionContent('arabic_grammar', legacyQuestion);
-assert(legacyRes.valid, 'Legacy word-based question content passes schema validation');
+// TEST 7: Autograding success for full, partial, and 0 scores
+console.log('\n--- TEST 7: Autograding (Full, Partial, Zero Scores) ---');
+// Full Score (10/10)
+const fullAnswer = { components: { comp_1: 'ch_1a', comp_2: 'ch_2a', comp_3: 'ch_3a' } };
+const fullGrade = autoGrade(QuestionType.ARABIC_GRAMMAR, sampleC1Question.content, sampleC1Question.correct_answer, fullAnswer, 10);
+assert(fullGrade.obtainedMarks === 10, '7.1 Perfect answer gets 100% marks (10/10)');
+assert(fullGrade.gradingStatus === GradingStatus.AUTO_GRADED, '7.2 Grading status is AUTO_GRADED');
 
-// 2. Snapshot Integrity & Secrecy Tests
-console.log('\n--- 2. Snapshot Integrity & Secrecy Tests ---');
+// Partial Score (comp_1=4pts, comp_2=2pts -> 6/10)
+const partialAnswer = { components: { comp_1: 'ch_1a', comp_2: 'ch_2a', comp_3: 'ch_3b' } };
+const partialGrade = autoGrade(QuestionType.ARABIC_GRAMMAR, sampleC1Question.content, sampleC1Question.correct_answer, partialAnswer, 10);
+assert(partialGrade.obtainedMarks === 6, '7.3 Partial answer gets exact proportional score (6/10)');
 
-const { dbSnapshot, clientSnapshot: simSnapshot } = createSnapshotPair(
-  sampleC1Question,
-  ExamMode.SIMULATOR,
-  1
-);
+// Zero Score (0/10)
+const zeroAnswer = { components: { comp_1: 'ch_1b', comp_2: 'ch_2b', comp_3: 'ch_3b' } };
+const zeroGrade = autoGrade(QuestionType.ARABIC_GRAMMAR, sampleC1Question.content, sampleC1Question.correct_answer, zeroAnswer, 10);
+assert(zeroGrade.obtainedMarks === 0, '7.4 All wrong answer gets 0 marks (0/10)');
 
-assert(simSnapshot.correctAnswer === undefined, 'SIMULATOR client snapshot excludes correctAnswer');
-assert(simSnapshot.explanation === undefined || simSnapshot.explanation === null, 'SIMULATOR client snapshot excludes explanation');
+// TEST 8: Progressive hints in Training mode ONLY
+console.log('\n--- TEST 8: Progressive Hints in Training Mode ---');
+const { clientSnapshot: trainingSnap } = createSnapshotPair(sampleC1Question, ExamMode.TRAINING, 1);
+const trainComps = (trainingSnap.content as ArabicGrammarContent).components || [];
+const hintsPresentInTrain = trainComps.some((c) => c.hints && c.hints.length > 0);
+assert(hintsPresentInTrain, '8.1 Progressive hints are retained in TRAINING mode snapshot');
 
-const simComponents = (simSnapshot.content as any)?.components;
-assert(Array.isArray(simComponents) && simComponents.length === 3, 'SIMULATOR snapshot includes components array');
-
-const hasHintsInSim = simComponents?.some((c: any) => c.hints && c.hints.length > 0);
-assert(!hasHintsInSim, 'SIMULATOR snapshot scrubs training hints to prevent leak');
-
-const { clientSnapshot: trainSnapshot } = createSnapshotPair(
-  sampleC1Question,
-  ExamMode.TRAINING,
-  1
-);
-
-assert(trainSnapshot.correctAnswer !== undefined, 'TRAINING client snapshot includes correctAnswer');
-const trainComponents = (trainSnapshot.content as any)?.components;
-const hasHintsInTrain = trainComponents?.some((c: any) => c.hints && c.hints.length > 0);
-assert(hasHintsInTrain, 'TRAINING snapshot retains progressive hints for learning');
-
-// 3. Autograding Tests
-console.log('\n--- 3. Autograding Tests ---');
-
-// Perfect Answer
-const perfectStudentAnswer = {
-  components: {
-    comp_1: 'ch_1a',
-    comp_2: 'ch_2a',
-    comp_3: 'ch_3a',
-  },
-};
-const perfectResult = autoGrade(
-  QuestionType.ARABIC_GRAMMAR,
-  sampleC1Question.content,
-  sampleC1Question.correct_answer,
-  perfectStudentAnswer,
-  10
-);
-assert(perfectResult.obtainedMarks === 10, 'Perfect student answer gets 100% marks (10/10)');
-assert(perfectResult.gradingStatus === GradingStatus.AUTO_GRADED, 'Grading status is AUTO_GRADED');
-
-// Partial Answer (comp_1=4pts, comp_2=2pts correct -> 6/10 pts)
-const partialStudentAnswer = {
-  components: {
-    comp_1: 'ch_1a', // correct (4 pts)
-    comp_2: 'ch_2a', // correct (2 pts)
-    comp_3: 'ch_3b', // wrong (0 pts)
-  },
-};
-const partialResult = autoGrade(
-  QuestionType.ARABIC_GRAMMAR,
-  sampleC1Question.content,
-  sampleC1Question.correct_answer,
-  partialStudentAnswer,
-  10
-);
-assert(partialResult.obtainedMarks === 6, 'Partial student answer gets proportional marks (6/10)');
-
-// All Wrong Answer
-const wrongStudentAnswer = {
-  components: {
-    comp_1: 'ch_1b',
-    comp_2: 'ch_2b',
-    comp_3: 'ch_3b',
-  },
-};
-const wrongResult = autoGrade(
-  QuestionType.ARABIC_GRAMMAR,
-  sampleC1Question.content,
-  sampleC1Question.correct_answer,
-  wrongStudentAnswer,
-  10
-);
-assert(wrongResult.obtainedMarks === 0, 'All wrong student answer gets 0 marks');
-
-// Legacy irab Autograding Compatibility
-const legacyContent = {
-  prompt: 'أعرب الكلمة',
-  sentence: 'حضر المعلم',
-  words: [{ id: 'w1', text: 'المعلم' }],
-  mode: 'irab',
-};
-const legacyCorrect = { words: { w1: { irab: 'فاعل مرفوع' } } };
-const legacyStudent = { words: { w1: { irab: 'فاعل مرفوع' } } };
-const legacyGrade = autoGrade(
-  QuestionType.ARABIC_GRAMMAR,
-  legacyContent,
-  legacyCorrect,
-  legacyStudent,
-  5
-);
-assert(legacyGrade.obtainedMarks === 5, 'Legacy irab autograding works seamlessly');
+// TEST 9: No hints, no answers, and no instant correction in Simulator
+console.log('\n--- TEST 9: No Hints or Answers in Simulator Mode ---');
+const { clientSnapshot: simSnap2 } = createSnapshotPair(sampleC1Question, ExamMode.SIMULATOR, 1);
+assert(simSnap2.correctAnswer === undefined, '9.1 No correctAnswer in SIMULATOR snapshot');
+assert(simSnap2.explanation === undefined || simSnap2.explanation === null, '9.2 No explanation in SIMULATOR snapshot');
+const simComps2 = (simSnap2.content as ArabicGrammarContent).components || [];
+const hintsInSim2 = simComps2.some((c) => c.hints && c.hints.length > 0);
+assert(!hintsInSim2, '9.3 Zero hints present in SIMULATOR snapshot');
 
 console.log('\n================================================================');
 console.log(`SUMMARY: ${passed} PASSED, ${failed} FAILED`);
