@@ -110,7 +110,51 @@ export const ContentSchemas = {
   contour_map: { type: 'object', required: ['prompt', 'mapImage', 'subQuestions'] },
   calculation: { type: 'object', required: ['prompt'] },
   ordering: { type: 'object', required: ['prompt', 'items'] },
-  arabic_grammar: { type: 'object', required: ['prompt', 'mode', 'passage', 'words'] },
+  arabic_grammar: {
+    type: 'object',
+    required: ['prompt'],
+    properties: {
+      prompt: { type: 'string', minLength: 1 },
+      sentence: { type: 'string' },
+      targetWord: { type: 'string' },
+      passage: { type: 'string' },
+      components: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['id', 'label', 'points', 'choices'],
+          properties: {
+            id: { type: 'string', minLength: 1 },
+            label: { type: 'string', minLength: 1 },
+            points: { type: 'number', minimum: 0 },
+            choices: {
+              type: 'array',
+              minItems: 2,
+              items: {
+                type: 'object',
+                required: ['id', 'text'],
+                properties: {
+                  id: { type: 'string', minLength: 1 },
+                  text: { type: 'string', minLength: 1 },
+                },
+              },
+            },
+            hints: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['level', 'text'],
+                properties: {
+                  level: { type: 'number' },
+                  text: { type: 'string', minLength: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   reading_comprehension: { type: 'object', required: ['prompt', 'passage', 'subQuestions'] },
 } as const;
 
@@ -154,7 +198,7 @@ export const AnswerSchemas = {
   contour_map: { type: 'object', required: ['subAnswers'] },
   calculation: { type: 'object', required: ['value'] },
   ordering: { type: 'object', required: ['order'] },
-  arabic_grammar: { type: 'object', required: ['words'] },
+  arabic_grammar: { type: 'object' },
   reading_comprehension: { type: 'object', required: ['subAnswers'] },
 } as const;
 
@@ -246,6 +290,60 @@ export function validateQuestionContent(type: keyof typeof ContentSchemas, conte
                 }
                 seenIds.add(String(optId));
               }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Deep validation for arabic_grammar components
+  if (type === 'arabic_grammar' && content && typeof content === 'object') {
+    const rawContent = content as any;
+    if (Array.isArray(rawContent.components)) {
+      const seenComponentIds = new Set<string>();
+      for (const comp of rawContent.components) {
+        if (!comp || typeof comp !== 'object') {
+          return { valid: false, errors: ['Grammar component must be an object'] };
+        }
+        if (!comp.id || typeof comp.id !== 'string') {
+          return { valid: false, errors: ['Grammar component is missing a valid id'] };
+        }
+        if (seenComponentIds.has(comp.id)) {
+          return { valid: false, errors: [`Duplicate component ID '${comp.id}' in arabic_grammar components`] };
+        }
+        seenComponentIds.add(comp.id);
+
+        if (typeof comp.points === 'number' && comp.points < 0) {
+          return { valid: false, errors: [`Component '${comp.id}' points cannot be negative`] };
+        }
+
+        if (Array.isArray(comp.choices)) {
+          if (comp.choices.length < 2) {
+            return { valid: false, errors: [`Component '${comp.id}' must contain at least 2 choices`] };
+          }
+          const seenChoiceIds = new Set<string>();
+          for (const choice of comp.choices) {
+            if (!choice || typeof choice !== 'object' || !choice.id || typeof choice.id !== 'string') {
+              return { valid: false, errors: [`Choice in component '${comp.id}' is missing a valid id`] };
+            }
+            if (seenChoiceIds.has(choice.id)) {
+              return { valid: false, errors: [`Duplicate choice ID '${choice.id}' in component '${comp.id}'`] };
+            }
+            seenChoiceIds.add(choice.id);
+          }
+        }
+
+        if (Array.isArray(comp.hints)) {
+          for (const hint of comp.hints) {
+            if (!hint || typeof hint !== 'object') {
+              return { valid: false, errors: [`Hint in component '${comp.id}' must be an object`] };
+            }
+            if (typeof hint.level !== 'number') {
+              return { valid: false, errors: [`Hint level in component '${comp.id}' must be a number`] };
+            }
+            if (!hint.text || typeof hint.text !== 'string' || !hint.text.trim()) {
+              return { valid: false, errors: [`Hint text in component '${comp.id}' must be non-empty`] };
             }
           }
         }

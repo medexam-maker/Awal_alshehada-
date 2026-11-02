@@ -8,6 +8,7 @@ import { MatchingRenderer } from '../../components/questions/MatchingRenderer';
 import { Pattern7AuthoringForm } from '../../components/admin/Pattern7AuthoringForm';
 import { Pattern8AuthoringForm, Pattern8FormFields } from '../../components/admin/Pattern8AuthoringForm';
 import { Pattern11AuthoringForm, Pattern11FormData } from '../../components/admin/Pattern11AuthoringForm';
+import { Pattern14AuthoringForm } from '../../components/admin/Pattern14AuthoringForm';
 import {
   Settings,
   PlusCircle,
@@ -1169,6 +1170,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [pattern7Data, setPattern7Data] = useState<any>(null);
   const [pattern8Data, setPattern8Data] = useState<Pattern8FormFields | null>(null);
   const [pattern11Data, setPattern11Data] = useState<Pattern11FormData | null>(null);
+  const [pattern14Data, setPattern14Data] = useState<any>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
   const handleEditQuestion = (q: AuthoredQuestion) => {
@@ -1309,8 +1311,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       };
       correctAnswer = { answers: answersRecord };
     } else if (questionType === QuestionType.ARABIC_GRAMMAR) {
-      content = { targetWord: grammarWord, fullSentence: questionPrompt };
-      correctAnswer = grammarAnswer;
+      if (pattern14Data && pattern14Data.components && pattern14Data.components.length > 0) {
+        content = {
+          prompt: pattern14Data.prompt || questionPrompt.trim(),
+          sentence: pattern14Data.sentence || undefined,
+          targetWord: pattern14Data.targetWord || grammarWord || undefined,
+          components: pattern14Data.components,
+        };
+        correctAnswer = {
+          components: pattern14Data.correctComponents,
+        };
+        if (pattern14Data.totalMarks > 0) {
+          setQuestionMarks(pattern14Data.totalMarks);
+        }
+      } else {
+        content = { targetWord: grammarWord, fullSentence: questionPrompt };
+        correctAnswer = grammarAnswer;
+      }
     } else if (questionType === QuestionType.ODD_ONE_OUT) {
       content = { words: oddWords.split('،').map((w) => w.trim()) };
       correctAnswer = oddAnswer.trim();
@@ -2294,28 +2311,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               )}
 
               {questionType === QuestionType.ARABIC_GRAMMAR && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 block">الكلمة المطلوب إعرابها:</label>
-                    <input
-                      type="text"
-                      value={grammarWord}
-                      onChange={(e) => setGrammarWord(e.target.value)}
-                      placeholder="مثلاً: مخلصونَ"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 block">الإعراب التام المعتمد:</label>
-                    <input
-                      type="text"
-                      value={grammarAnswer}
-                      onChange={(e) => setGrammarAnswer(e.target.value)}
-                      placeholder="خبر إنّ مرفوع بالواو لأنه جمع مذكر سالم"
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                </div>
+                <Pattern14AuthoringForm
+                  initialPrompt={questionPrompt}
+                  initialSentence={grammarWord ? `الجملة المحتوية على (${grammarWord})` : ''}
+                  initialTargetWord={grammarWord}
+                  onChange={(data) => {
+                    setPattern14Data(data);
+                    if (data.totalMarks > 0) {
+                      setQuestionMarks(data.totalMarks);
+                    }
+                  }}
+                />
               )}
 
               {questionType === QuestionType.ODD_ONE_OUT && (

@@ -397,21 +397,58 @@ export function autoGrade(
   } else if (questionType === QuestionType.ARABIC_GRAMMAR) {
     const c = content as ArabicGrammarContent;
     const ca = correctAnswer as ArabicGrammarAnswer;
-    const sa = studentAnswer as ArabicGrammarAnswer | undefined;
-    let totalUnits = 0;
-    let correctUnits = 0;
-    for (const word of c.words || []) {
+    const sa = (studentAnswer || {}) as ArabicGrammarAnswer & Record<string, any>;
+
+    if (Array.isArray(c.components) && c.components.length > 0) {
+      // C1 Component-based Adaptive Grammar Lab scoring
+      const caComponents = (ca.components && typeof ca.components === 'object')
+        ? (ca.components as Record<string, string>)
+        : (ca as Record<string, any>);
+      const saComponents = (sa.components && typeof sa.components === 'object')
+        ? (sa.components as Record<string, string>)
+        : (sa as Record<string, any>);
+
+      let totalComponentPoints = 0;
+      let earnedComponentPoints = 0;
+
+      for (const comp of c.components) {
+        const compPoints = typeof comp.points === 'number' && comp.points >= 0 ? comp.points : 1;
+        totalComponentPoints += compPoints;
+
+        const correctChoiceId = caComponents?.[comp.id] ?? (ca as any)[comp.id];
+        const studentChoiceId = saComponents?.[comp.id] ?? (sa as any)[comp.id];
+
+        if (
+          correctChoiceId !== undefined &&
+          studentChoiceId !== undefined &&
+          String(correctChoiceId) === String(studentChoiceId)
+        ) {
+          earnedComponentPoints += compPoints;
+        }
+      }
+
+      if (totalComponentPoints > 0) {
+        obtainedMarks = (earnedComponentPoints / totalComponentPoints) * maxMarks;
+      } else {
+        obtainedMarks = 0;
+      }
+    } else {
+      // Legacy irab / tashkeel word-based scoring
+      let totalUnits = 0;
+      let correctUnits = 0;
+      for (const word of c.words || []) {
         const caWord = ca.words?.[word.id];
         const saWord = sa?.words?.[word.id];
         if (c.mode === 'irab' && caWord?.irab) {
-            totalUnits++;
-            if (saWord?.irab && saWord.irab === caWord.irab) correctUnits++;
+          totalUnits++;
+          if (saWord?.irab && saWord.irab === caWord.irab) correctUnits++;
         } else if (c.mode === 'tashkeel' && caWord?.tashkeel) {
-            totalUnits++;
-            if (saWord?.tashkeel && saWord.tashkeel === caWord.tashkeel) correctUnits++;
+          totalUnits++;
+          if (saWord?.tashkeel && saWord.tashkeel === caWord.tashkeel) correctUnits++;
         }
+      }
+      obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
     }
-    obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.ODD_ONE_OUT) {
     const c = (content || {}) as any;
     const ca = (correctAnswer || {}) as any;

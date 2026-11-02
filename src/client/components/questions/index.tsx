@@ -200,7 +200,16 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       );
 
     case QuestionType.ARABIC_GRAMMAR:
-      return <GrammarRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <GrammarRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.READING_COMPREHENSION:
       return <ReadingComprehensionRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;

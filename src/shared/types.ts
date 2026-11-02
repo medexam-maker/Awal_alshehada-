@@ -334,30 +334,60 @@ export interface OrderingAnswer {
   order: Record<string, number>;
 }
 
-// --- 14. Arabic Grammar Parsing + Diacritics ---
+// --- 14. Arabic Grammar Parsing + Diacritics (C1 Adaptive Grammar Lab) ---
+export interface GrammarChoice {
+  id: string;
+  text: string;
+}
+
+export interface GrammarHint {
+  level: number;
+  text: string;
+}
+
+export interface GrammarComponent {
+  id: string;
+  label: string;
+  points: number;
+  choices: GrammarChoice[];
+  hints?: GrammarHint[];
+}
+
 export interface GrammarOption {
   id: string;
   label: string;
 }
+
 export interface GrammarAnswer {
   irab?: string;
   tashkeel?: string;
   function?: string;
 }
+
 export interface ArabicGrammarWord {
   id: string;
   text: string;
   options?: GrammarOption[];
   correctAnswer: GrammarAnswer;
 }
+
 export interface ArabicGrammarContent {
   prompt: string;
-  mode: 'irab' | 'tashkeel';
-  passage: string;
-  words: ArabicGrammarWord[];
+  sentence?: string;
+  targetWord?: string;
+  passage?: string;
+  components?: GrammarComponent[];
+
+  // Legacy fields (optional for backward compatibility)
+  mode?: 'irab' | 'tashkeel';
+  words?: ArabicGrammarWord[];
 }
+
 export interface ArabicGrammarAnswer {
-  words: Record<string, GrammarAnswer>;
+  components?: Record<string, string>;
+  hintsUsed?: Record<string, number>;
+  analysis?: Record<string, string>;
+  words?: Record<string, GrammarAnswer>;
 }
 
 // --- 15. Reading Comprehension + Summary ---

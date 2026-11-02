@@ -247,9 +247,7 @@ export const QUESTION_TYPE_REGISTRY: Record<QuestionType, QuestionTypeRegistryEn
     manualGradingSupport: false,
     mediaRequired: false,
     validationRules: [
-      { field: 'mode', required: true, type: 'string' },
-      { field: 'passage', required: true, type: 'string' },
-      { field: 'words', required: true, type: 'array' }
+      { field: 'prompt', required: true, type: 'string' }
     ]
   },
   [QuestionType.READING_COMPREHENSION]: {
