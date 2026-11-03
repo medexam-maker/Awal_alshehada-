@@ -8,11 +8,13 @@ import examRoutes from './src/server/routes/examRoutes';
 import authRoutes from './src/server/routes/authRoutes';
 import subjectRoutes from './src/server/routes/subjectRoutes';
 import adminRoutes from './src/server/routes/adminRoutes';
+import { requireAuth, AuthenticatedRequest } from './src/server/middleware/auth';
+import { mediaStorage } from './src/server/lib/mediaStorage';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Serve public directory assets (PWA manifest, icons, sitemap, robots)
 app.use(express.static(path.resolve(process.cwd(), 'public')));
@@ -25,6 +27,39 @@ app.get('/robots.txt', (_req, res) => {
 app.get('/sitemap.xml', (_req, res) => {
   res.type('application/xml');
   res.sendFile(path.resolve(process.cwd(), 'public/sitemap.xml'));
+});
+
+// GET /api/media/:id (any authenticated user)
+app.get('/api/media/:id', requireAuth, async (req: AuthenticatedRequest, res: express.Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const asset = await mediaStorage.getAssetBytes(id);
+    if (!asset) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Media asset not found', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    res.set({
+      'Content-Type': asset.mimeType,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': 'inline',
+      'ETag': asset.sha256,
+      'Cache-Control': 'private, max-age=31536000, immutable',
+    });
+
+    res.send(asset.data);
+  } catch (err) {
+    console.error('[media/:id:GET] Error serving media asset:', err);
+    res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Failed to retrieve media asset', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // Mount the API routes

@@ -1,10 +1,23 @@
 import { Router, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import { pool } from '../db/index';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { QuestionType, BankType, QuestionStatus } from '../../shared/constants';
-import { validateQuestionContent, validateQuestionAnswer, validateMcqAnswer, validateTrueFalseAnswer, validateMultiStepCalculationContent, validateMultiStepCalculationCorrectAnswer, ContentSchemas, AnswerSchemas } from '../../shared/validation/schemas';
+import {
+  validateQuestionContent,
+  validateQuestionAnswer,
+  validateMcqAnswer,
+  validateTrueFalseAnswer,
+  validateMultiStepCalculationContent,
+  validateMultiStepCalculationCorrectAnswer,
+  validateDiagramLabelingKey,
+  ContentSchemas,
+  AnswerSchemas,
+} from '../../shared/validation/schemas';
 import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
 import { buildCanonicalAssessmentPayload, computeCanonicalSha256Node } from '../../shared/canonicalHash';
+import { validateImageUpload } from '../lib/mediaValidation';
+import { mediaStorage } from '../lib/mediaStorage';
 
 const router = Router();
 
@@ -199,6 +212,53 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
     }
   }
 
+  // Diagram labeling key and asset validation
+  if (questionType === QuestionType.DIAGRAM_LABELING) {
+    if (Array.isArray(fullContent.subQuestions) && fullContent.subQuestions.length > 0) {
+      const keyVal = validateDiagramLabelingKey(fullContent, normalizedCorrectAnswer);
+      if (!keyVal.valid) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Invalid diagram_labeling answer key',
+            details: keyVal.errors,
+          },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (fullContent.diagram?.assetId) {
+        const check = await mediaStorage.isAssetArchivedOrUnknown(fullContent.diagram.assetId);
+        if (!check.exists) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: `Referenced diagram asset '${fullContent.diagram.assetId}' does not exist`,
+              details: {},
+            },
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+        if (check.isArchived) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: `Referenced diagram asset '${fullContent.diagram.assetId}' is archived and cannot be used for new questions`,
+              details: {},
+            },
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+      }
+    }
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -366,6 +426,68 @@ router.put('/questions/:id', async (req: AuthenticatedRequest, res: Response): P
     const newCorrectAnswer = correctAnswer !== undefined ? correctAnswer : currentQ.correct_answer;
     const newMarks = allocatedMarks !== undefined ? Number(allocatedMarks) : currentQ.marks;
     const newExplanation = explanationAr !== undefined ? explanationAr : currentQ.explanation;
+
+    if (currentQ.question_type === 'diagram_labeling') {
+      const parsedNewContent = typeof newContent === 'string' ? JSON.parse(newContent) : newContent;
+      const parsedNewCorrectAnswer = typeof newCorrectAnswer === 'string' ? JSON.parse(newCorrectAnswer) : newCorrectAnswer;
+
+      if (Array.isArray(parsedNewContent?.subQuestions) && parsedNewContent.subQuestions.length > 0) {
+        const cVal = validateQuestionContent('diagram_labeling', parsedNewContent);
+        if (!cVal.valid) {
+          await client.query('ROLLBACK');
+          res.status(400).json({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Invalid diagram_labeling content', details: cVal.errors },
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+
+        const kVal = validateDiagramLabelingKey(parsedNewContent, parsedNewCorrectAnswer);
+        if (!kVal.valid) {
+          await client.query('ROLLBACK');
+          res.status(400).json({
+            success: false,
+            error: { code: 'VALIDATION_ERROR', message: 'Invalid diagram_labeling answer key', details: kVal.errors },
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
+
+        if (parsedNewContent.diagram?.assetId) {
+          let currentAssetId: string | null = null;
+          try {
+            const currentParsed = typeof currentQ.content === 'string' ? JSON.parse(currentQ.content) : currentQ.content;
+            currentAssetId = currentParsed?.diagram?.assetId || null;
+          } catch {
+            // ignore
+          }
+
+          const isNewRef = currentAssetId !== parsedNewContent.diagram.assetId;
+          const check = await mediaStorage.isAssetArchivedOrUnknown(parsedNewContent.diagram.assetId);
+
+          if (!check.exists) {
+            await client.query('ROLLBACK');
+            res.status(400).json({
+              success: false,
+              error: { code: 'VALIDATION_ERROR', message: `Referenced diagram asset '${parsedNewContent.diagram.assetId}' does not exist`, details: {} },
+              timestamp: new Date().toISOString(),
+            });
+            return;
+          }
+
+          if (isNewRef && check.isArchived) {
+            await client.query('ROLLBACK');
+            res.status(400).json({
+              success: false,
+              error: { code: 'VALIDATION_ERROR', message: `Referenced diagram asset '${parsedNewContent.diagram.assetId}' is archived and cannot be used for new questions`, details: {} },
+              timestamp: new Date().toISOString(),
+            });
+            return;
+          }
+        }
+      }
+    }
 
     await client.query(
       `UPDATE question_bank
@@ -1551,6 +1673,226 @@ router.patch('/attempts/:attemptId/questions/:questionId/grade', async (req: Aut
     res.status(500).json({
       success: false,
       error: { code: 'DATABASE_ERROR', message: 'Failed to save manual grade', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * Visual Mastery Lab (C2 — diagram_labeling) Media Library Admin Endpoints
+ */
+
+/**
+ * POST /api/admin/media/diagrams
+ * Uploads a diagram image (PNG, JPEG, WebP) within 2MB and returns metadata only.
+ * Content-addressed via sha256 (duplicates return existing asset with duplicate: true).
+ */
+router.post('/media/diagrams', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { fileName, mimeType, dataBase64, name, keywords, width, height } = req.body;
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Name is required' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (!mimeType || typeof mimeType !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'MIME type is required' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (!dataBase64 || typeof dataBase64 !== 'string') {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'dataBase64 is required' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const base64Clean = dataBase64.replace(/^data:image\/[a-z0-9+]+;base64,/, '');
+    const bytes = Buffer.from(base64Clean, 'base64');
+
+    const validation = validateImageUpload({
+      mimeType,
+      bytes: new Uint8Array(bytes),
+      fileName,
+      maxBytes: 2 * 1024 * 1024,
+    });
+
+    if (!validation.valid) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: validation.error || 'Invalid image file' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+
+    const saveResult = await mediaStorage.saveAsset({
+      ownerId: req.user?.id,
+      name: name.trim(),
+      fileName: fileName || name.trim(),
+      mimeType: validation.detectedMime || mimeType,
+      bytes: new Uint8Array(bytes),
+      sha256,
+      width: typeof width === 'number' ? width : null,
+      height: typeof height === 'number' ? height : null,
+      keywords: Array.isArray(keywords) ? keywords : [],
+      kind: 'diagram',
+    });
+
+    // Write audit log
+    await pool.query(
+      `INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, 'media_assets', $3, $4)`,
+      [
+        req.user?.id || 'system',
+        saveResult.duplicate ? 'diagram_media_deduplicated' : 'diagram_media_uploaded',
+        saveResult.asset.id,
+        JSON.stringify({ sha256, duplicate: saveResult.duplicate, name: saveResult.asset.name }),
+      ]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...saveResult.asset,
+        duplicate: saveResult.duplicate,
+      },
+      message: saveResult.duplicate ? 'Existing diagram asset found and returned' : 'Diagram asset uploaded successfully',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/media/diagrams:POST] Error uploading media:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to process diagram media upload', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * GET /api/admin/media/diagrams
+ * Searches diagram assets by name, keyword, or exact id. Max 50 per page.
+ */
+router.get('/media/diagrams', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { query, includeArchived, limit, offset } = req.query;
+    const parsedLimit = limit ? Number(limit) : 50;
+    const parsedOffset = offset ? Number(offset) : 0;
+    const shouldIncludeArchived = req.query.includeArchived === 'true';
+
+    const result = await mediaStorage.searchAssets({
+      query: typeof query === 'string' ? query : undefined,
+      includeArchived: shouldIncludeArchived,
+      limit: parsedLimit,
+      offset: parsedOffset,
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result.assets,
+      total: result.total,
+      message: '',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/media/diagrams:GET] Error listing diagrams:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to list diagram assets', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * GET /api/admin/media/diagrams/:id
+ * Retrieves metadata for a specific diagram asset + referenceCount + up to 20 question IDs.
+ */
+router.get('/media/diagrams/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const metadata = await mediaStorage.getAssetMetadata(id);
+
+    if (!metadata) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Diagram asset not found', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: metadata,
+      message: '',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/media/diagrams/:id:GET] Error retrieving diagram asset:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to retrieve diagram asset', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * PATCH /api/admin/media/diagrams/:id
+ * Updates metadata (name, keywords, archived state). Never touches image bytes. Audit-logged.
+ */
+router.patch('/media/diagrams/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, keywords, archived } = req.body;
+
+    const updated = await mediaStorage.updateAsset(id, { name, keywords, archived });
+    if (!updated) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Diagram asset not found', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Write audit log
+    await pool.query(
+      `INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, 'diagram_media_updated', 'media_assets', $2, $3)`,
+      [
+        req.user?.id || 'system',
+        id,
+        JSON.stringify({ name, keywords, archived }),
+      ]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: updated,
+      message: 'Diagram asset updated successfully',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/media/diagrams/:id:PATCH] Error updating diagram asset:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'Failed to update diagram asset', details: {} },
       timestamp: new Date().toISOString(),
     });
   }

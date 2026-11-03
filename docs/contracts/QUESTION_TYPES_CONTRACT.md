@@ -1,7 +1,7 @@
 # QUESTION_TYPES_CONTRACT.md
 
 Contract: 2 — Question Types & Question Domain
-Version: 1.2.0
+Version: 1.3.0
 Status: Approved Architectural Contract
 Depends On: PROJECT_CONSTITUTION.md v1.1.0
 Normative Owner: This contract is the sole normative owner of supported question-type definitions.
@@ -499,26 +499,125 @@ Grading:
 
 ---
 
-11.10 Diagram Labeling
+11.10 Diagram Labeling (C2 — Visual Mastery Lab)
 
 ID: "diagram_labeling"
 
-Purpose: identify or label regions/elements of a diagram.
+Purpose: assess scientific diagram mastery across three independent cognitive abilities:
+- `locate`: tap/click the image to identify a physical position (identification).
+- `name`: recognize the term/structure (recognition).
+- `function`: understand the function or phenomenon related to the structure (understanding).
 
-Content may define:
+Canonical Data Shapes (v1.3.0):
 
-- diagram media reference;
-- label targets;
-- target identifiers;
-- instructional label metadata.
+1. Content (`content`):
+```json
+{
+  "prompt": "اكتب على الرسم",
+  "diagram": {
+    "assetId": "uuid-string (uploaded)",
+    "url": "/assets/... (bundled demo/seed only)",
+    "alt": "وصف توضيحي للرسم"
+  },
+  "subQuestions": [
+    {
+      "id": "sq1",
+      "kind": "locate",
+      "skill": "identification",
+      "prompt": "حدد موضع البؤرة الرئيسية F",
+      "marks": 1,
+      "hints": ["ابحث على المحور الرئيسي", "في الجهة التي تتجمع فيها الأشعة"]
+    },
+    {
+      "id": "sq2",
+      "kind": "name",
+      "skill": "recognition",
+      "prompt": "ما اسم الجزء المظلل؟",
+      "marks": 1,
+      "target": { "type": "ellipse", "cx": 0.5, "cy": 0.5, "rx": 0.05, "ry": 0.35 },
+      "options": [
+        { "id": "sq2_a", "text": "العدسة المحدبة" },
+        { "id": "sq2_b", "text": "المرآة المقعرة" },
+        { "id": "sq2_c", "text": "المنشور الزجاجي" }
+      ]
+    },
+    {
+      "id": "sq3",
+      "kind": "function",
+      "skill": "understanding",
+      "prompt": "ماذا يحدث للأشعة الموازية للمحور الرئيسي؟",
+      "marks": 2,
+      "options": [
+        { "id": "sq3_a", "text": "تتجمع في البؤرة" },
+        { "id": "sq3_b", "text": "تتفرق بعيداً عن المحور" },
+        { "id": "sq3_c", "text": "تنعكس عائدة في الاتجاه نفسه" }
+      ]
+    }
+  ]
+}
+```
 
-Student answer is a structured mapping between target identifiers and submitted labels.
+Constraints:
+- Diagram reference: exactly one of `assetId` or bundled `/assets/...` url. External URLs are rejected.
+- `name`: exactly 3 options.
+- `function`: 3 to 4 options.
+- `hints`: max 4 hints per sub-question, plain text, training mode only.
+- `target`: optional display-only highlight region conforming to Region geometry.
+- Option IDs and sub-question IDs must be unique within the question.
 
-Partial credit is supported.
+2. Correct Answer (`correct_answer`, DB only):
+```json
+{
+  "subAnswers": {
+    "sq1": {
+      "regions": [
+        { "type": "ellipse", "cx": 0.75, "cy": 0.5, "rx": 0.04, "ry": 0.06 }
+      ]
+    },
+    "sq2": {
+      "optionId": "sq2_a",
+      "acceptedNames": ["العدسة المحدبة", "عدسة محدبة", "العدسة اللامة", "عدسة لامة"]
+    },
+    "sq3": {
+      "optionId": "sq3_a"
+    }
+  },
+  "explanations": {
+    "sq1": "شرح البؤرة الرئيسية...",
+    "sq2": "شرح العدسة المحدبة...",
+    "sq3": "شرح مسار الأشعة..."
+  }
+}
+```
 
-Media must use the platform's approved media/storage model rather than arbitrary uncontrolled storage references.
+3. Student Answer (`studentAnswer`):
+```json
+{
+  "subAnswers": {
+    "sq1": { "point": { "x": 0.75, "y": 0.5 } },
+    "sq2": { "optionId": "sq2_a", "text": "عدسة محدبة" },
+    "sq3": { "optionId": "sq3_a" }
+  }
+}
+```
 
-The Exam Engine owns scoring.
+4. Region Geometry:
+- Normalized coordinates (0..1) on x and y.
+- Geometries:
+  - `ellipse`: `{ type: 'ellipse', cx: number, cy: number, rx: number, ry: number, tolerance?: number }`
+  - `rect`: `{ type: 'rect', x: number, y: number, w: number, h: number, tolerance?: number }`
+  - `polygon`: `{ type: 'polygon', points: [{ x: number, y: number }], tolerance?: number }` (>= 3 points)
+- Tolerance: optional normalized distance (0..0.1, default 0.01) to forgive near-miss taps.
+
+5. Scoring & Exam Modes:
+- Weighted by sub-question `marks` (default 1).
+- In Simulator mode:
+  - `name` requires typed text, graded by exact normalized equality against `acceptedNames` via `normalizeArabicText` (no fuzzy matching).
+  - All answer keys, regions, acceptedNames, hints, and explanations are strictly scrubbed from client snapshots.
+- In Training mode:
+  - `name` displays 3 shuffled options.
+  - Hints and answer keys are accessible for formative feedback.
+- Legacy `labels` questions remain fully backward-compatible and graded as before.
 
 ---
 

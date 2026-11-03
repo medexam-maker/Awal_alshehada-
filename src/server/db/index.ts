@@ -208,6 +208,25 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS media_assets (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+      owner_id TEXT,
+      storage_key TEXT UNIQUE,
+      file_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_size BIGINT NOT NULL,
+      data BYTEA,
+      name TEXT,
+      keywords TEXT[] DEFAULT '{}',
+      sha256 TEXT UNIQUE,
+      width INT,
+      height INT,
+      kind TEXT DEFAULT 'diagram',
+      status TEXT DEFAULT 'active',
+      archived_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Ensure session and attempt columns exist in case table was created earlier without them
     ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_id TEXT;
     ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS session_created_at TIMESTAMPTZ;

@@ -668,6 +668,44 @@ export function createClientSnapshot(
         return snap;
     }
 
+    // 13. DIAGRAM_LABELING
+    if (row.question_type === 'diagram_labeling') {
+        if (Array.isArray(rawContentObj.subQuestions) && rawContentObj.subQuestions.length > 0) {
+            if (examMode === ExamMode.TRAINING) {
+                snap.content = row.content;
+                snap.correctAnswer = row.correct_answer;
+                snap.explanation = row.explanation ?? null;
+                snap.explanationAr = row.explanation ?? null;
+            } else {
+                // SIMULATOR: strictly omit hints, explanations, correctAnswer, and any answer keys
+                const simSubQuestions = rawContentObj.subQuestions.map((s: any) => {
+                    const cleanSub: Record<string, unknown> = {
+                        id: String(s.id),
+                        kind: s.kind,
+                        prompt: s.prompt,
+                    };
+                    if (s.marks !== undefined) cleanSub.marks = s.marks;
+                    if (s.skill !== undefined) cleanSub.skill = s.skill;
+                    if (s.target !== undefined) cleanSub.target = s.target;
+                    if (Array.isArray(s.options)) {
+                        cleanSub.options = s.options.map((o: any) => ({
+                            id: String(o.id),
+                            text: String(o.text ?? ''),
+                        }));
+                    }
+                    return cleanSub;
+                });
+
+                snap.content = {
+                    prompt: promptText,
+                    diagram: rawContentObj.diagram,
+                    subQuestions: simSubQuestions,
+                };
+            }
+            return snap;
+        }
+    }
+
     // Fallback for all other types (e.g. calculation, contour map)
     if (examMode === ExamMode.TRAINING) {
         snap.content = row.content;
@@ -829,6 +867,33 @@ export function createSnapshotPair(
             content: {
                 ...rawContentObj,
                 ...(finalReasoning ? { reasoning: finalReasoning } : {}),
+            },
+            correct_answer: row.correct_answer,
+            primary_interaction_mode: row.primary_interaction_mode,
+            marks: row.marks,
+            explanation: row.explanation,
+        };
+    } else if (row.question_type === 'diagram_labeling') {
+        const rawSubQuestions = Array.isArray(rawContentObj.subQuestions) ? rawContentObj.subQuestions : [];
+        const subQuestionsWithShuffledOptions = rawSubQuestions.map((s: any) => {
+            if (Array.isArray(s?.options) && s.options.length > 0) {
+                const shuffled = [...s.options];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return { ...s, options: shuffled };
+            }
+            return s;
+        });
+
+        dbSnapshot = {
+            id: row.id,
+            subject_id: row.subject_id,
+            question_type: row.question_type,
+            content: {
+                ...rawContentObj,
+                subQuestions: subQuestionsWithShuffledOptions,
             },
             correct_answer: row.correct_answer,
             primary_interaction_mode: row.primary_interaction_mode,

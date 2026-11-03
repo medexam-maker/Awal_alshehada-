@@ -324,6 +324,7 @@ export async function finishExam(
                 }
             }
 
+            let gradeResultComponents: any = undefined;
             if (validatedAnswer) {
                 const gradeResult = autoGrade(
                     dbSnapshot.question_type as QuestionType,
@@ -334,6 +335,7 @@ export async function finishExam(
                 );
                 obtainedMarks = gradeResult.obtainedMarks;
                 status = gradeResult.gradingStatus;
+                gradeResultComponents = gradeResult.components;
             } else {
                  status = GradingStatus.AUTO_GRADED;
             }
@@ -360,7 +362,8 @@ export async function finishExam(
                 questionId: aq.question_id,
                 isCorrect: obtainedMarks === maxMarks,
                 obtainedMarks,
-                maxMarks
+                maxMarks,
+                ...(gradeResultComponents ? { components: gradeResultComponents } : {})
             });
         }
 

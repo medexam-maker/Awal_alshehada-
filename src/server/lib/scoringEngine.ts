@@ -1,6 +1,7 @@
 import { QuestionType, GradingStrategy, GradingStatus } from '../../shared/constants';
 import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
 import { matchKeywords, normalizeArabicText, tokenMatchesWord } from '../../shared/keywordMatcher';
+import { pointInRegion } from '../../shared/regionGeometry';
 import {
   FillBlankContent, FillBlankAnswer,
   MatchingAnswer, ComparisonTableContent, ComparisonTableAnswer,
@@ -12,6 +13,7 @@ import {
 export interface GradingOutcome {
   obtainedMarks: number;
   gradingStatus: GradingStatus;
+  components?: any;
 }
 
 function normalizeText(
@@ -383,17 +385,28 @@ export function autoGrade(
 
     obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.DIAGRAM_LABELING) {
-    const ca = correctAnswer as DiagramLabelingAnswer;
-    const sa = studentAnswer as DiagramLabelingAnswer | undefined;
-    const labels = Object.keys(ca.labels || {});
-    const totalUnits = labels.length;
-    let correctUnits = 0;
-    if (sa?.labels) {
-        for (const key of labels) {
-            if (sa.labels[key] === ca.labels[key]) correctUnits++;
-        }
+    const c = (content || {}) as Record<string, any>;
+    if (Array.isArray(c.subQuestions) && c.subQuestions.length > 0) {
+      const diagResult = gradeDiagramLabeling(content, correctAnswer, studentAnswer, maxMarks);
+      obtainedMarks = diagResult.obtainedMarks;
+      return {
+        obtainedMarks,
+        gradingStatus: GradingStatus.AUTO_GRADED,
+        components: diagResult.components,
+      };
+    } else {
+      const ca = correctAnswer as DiagramLabelingAnswer;
+      const sa = studentAnswer as DiagramLabelingAnswer | undefined;
+      const labels = Object.keys(ca?.labels || {});
+      const totalUnits = labels.length;
+      let correctUnits = 0;
+      if (sa?.labels) {
+          for (const key of labels) {
+              if (sa.labels[key] === ca.labels[key]) correctUnits++;
+          }
+      }
+      obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
     }
-    obtainedMarks = totalUnits > 0 ? (correctUnits / totalUnits) * maxMarks : 0;
   } else if (questionType === QuestionType.ARABIC_GRAMMAR) {
     const c = content as ArabicGrammarContent;
     const ca = (correctAnswer || {}) as ArabicGrammarAnswer & Record<string, string>;
@@ -1165,5 +1178,116 @@ export function gradeContourMapQuestion(
     obtainedMarks,
     maxMarks: totalMaxMarks,
     subResults
+  };
+}
+
+export interface DiagramComponentScore {
+  id: string;
+  kind: 'locate' | 'name' | 'function';
+  skill: 'recognition' | 'identification' | 'understanding';
+  earned: number;
+  max: number;
+}
+
+export interface DiagramGradingResult {
+  obtainedMarks: number;
+  components: DiagramComponentScore[];
+}
+
+export function gradeDiagramLabeling(
+  content: unknown,
+  key: unknown,
+  answer: unknown,
+  maxMarks: number
+): DiagramGradingResult {
+  const c = (content || {}) as Record<string, any>;
+  const k = (key || {}) as Record<string, any>;
+  const a = (answer || {}) as Record<string, any>;
+
+  const subQuestions: any[] = Array.isArray(c.subQuestions) ? c.subQuestions : [];
+  if (subQuestions.length === 0) {
+    return { obtainedMarks: 0, components: [] };
+  }
+
+  const subAnswersKey = (k.subAnswers && typeof k.subAnswers === 'object') ? k.subAnswers : {};
+  const studentSubAnswers = (a.subAnswers && typeof a.subAnswers === 'object') ? a.subAnswers : {};
+
+  // Compute weights
+  let totalWeight = 0;
+  for (const s of subQuestions) {
+    const w = typeof s.marks === 'number' && s.marks >= 0 ? s.marks : 1;
+    totalWeight += w;
+  }
+  if (totalWeight <= 0) totalWeight = 1;
+
+  const components: DiagramComponentScore[] = [];
+
+  for (const s of subQuestions) {
+    const sId = String(s.id);
+    const kind: 'locate' | 'name' | 'function' =
+      s.kind === 'locate' || s.kind === 'name' || s.kind === 'function' ? s.kind : 'locate';
+
+    // Skill tags: defaults by kind, explicit override respected
+    const defaultSkill: 'recognition' | 'identification' | 'understanding' =
+      kind === 'locate' ? 'identification' : kind === 'name' ? 'recognition' : 'understanding';
+    const skill: 'recognition' | 'identification' | 'understanding' =
+      (s.skill === 'recognition' || s.skill === 'identification' || s.skill === 'understanding') ? s.skill : defaultSkill;
+
+    const weight = typeof s.marks === 'number' && s.marks >= 0 ? s.marks : 1;
+    const subMax = (weight / totalWeight) * maxMarks;
+
+    const sKey = subAnswersKey[sId];
+    const sAns = studentSubAnswers[sId];
+
+    let earned = 0;
+
+    if (sKey && sAns && typeof sAns === 'object') {
+      if (kind === 'locate') {
+        const pt = sAns.point;
+        if (pt && typeof pt === 'object' && typeof pt.x === 'number' && typeof pt.y === 'number') {
+          const regions: any[] = Array.isArray(sKey.regions) ? sKey.regions : [];
+          const matched = regions.some((reg) => pointInRegion(pt, reg));
+          if (matched) {
+            earned = subMax;
+          }
+        }
+      } else if (kind === 'name') {
+        // optionId beats text when both are sent
+        if (typeof sAns.optionId === 'string') {
+          if (sKey.optionId && sAns.optionId === sKey.optionId) {
+            earned = subMax;
+          }
+        } else if (typeof sAns.text === 'string' && sAns.text.trim()) {
+          const normStudent = normalizeArabicText(sAns.text);
+          const acceptedNames: string[] = Array.isArray(sKey.acceptedNames) ? sKey.acceptedNames : [];
+          const matched = acceptedNames.some((acc) => normalizeArabicText(acc) === normStudent);
+          if (matched) {
+            earned = subMax;
+          }
+        }
+      } else if (kind === 'function') {
+        if (typeof sAns.optionId === 'string') {
+          if (sKey.optionId && sAns.optionId === sKey.optionId) {
+            earned = subMax;
+          }
+        }
+      }
+    }
+
+    components.push({
+      id: sId,
+      kind,
+      skill,
+      earned,
+      max: subMax,
+    });
+  }
+
+  const rawObtained = components.reduce((sum, item) => sum + item.earned, 0);
+  const obtainedMarks = Math.max(0, Math.min(maxMarks, rawObtained));
+
+  return {
+    obtainedMarks,
+    components,
   };
 }

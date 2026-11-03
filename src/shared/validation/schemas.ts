@@ -1,5 +1,6 @@
 import Ajv, { ErrorObject } from 'ajv';
 import { ArabicGrammarContent, ArabicGrammarAnswer, ArabicGrammarCorrectAnswer } from '../types';
+import { validateRegion } from '../regionGeometry';
 
 export const ajv = new Ajv({ allErrors: true });
 
@@ -107,7 +108,7 @@ export const ContentSchemas = {
       },
     },
   },
-  diagram_labeling: { type: 'object', required: ['prompt', 'diagram', 'labels'] },
+  diagram_labeling: { type: 'object', required: ['prompt', 'diagram'] },
   contour_map: { type: 'object', required: ['prompt', 'mapImage', 'subQuestions'] },
   calculation: { type: 'object', required: ['prompt'] },
   ordering: { type: 'object', required: ['prompt', 'items'] },
@@ -195,7 +196,7 @@ export const AnswerSchemas = {
       reasonText: { type: 'string' },
     },
   },
-  diagram_labeling: { type: 'object', required: ['labels'] },
+  diagram_labeling: { type: 'object' },
   contour_map: { type: 'object', required: ['subAnswers'] },
   calculation: { type: 'object', required: ['value'] },
   ordering: { type: 'object', required: ['order'] },
@@ -365,6 +366,100 @@ export function validateQuestionContent(type: keyof typeof ContentSchemas, conte
     }
   }
 
+  // Deep validation for diagram_labeling
+  if (type === 'diagram_labeling' && content && typeof content === 'object') {
+    const rawContent = content as Record<string, unknown>;
+
+    // Legacy format: has labels array
+    if (Array.isArray(rawContent.labels)) {
+      if (rawContent.labels.length === 0) {
+        return { valid: false, errors: ['Legacy diagram_labeling must contain at least one label'] };
+      }
+      return { valid: true, errors: [] };
+    }
+
+    // Modern C2 Visual Mastery Lab format
+    if (!rawContent.diagram || typeof rawContent.diagram !== 'object') {
+      return { valid: false, errors: ['Diagram reference is required'] };
+    }
+
+    const diag = rawContent.diagram as Record<string, unknown>;
+    const hasAssetId = typeof diag.assetId === 'string' && diag.assetId.trim().length > 0;
+    const hasUrl = typeof diag.url === 'string' && diag.url.trim().length > 0;
+
+    // Exactly one of assetId | url
+    if ((hasAssetId && hasUrl) || (!hasAssetId && !hasUrl)) {
+      return { valid: false, errors: ['Diagram must specify exactly one of assetId or url'] };
+    }
+
+    if (hasUrl) {
+      const urlStr = diag.url as string;
+      if (!urlStr.startsWith('/assets/')) {
+        return { valid: false, errors: ['External diagram URLs are rejected. Bundled diagrams must be under /assets/'] };
+      }
+    }
+
+    if (!Array.isArray(rawContent.subQuestions) || rawContent.subQuestions.length === 0) {
+      return { valid: false, errors: ['subQuestions must be a non-empty list'] };
+    }
+
+    const seenSubIds = new Set<string>();
+    const seenOptionIds = new Set<string>();
+
+    for (const sub of rawContent.subQuestions) {
+      if (!sub || typeof sub !== 'object') {
+        return { valid: false, errors: ['Sub-question must be an object'] };
+      }
+      const s = sub as Record<string, unknown>;
+      if (!s.id || typeof s.id !== 'string') {
+        return { valid: false, errors: ['Sub-question must have a valid id'] };
+      }
+      if (seenSubIds.has(s.id)) {
+        return { valid: false, errors: [`Duplicate sub-question id '${s.id}'`] };
+      }
+      seenSubIds.add(s.id);
+
+      if (!s.kind || !['locate', 'name', 'function'].includes(s.kind as string)) {
+        return { valid: false, errors: [`Sub-question '${s.id}' has invalid kind '${String(s.kind)}'. Allowed: locate, name, function`] };
+      }
+
+      if (s.hints !== undefined) {
+        if (!Array.isArray(s.hints) || s.hints.length > 4) {
+          return { valid: false, errors: [`Sub-question '${s.id}' hints must not exceed 4 items`] };
+        }
+      }
+
+      if (s.target !== undefined && s.target !== null) {
+        const vTarget = validateRegion(s.target);
+        if (!vTarget.valid) {
+          return { valid: false, errors: [`Sub-question '${s.id}' target is not a valid Region: ${vTarget.error}`] };
+        }
+      }
+
+      if (s.kind === 'name') {
+        if (!Array.isArray(s.options) || s.options.length !== 3) {
+          return { valid: false, errors: [`Sub-question '${s.id}' of kind 'name' must contain exactly 3 options`] };
+        }
+      } else if (s.kind === 'function') {
+        if (!Array.isArray(s.options) || s.options.length < 3 || s.options.length > 4) {
+          return { valid: false, errors: [`Sub-question '${s.id}' of kind 'function' must contain 3 to 4 options`] };
+        }
+      }
+
+      if (Array.isArray(s.options)) {
+        for (const opt of s.options) {
+          if (!opt || typeof opt !== 'object' || !opt.id || typeof opt.id !== 'string') {
+            return { valid: false, errors: [`Sub-question '${s.id}' option must have a valid string id`] };
+          }
+          if (seenOptionIds.has(opt.id)) {
+            return { valid: false, errors: [`Duplicate option id '${opt.id}' in question`] };
+          }
+          seenOptionIds.add(opt.id);
+        }
+      }
+    }
+  }
+
   return { valid: true, errors: [] };
 }
 
@@ -372,6 +467,47 @@ export function validateQuestionAnswer(type: keyof typeof AnswerSchemas, answer:
   // Support both legacy numeric_with_work and multi_step_mcq answers for calculation
   if (type === 'calculation' && answer && typeof answer === 'object' && 'step_answers' in (answer as Record<string, unknown>)) {
     return validateMultiStepCalculationAnswer(answer);
+  }
+
+  if (type === 'diagram_labeling' && answer && typeof answer === 'object') {
+    const rawAnswer = answer as Record<string, unknown>;
+    if (rawAnswer.subAnswers !== undefined) {
+      if (typeof rawAnswer.subAnswers !== 'object' || rawAnswer.subAnswers === null) {
+        return { valid: false, errors: ['subAnswers must be an object'] };
+      }
+      const subs = rawAnswer.subAnswers as Record<string, unknown>;
+      for (const [subId, subVal] of Object.entries(subs)) {
+        if (subVal !== undefined && subVal !== null) {
+          if (typeof subVal !== 'object') {
+            return { valid: false, errors: [`Sub-answer '${subId}' must be an object`] };
+          }
+          const sv = subVal as Record<string, unknown>;
+          if (sv.point !== undefined) {
+            if (!sv.point || typeof sv.point !== 'object') {
+              return { valid: false, errors: [`Sub-answer '${subId}' point must be an object {x, y}`] };
+            }
+            const pt = sv.point as Record<string, unknown>;
+            if (
+              typeof pt.x !== 'number' || !Number.isFinite(pt.x) || pt.x < 0 || pt.x > 1 ||
+              typeof pt.y !== 'number' || !Number.isFinite(pt.y) || pt.y < 0 || pt.y > 1
+            ) {
+              return { valid: false, errors: [`Sub-answer '${subId}' point coordinates must be normalized numbers in [0, 1]`] };
+            }
+          }
+          if (sv.optionId !== undefined && typeof sv.optionId !== 'string') {
+            return { valid: false, errors: [`Sub-answer '${subId}' optionId must be a string`] };
+          }
+          if (sv.text !== undefined && typeof sv.text !== 'string') {
+            return { valid: false, errors: [`Sub-answer '${subId}' text must be a string`] };
+          }
+        }
+      }
+      return { valid: true, errors: [] };
+    }
+    if (rawAnswer.labels !== undefined) {
+      return { valid: true, errors: [] };
+    }
+    return { valid: false, errors: ['diagram_labeling answer must contain subAnswers or labels'] };
   }
 
   const schema = AnswerSchemas[type];
@@ -383,6 +519,78 @@ export function validateQuestionAnswer(type: keyof typeof AnswerSchemas, answer:
   if (!valid) {
     return { valid: false, errors: validate.errors || [] };
   }
+  return { valid: true, errors: [] };
+}
+
+export function validateDiagramLabelingKey(content: unknown, key: unknown): ValidationResult {
+  if (!content || typeof content !== 'object') {
+    return { valid: false, errors: ['Content must be a non-null object'] };
+  }
+  const rawContent = content as Record<string, unknown>;
+  const subQuestions = Array.isArray(rawContent.subQuestions) ? rawContent.subQuestions : [];
+  if (subQuestions.length === 0) {
+    return { valid: false, errors: ['Content must contain subQuestions'] };
+  }
+
+  if (!key || typeof key !== 'object') {
+    return { valid: false, errors: ['Key must be a non-null object'] };
+  }
+  const rawKey = key as Record<string, unknown>;
+  if (!rawKey.subAnswers || typeof rawKey.subAnswers !== 'object') {
+    return { valid: false, errors: ['Key must contain subAnswers object'] };
+  }
+
+  const subAnswers = rawKey.subAnswers as Record<string, unknown>;
+  const subMap = new Map<string, any>();
+  for (const s of subQuestions) {
+    if (s && s.id) subMap.set(String(s.id), s);
+  }
+
+  // Ensure no extra unrecognized sub-question IDs in key
+  for (const subId of Object.keys(subAnswers)) {
+    if (!subMap.has(subId)) {
+      return { valid: false, errors: [`Unknown subAnswer key '${subId}' not present in question content`] };
+    }
+  }
+
+  // Ensure every subQuestion in content has a valid key entry
+  for (const [subId, sub] of subMap.entries()) {
+    const kAns = subAnswers[subId] as Record<string, unknown> | undefined;
+    if (!kAns || typeof kAns !== 'object') {
+      return { valid: false, errors: [`Missing answer key for sub-question '${subId}'`] };
+    }
+
+    if (sub.kind === 'locate') {
+      if (!Array.isArray(kAns.regions) || kAns.regions.length === 0) {
+        return { valid: false, errors: [`Sub-question '${subId}' (locate) must have at least one region`] };
+      }
+      for (const reg of kAns.regions) {
+        const v = validateRegion(reg);
+        if (!v.valid) {
+          return { valid: false, errors: [`Invalid region in sub-question '${subId}': ${v.error}`] };
+        }
+      }
+    } else if (sub.kind === 'name') {
+      const allowedOptionIds = Array.isArray(sub.options) ? sub.options.map((o: any) => o.id) : [];
+      if (typeof kAns.optionId !== 'string' || !allowedOptionIds.includes(kAns.optionId)) {
+        return { valid: false, errors: [`Sub-question '${subId}' (name) optionId '${String(kAns.optionId)}' does not match any valid option`] };
+      }
+      if (!Array.isArray(kAns.acceptedNames) || kAns.acceptedNames.length === 0) {
+        return { valid: false, errors: [`Sub-question '${subId}' (name) must have at least one acceptedName`] };
+      }
+      for (const name of kAns.acceptedNames) {
+        if (typeof name !== 'string' || !name.trim()) {
+          return { valid: false, errors: [`Sub-question '${subId}' acceptedNames must be non-empty strings`] };
+        }
+      }
+    } else if (sub.kind === 'function') {
+      const allowedOptionIds = Array.isArray(sub.options) ? sub.options.map((o: any) => o.id) : [];
+      if (typeof kAns.optionId !== 'string' || !allowedOptionIds.includes(kAns.optionId)) {
+        return { valid: false, errors: [`Sub-question '${subId}' (function) optionId '${String(kAns.optionId)}' does not match any valid option`] };
+      }
+    }
+  }
+
   return { valid: true, errors: [] };
 }
 

@@ -1,5 +1,6 @@
 import { QuestionType, GradingStrategy } from './constants';
 import type { ValidationResult } from './validation/schemas';
+import type { Region } from './regionGeometry';
 
 export interface MediaReference {
   url: string;
@@ -219,6 +220,67 @@ export interface OddOneOutCorrectAnswer {
 }
 
 // --- 10. Diagram Labeling ---
+export type DiagramSubQuestionKind = 'locate' | 'name' | 'function';
+export type DiagramSkill = 'recognition' | 'identification' | 'understanding';
+
+export interface DiagramSubQuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface DiagramSubQuestion {
+  id: string;
+  kind: DiagramSubQuestionKind;
+  prompt: string;
+  marks?: number;
+  skill?: DiagramSkill;
+  target?: Region;
+  options?: DiagramSubQuestionOption[];
+  hints?: string[];
+}
+
+export interface DiagramReference {
+  assetId?: string;
+  url?: string;
+  alt?: string;
+}
+
+export interface ModernDiagramLabelingContent {
+  prompt: string;
+  diagram: DiagramReference;
+  subQuestions: DiagramSubQuestion[];
+}
+
+export interface DiagramLocateKey {
+  regions: Region[];
+}
+
+export interface DiagramNameKey {
+  optionId: string;
+  acceptedNames: string[];
+}
+
+export interface DiagramFunctionKey {
+  optionId: string;
+}
+
+export type DiagramSubAnswerKey = DiagramLocateKey | DiagramNameKey | DiagramFunctionKey;
+
+export interface DiagramLabelingCorrectAnswer {
+  subAnswers: Record<string, DiagramSubAnswerKey>;
+  explanations?: Record<string, string>;
+}
+
+export interface DiagramStudentSubAnswer {
+  point?: { x: number; y: number };
+  optionId?: string;
+  text?: string;
+}
+
+export interface ModernDiagramLabelingAnswer {
+  subAnswers: Record<string, DiagramStudentSubAnswer>;
+}
+
 export interface DiagramLabel {
   id: string;
   pointNumber: number;

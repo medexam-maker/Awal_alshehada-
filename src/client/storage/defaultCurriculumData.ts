@@ -3,6 +3,7 @@ import { SubjectExamBlueprint, AuthoredQuestion } from '../types/curriculum';
 import { TWELVE_CONTRACT_SUBJECTS } from '../data/contractSubjects';
 import { JEBEL_MARRA_CONTOUR_MAP_SVG_URL } from '../../shared/contourUtils';
 import { DEMO_ODD_ONE_OUT, DEMO_COMPARISON_TABLE } from '../../shared/batch1DemoQuestions';
+import { DEMO_DIAGRAM_LABELING } from '../../shared/diagramDemoQuestion';
 
 /**
  * Creates default authentic Sudanese Secondary Certificate blueprints for each of the 12 subjects.
@@ -1265,6 +1266,23 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
       correctAnswer: DEMO_COMPARISON_TABLE.row.correct_answer,
       allocatedMarks: DEMO_COMPARISON_TABLE.row.marks,
       explanationAr: DEMO_COMPARISON_TABLE.row.explanation,
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: DEMO_DIAGRAM_LABELING.row.id,
+      subjectSlug: DEMO_DIAGRAM_LABELING.subjectSlug,
+      patternId: 'physics_q3_a',
+      questionNumber: 3,
+      partLabel: 'أ',
+      questionType: DEMO_DIAGRAM_LABELING.row.question_type,
+      prompt: DEMO_DIAGRAM_LABELING.row.content.prompt,
+      content: DEMO_DIAGRAM_LABELING.row.content,
+      correctAnswer: DEMO_DIAGRAM_LABELING.row.correct_answer,
+      allocatedMarks: DEMO_DIAGRAM_LABELING.row.marks,
+      explanationAr: DEMO_DIAGRAM_LABELING.row.explanation,
       examScope: 'both',
       examYear: 2024,
       status: 'approved',
