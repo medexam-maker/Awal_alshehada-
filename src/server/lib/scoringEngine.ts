@@ -7,13 +7,15 @@ import {
   MatchingAnswer, ComparisonTableContent, ComparisonTableAnswer,
   OrderingAnswer, DiagramLabelingAnswer,
   ArabicGrammarContent, ArabicGrammarAnswer,
-  OddOneOutAnswer, CalculationAnswer
+  OddOneOutAnswer, CalculationAnswer,
+  ReadingComprehensionContent, ReadingComprehensionAnswer, ReadingSkillLevel
 } from '../../shared/types';
 
 export interface GradingOutcome {
   obtainedMarks: number;
   gradingStatus: GradingStatus;
   components?: any;
+  skillMastery?: any;
 }
 
 function normalizeText(
@@ -93,6 +95,16 @@ export function autoGrade(
     return {
       obtainedMarks: contourResult.obtainedMarks,
       gradingStatus: GradingStatus.AUTO_GRADED,
+    };
+  }
+
+  if (questionType === QuestionType.READING_COMPREHENSION) {
+    const readingResult = gradeReadingComprehension(content, correctAnswer, studentAnswer, maxMarks);
+    return {
+      obtainedMarks: readingResult.obtainedMarks,
+      gradingStatus: GradingStatus.AUTO_GRADED,
+      components: readingResult.subResults,
+      skillMastery: readingResult.skillMastery,
     };
   }
 
@@ -1289,5 +1301,200 @@ export function gradeDiagramLabeling(
   return {
     obtainedMarks,
     components,
+  };
+}
+
+// ==========================================
+// CONTRACT 3: ACTIVE READING JOURNEY AUTOGRADING
+// ==========================================
+
+export interface ReadingSubQuestionScore {
+  id: string;
+  skill: ReadingSkillLevel;
+  earnedCore: number;
+  maxCore: number;
+  earnedEvidence: number;
+  maxEvidence: number;
+  earnedTotal: number;
+  maxTotal: number;
+  isCorrect: boolean;
+}
+
+export interface ReadingSkillMastery {
+  skill: ReadingSkillLevel;
+  earned: number;
+  max: number;
+  percentage: number;
+}
+
+export interface ReadingComprehensionGradingOutcome {
+  isCorrect: boolean;
+  obtainedMarks: number;
+  maxMarks: number;
+  subResults: ReadingSubQuestionScore[];
+  skillMastery: Record<ReadingSkillLevel, ReadingSkillMastery>;
+}
+
+export function gradeReadingComprehension(
+  content: unknown,
+  correctAnswer: unknown,
+  studentAnswer: unknown,
+  maxMarks: number
+): ReadingComprehensionGradingOutcome {
+  const c = (content || {}) as Record<string, any>;
+  const ca = (correctAnswer || {}) as Record<string, any>;
+  const sa = (studentAnswer || {}) as Record<string, any>;
+
+  const subQuestions: any[] = Array.isArray(c.subQuestions) ? c.subQuestions : [];
+  const correctSubMap = (ca.subAnswers && typeof ca.subAnswers === 'object') ? ca.subAnswers : {};
+  const studentSubMap = (sa.subAnswers && typeof sa.subAnswers === 'object') ? sa.subAnswers : {};
+
+  const ALL_SKILLS: ReadingSkillLevel[] = ['literal', 'vocabulary', 'inference', 'analysis', 'evaluation'];
+  const skillMastery: Record<ReadingSkillLevel, ReadingSkillMastery> = {
+    literal: { skill: 'literal', earned: 0, max: 0, percentage: 0 },
+    vocabulary: { skill: 'vocabulary', earned: 0, max: 0, percentage: 0 },
+    inference: { skill: 'inference', earned: 0, max: 0, percentage: 0 },
+    analysis: { skill: 'analysis', earned: 0, max: 0, percentage: 0 },
+    evaluation: { skill: 'evaluation', earned: 0, max: 0, percentage: 0 },
+  };
+
+  if (subQuestions.length === 0) {
+    return {
+      isCorrect: false,
+      obtainedMarks: 0,
+      maxMarks,
+      subResults: [],
+      skillMastery,
+    };
+  }
+
+  let totalWeight = 0;
+  for (const sq of subQuestions) {
+    const w = typeof sq.marks === 'number' && sq.marks > 0 ? sq.marks : 1;
+    totalWeight += w;
+  }
+  if (totalWeight <= 0) totalWeight = 1;
+
+  const subResults: ReadingSubQuestionScore[] = [];
+  let totalObtained = 0;
+
+  for (const sq of subQuestions) {
+    const sqId = String(sq.id);
+    const skill: ReadingSkillLevel = ALL_SKILLS.includes(sq.skill) ? sq.skill : 'literal';
+    const weight = typeof sq.marks === 'number' && sq.marks > 0 ? sq.marks : 1;
+    const subMax = (weight / totalWeight) * maxMarks;
+
+    const correctSub = correctSubMap[sqId] || {};
+    const studentSub = studentSubMap[sqId];
+
+    const evidenceSpec = sq.evidence || correctSub.evidence;
+    const evidenceRequired = Boolean(evidenceSpec?.required);
+
+    const maxCore = evidenceRequired ? subMax * 0.7 : subMax;
+    const maxEvidence = evidenceRequired ? subMax * 0.3 : 0;
+
+    let earnedCore = 0;
+    let earnedEvidence = 0;
+
+    // 1. Evaluate Core Answer
+    let studentCoreVal: any = undefined;
+    if (studentSub !== undefined && studentSub !== null) {
+      if (typeof studentSub === 'object') {
+        studentCoreVal = studentSub.coreAnswer ?? studentSub.selectedOptionId ?? studentSub.value ?? studentSub.text;
+      } else {
+        studentCoreVal = studentSub;
+      }
+    }
+
+    let correctCoreVal: any = sq.correctOptionId ?? sq.correctValue ?? correctSub.correctCoreAnswer ?? correctSub.correctOptionId ?? correctSub.correctValue;
+
+    if (studentCoreVal !== undefined && studentCoreVal !== null && studentCoreVal !== '') {
+      if (typeof correctCoreVal === 'boolean' || typeof studentCoreVal === 'boolean') {
+        if (Boolean(studentCoreVal) === Boolean(correctCoreVal)) {
+          earnedCore = maxCore;
+        }
+      } else if (typeof correctCoreVal === 'string' && typeof studentCoreVal === 'string') {
+        const normS = normalizeArabicText(studentCoreVal);
+        const normC = normalizeArabicText(correctCoreVal);
+        const acceptable: string[] = Array.isArray(sq.acceptableAnswers)
+          ? sq.acceptableAnswers
+          : Array.isArray(correctSub.acceptableAnswers)
+          ? correctSub.acceptableAnswers
+          : [];
+
+        if (normS && normC && normS === normC) {
+          earnedCore = maxCore;
+        } else if (acceptable.some((acc) => normalizeArabicText(acc) === normS)) {
+          earnedCore = maxCore;
+        } else if (sq.correctOptionId && String(studentCoreVal) === String(sq.correctOptionId)) {
+          earnedCore = maxCore;
+        }
+      } else if (String(studentCoreVal) === String(correctCoreVal)) {
+        earnedCore = maxCore;
+      }
+    }
+
+    // 2. Evaluate Evidence
+    if (evidenceRequired && evidenceSpec) {
+      const studentEv = typeof studentSub === 'object' && studentSub !== null ? studentSub.evidence : undefined;
+      if (studentEv && typeof studentEv === 'object') {
+        let evMatched = false;
+        if (evidenceSpec.targetParagraphId && studentEv.paragraphId) {
+          if (String(studentEv.paragraphId) === String(evidenceSpec.targetParagraphId)) {
+            evMatched = true;
+          }
+        }
+        if (!evMatched && Array.isArray(evidenceSpec.acceptedSentenceIds) && studentEv.sentenceId) {
+          if (evidenceSpec.acceptedSentenceIds.includes(String(studentEv.sentenceId))) {
+            evMatched = true;
+          }
+        }
+        if (!evMatched && Array.isArray(evidenceSpec.acceptedQuoteKeywords) && studentEv.selectedQuote) {
+          const normQuote = normalizeArabicText(studentEv.selectedQuote);
+          if (evidenceSpec.acceptedQuoteKeywords.some((kw: string) => normQuote.includes(normalizeArabicText(kw)))) {
+            evMatched = true;
+          }
+        }
+        if (evMatched) {
+          earnedEvidence = maxEvidence;
+        }
+      }
+    }
+
+    const earnedTotal = earnedCore + earnedEvidence;
+    const isSubCorrect = Math.abs(earnedTotal - subMax) < 0.01;
+
+    subResults.push({
+      id: sqId,
+      skill,
+      earnedCore,
+      maxCore,
+      earnedEvidence,
+      maxEvidence,
+      earnedTotal,
+      maxTotal: subMax,
+      isCorrect: isSubCorrect,
+    });
+
+    totalObtained += earnedTotal;
+
+    skillMastery[skill].earned += earnedTotal;
+    skillMastery[skill].max += subMax;
+  }
+
+  for (const sk of ALL_SKILLS) {
+    const sm = skillMastery[sk];
+    sm.percentage = sm.max > 0 ? Math.round((sm.earned / sm.max) * 100) : 0;
+  }
+
+  const obtainedMarks = Math.min(maxMarks, Math.round(totalObtained * 100) / 100);
+  const isAllCorrect = subResults.length > 0 && subResults.every((s) => s.isCorrect);
+
+  return {
+    isCorrect: isAllCorrect,
+    obtainedMarks,
+    maxMarks,
+    subResults,
+    skillMastery,
   };
 }

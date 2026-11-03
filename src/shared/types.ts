@@ -458,22 +458,108 @@ export interface ArabicGrammarCorrectAnswer {
   words?: Record<string, GrammarAnswer>;
 }
 
-// --- 15. Reading Comprehension + Summary ---
+// --- 15. Active Reading Journey (Contract 3 — Reading Comprehension) ---
+export type ReadingSkillLevel =
+  | 'literal'        // الفهم الحرفي
+  | 'vocabulary'     // فهم المفردات من السياق
+  | 'inference'      // الاستنتاج والتفسير
+  | 'analysis'       // التحليل والربط
+  | 'evaluation';     // التقييم والقراءة النقدية
+
+export interface ReadingParagraph {
+  id: string; // e.g. 'p1', 'p2'
+  number: number; // e.g. 1, 2
+  text: string;
+}
+
+export interface VocabularyEntry {
+  id: string;
+  word: string;
+  paragraphId?: string;
+  definition: string;
+  root?: string;
+  contextualNote?: string;
+}
+
+export interface EvidenceSpec {
+  required: boolean;
+  prompt?: string;
+  targetParagraphId?: string;
+  acceptedSentenceIds?: string[];
+  acceptedQuoteKeywords?: string[];
+}
+
+export interface StudentEvidenceAnswer {
+  paragraphId?: string;
+  sentenceId?: string;
+  selectedQuote?: string;
+}
+
+export interface ActiveReadingHint {
+  level: number; // 1..5
+  text: string;
+  focusParagraphId?: string;
+}
+
+export interface ActiveReadingSubQuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface ActiveReadingSubQuestion {
+  id: string;
+  skill: ReadingSkillLevel;
+  prompt: string;
+  type?: 'multiple_choice' | 'fill_blank' | 'true_false' | 'short_essay';
+  marks?: number;
+  options?: ActiveReadingSubQuestionOption[];
+  correctOptionId?: string;
+  correctValue?: string | boolean;
+  acceptableAnswers?: string[];
+  evidence?: EvidenceSpec;
+  hints?: ActiveReadingHint[];
+  explanation?: string;
+}
+
 export type ReadingSubQuestion =
+  | ActiveReadingSubQuestion
   | { id: string; type: typeof QuestionType.MULTIPLE_CHOICE; prompt: string; content: MultipleChoiceContent; correctAnswer: MultipleChoiceAnswer }
   | { id: string; type: typeof QuestionType.FILL_BLANK; prompt: string; content: FillBlankContent; correctAnswer: FillBlankAnswer }
   | { id: string; type: typeof QuestionType.TRUE_FALSE; prompt: string; content: TrueFalseContent; correctAnswer: TrueFalseAnswer };
 
 export interface ReadingComprehensionContent {
   prompt: string;
+  passageId?: string;
+  passageTitle?: string;
   passage: string;
+  paragraphs?: ReadingParagraph[];
+  vocabulary?: VocabularyEntry[];
   media?: MediaReference[];
   subQuestions: ReadingSubQuestion[];
   summaryPrompt?: string;
 }
+
+export interface ActiveReadingStudentSubAnswer {
+  coreAnswer?: string | boolean;
+  evidence?: StudentEvidenceAnswer;
+  hintsUsed?: number;
+}
+
 export interface ReadingComprehensionAnswer {
-  subAnswers: Record<string, MultipleChoiceAnswer | FillBlankAnswer | TrueFalseAnswer | unknown>;
+  subAnswers: Record<string, ActiveReadingStudentSubAnswer | MultipleChoiceAnswer | FillBlankAnswer | TrueFalseAnswer | string | boolean | unknown>;
   summary?: string;
+  sessionAnnotations?: {
+    highlights?: Array<{ paragraphId?: string; sentenceId?: string; start?: number; end?: number; color?: string; text?: string }>;
+    activeVocabLookups?: string[];
+  };
+}
+
+export interface ReadingComprehensionCorrectAnswer {
+  subAnswers: Record<string, {
+    correctCoreAnswer?: string | boolean;
+    acceptableAnswers?: string[];
+    evidence?: EvidenceSpec;
+  }>;
 }
 
 // --- Discriminated Unions ---

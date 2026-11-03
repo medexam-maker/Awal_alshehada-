@@ -212,7 +212,15 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       );
 
     case QuestionType.READING_COMPREHENSION:
-      return <ReadingComprehensionRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <ReadingComprehensionRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          isSimulator={examMode === 'simulator'}
+        />
+      );
 
     default:
       return (

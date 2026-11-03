@@ -706,6 +706,60 @@ export function createClientSnapshot(
         }
     }
 
+    // 14. READING_COMPREHENSION
+    if (row.question_type === 'reading_comprehension') {
+        const rawSubQuestions = Array.isArray(rawContentObj.subQuestions) ? rawContentObj.subQuestions : [];
+        if (examMode === ExamMode.TRAINING) {
+            snap.content = row.content;
+            snap.correctAnswer = row.correct_answer;
+            snap.explanation = row.explanation ?? null;
+            snap.explanationAr = row.explanation ?? null;
+        } else {
+            // SIMULATOR: Strictly omit hints, explanations, correctOptionId, correctValue, acceptableAnswers, acceptedSentenceIds, acceptedQuoteKeywords
+            const simSubQuestions = rawSubQuestions.map((sq: any) => {
+                const cleanSq: Record<string, unknown> = {
+                    id: String(sq.id),
+                    skill: sq.skill || 'literal',
+                    prompt: String(sq.prompt || sq.question || ''),
+                    type: sq.type || (Array.isArray(sq.options) && sq.options.length > 0 ? 'multiple_choice' : 'fill_blank'),
+                };
+                if (sq.marks !== undefined) cleanSq.marks = sq.marks;
+                if (Array.isArray(sq.options)) {
+                    cleanSq.options = sq.options.map((o: any) => ({
+                        id: String(o.id || o),
+                        text: String(typeof o === 'object' && o !== null ? (o.text ?? o.id) : o),
+                    }));
+                }
+                if (sq.evidence) {
+                    cleanSq.evidence = {
+                        required: Boolean(sq.evidence.required),
+                        prompt: sq.evidence.prompt ? String(sq.evidence.prompt) : undefined,
+                    };
+                }
+                return cleanSq;
+            });
+
+            const cleanVocab = Array.isArray(rawContentObj.vocabulary)
+                ? rawContentObj.vocabulary.map((v: any) => ({
+                      id: String(v.id || ''),
+                      word: String(v.word || ''),
+                      paragraphId: v.paragraphId ? String(v.paragraphId) : undefined,
+                  }))
+                : undefined;
+
+            snap.content = {
+                prompt: promptText,
+                passageId: rawContentObj.passageId,
+                passageTitle: rawContentObj.passageTitle,
+                passage: rawContentObj.passage,
+                paragraphs: rawContentObj.paragraphs,
+                ...(cleanVocab ? { vocabulary: cleanVocab } : {}),
+                subQuestions: simSubQuestions,
+            };
+        }
+        return snap;
+    }
+
     // Fallback for all other types (e.g. calculation, contour map)
     if (examMode === ExamMode.TRAINING) {
         snap.content = row.content;
@@ -874,6 +928,33 @@ export function createSnapshotPair(
             explanation: row.explanation,
         };
     } else if (row.question_type === 'diagram_labeling') {
+        const rawSubQuestions = Array.isArray(rawContentObj.subQuestions) ? rawContentObj.subQuestions : [];
+        const subQuestionsWithShuffledOptions = rawSubQuestions.map((s: any) => {
+            if (Array.isArray(s?.options) && s.options.length > 0) {
+                const shuffled = [...s.options];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return { ...s, options: shuffled };
+            }
+            return s;
+        });
+
+        dbSnapshot = {
+            id: row.id,
+            subject_id: row.subject_id,
+            question_type: row.question_type,
+            content: {
+                ...rawContentObj,
+                subQuestions: subQuestionsWithShuffledOptions,
+            },
+            correct_answer: row.correct_answer,
+            primary_interaction_mode: row.primary_interaction_mode,
+            marks: row.marks,
+            explanation: row.explanation,
+        };
+    } else if (row.question_type === 'reading_comprehension') {
         const rawSubQuestions = Array.isArray(rawContentObj.subQuestions) ? rawContentObj.subQuestions : [];
         const subQuestionsWithShuffledOptions = rawSubQuestions.map((s: any) => {
             if (Array.isArray(s?.options) && s.options.length > 0) {
