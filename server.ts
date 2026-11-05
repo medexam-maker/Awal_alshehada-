@@ -43,13 +43,21 @@ app.get('/api/media/:id', requireAuth, async (req: AuthenticatedRequest, res: ex
       return;
     }
 
+    const quotedEtag = `"${asset.sha256}"`;
+    const clientEtag = req.headers['if-none-match'];
+
     res.set({
       'Content-Type': asset.mimeType,
       'X-Content-Type-Options': 'nosniff',
       'Content-Disposition': 'inline',
-      'ETag': asset.sha256,
+      'ETag': quotedEtag,
       'Cache-Control': 'private, max-age=31536000, immutable',
     });
+
+    if (clientEtag === quotedEtag || clientEtag === asset.sha256) {
+      res.status(304).end();
+      return;
+    }
 
     res.send(asset.data);
   } catch (err) {
@@ -74,7 +82,8 @@ export { app };
 const isServerless = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 async function startServer() {
-  if (isServerless || process.env.NODE_ENV === 'test') {
+  const isMain = process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js'));
+  if (!isMain || isServerless || process.env.NODE_ENV === 'test') {
     return;
   }
 

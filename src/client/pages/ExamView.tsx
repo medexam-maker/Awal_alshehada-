@@ -39,6 +39,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ onFinishExam, onExitExam }) 
     submitExam,
     abandonExam,
     isLoading,
+    diagramPreloadProgress,
   } = useExam();
 
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -249,6 +250,17 @@ export const ExamView: React.FC<ExamViewProps> = ({ onFinishExam, onExitExam }) 
           answeredCount={answeredCount}
         />
       </div>
+
+      {/* Small non-blocking diagram preloading progress indicator */}
+      {diagramPreloadProgress && diagramPreloadProgress.total > 0 && diagramPreloadProgress.done < diagramPreloadProgress.total && (
+        <div className="bg-sky-50 border border-sky-200 text-sky-800 text-xs font-semibold px-4 py-2 rounded-2xl flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-sky-500 animate-pulse" />
+            <span>تحميل الرسومات {diagramPreloadProgress.done}/{diagramPreloadProgress.total}</span>
+          </div>
+          <span className="text-[11px] text-sky-600">جارٍ الحفظ في الذاكرة دون تعطيل الامتحان</span>
+        </div>
+      )}
 
       {/* Main Layout: Question Card + Navigator Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">

@@ -1691,10 +1691,28 @@ router.post('/media/diagrams', async (req: AuthenticatedRequest, res: Response):
   try {
     const { fileName, mimeType, dataBase64, name, keywords, width, height } = req.body;
 
-    if (!name || typeof name !== 'string' || !name.trim()) {
+    if (!dataBase64 || typeof dataBase64 !== 'string') {
       res.status(400).json({
         success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'Name is required' },
+        error: { code: 'VALIDATION_ERROR', message: 'dataBase64 is required' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (dataBase64.length > 2.8 * 1024 * 1024) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Base64 string exceeds 2.8 MB limit' },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (!name || typeof name !== 'string' || !name.trim() || name.trim().length > 120) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Name must be a trimmed string between 1 and 120 characters' },
         timestamp: new Date().toISOString(),
       });
       return;
@@ -1709,13 +1727,37 @@ router.post('/media/diagrams', async (req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    if (!dataBase64 || typeof dataBase64 !== 'string') {
-      res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: 'dataBase64 is required' },
-        timestamp: new Date().toISOString(),
-      });
-      return;
+    if (keywords !== undefined) {
+      if (!Array.isArray(keywords) || keywords.length > 20 || keywords.some((k) => typeof k !== 'string' || !k.trim() || k.trim().length > 40)) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Keywords must be an array of at most 20 strings, each 1 to 40 characters' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
+    if (width !== undefined && width !== null) {
+      if (!Number.isInteger(width) || width < 1 || width > 20000) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Width must be an integer between 1 and 20000' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
+    if (height !== undefined && height !== null) {
+      if (!Number.isInteger(height) || height < 1 || height > 20000) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Height must be an integer between 1 and 20000' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
     }
 
     const base64Clean = dataBase64.replace(/^data:image\/[a-z0-9+]+;base64,/, '');
@@ -1748,21 +1790,27 @@ router.post('/media/diagrams', async (req: AuthenticatedRequest, res: Response):
       sha256,
       width: typeof width === 'number' ? width : null,
       height: typeof height === 'number' ? height : null,
-      keywords: Array.isArray(keywords) ? keywords : [],
+      keywords: Array.isArray(keywords) ? keywords.map((k) => k.trim()) : [],
       kind: 'diagram',
     });
 
-    // Write audit log
-    await pool.query(
-      `INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'media_assets', $3, $4)`,
-      [
-        req.user?.id || 'system',
-        saveResult.duplicate ? 'diagram_media_deduplicated' : 'diagram_media_uploaded',
-        saveResult.asset.id,
-        JSON.stringify({ sha256, duplicate: saveResult.duplicate, name: saveResult.asset.name }),
-      ]
-    );
+    // Write audit log (best-effort)
+    if (req.user?.id) {
+      try {
+        await pool.query(
+          `INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+           VALUES ($1, $2, 'media_assets', $3, $4)`,
+          [
+            req.user.id,
+            saveResult.duplicate ? 'diagram_media_deduplicated' : 'diagram_media_uploaded',
+            saveResult.asset.id,
+            JSON.stringify({ sha256, duplicate: saveResult.duplicate, name: saveResult.asset.name }),
+          ]
+        );
+      } catch (auditErr) {
+        console.error('[admin/media/diagrams:POST] Audit log write failed (best-effort):', auditErr);
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -1861,7 +1909,34 @@ router.patch('/media/diagrams/:id', async (req: AuthenticatedRequest, res: Respo
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, keywords, archived } = req.body;
 
-    const updated = await mediaStorage.updateAsset(id, { name, keywords, archived });
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim() || name.trim().length > 120) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Name must be a trimmed string between 1 and 120 characters' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
+    if (keywords !== undefined) {
+      if (!Array.isArray(keywords) || keywords.length > 20 || keywords.some((k) => typeof k !== 'string' || !k.trim() || k.trim().length > 40)) {
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Keywords must be an array of at most 20 strings, each 1 to 40 characters' },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+    }
+
+    const updated = await mediaStorage.updateAsset(id, {
+      name: name ? name.trim() : undefined,
+      keywords: keywords ? keywords.map((k: string) => k.trim()) : undefined,
+      archived,
+    });
+
     if (!updated) {
       res.status(404).json({
         success: false,
@@ -1871,16 +1946,22 @@ router.patch('/media/diagrams/:id', async (req: AuthenticatedRequest, res: Respo
       return;
     }
 
-    // Write audit log
-    await pool.query(
-      `INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, 'diagram_media_updated', 'media_assets', $2, $3)`,
-      [
-        req.user?.id || 'system',
-        id,
-        JSON.stringify({ name, keywords, archived }),
-      ]
-    );
+    // Write audit log (best-effort)
+    if (req.user?.id) {
+      try {
+        await pool.query(
+          `INSERT INTO audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+           VALUES ($1, 'diagram_media_updated', 'media_assets', $2, $3)`,
+          [
+            req.user.id,
+            id,
+            JSON.stringify({ name, keywords, archived }),
+          ]
+        );
+      } catch (auditErr) {
+        console.error('[admin/media/diagrams/:id:PATCH] Audit log write failed (best-effort):', auditErr);
+      }
+    }
 
     res.status(200).json({
       success: true,

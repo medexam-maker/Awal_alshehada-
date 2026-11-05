@@ -4,6 +4,12 @@ import { examStorage, StoredAttempt } from '../storage/examStorage';
 import { curriculumStorage } from '../storage/curriculumStorage';
 import { ExamSubMode } from '../types/curriculum';
 import { QuestionType } from '../../shared/constants';
+import {
+  collectDiagramAssetUrls,
+  preloadAssets,
+  cleanupUnusedDiagramAssets,
+  allCached,
+} from '../lib/examAssetPreload';
 
 export interface ExamResult {
   attemptId: string;
@@ -49,6 +55,7 @@ interface ExamContextType {
   lastResult: ExamResult | null;
   pendingSubmission: PendingSubmissionState | null;
   isLoading: boolean;
+  diagramPreloadProgress: { done: number; total: number } | null;
 }
 
 const ExamContext = createContext<ExamContextType | undefined>(undefined);
@@ -61,6 +68,76 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [lastResult, setLastResult] = useState<ExamResult | null>(null);
   const [pendingSubmission, setPendingSubmission] = useState<PendingSubmissionState | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [diagramPreloadProgress, setDiagramPreloadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [uncachedDiagramUrls, setUncachedDiagramUrls] = useState<string[]>([]);
+
+  const triggerDiagramPreload = useCallback(async (questions: any[], isNewExam = false) => {
+    const urls = collectDiagramAssetUrls(questions);
+    if (urls.length === 0) {
+      setDiagramPreloadProgress(null);
+      setUncachedDiagramUrls([]);
+      return;
+    }
+
+    if (isNewExam) {
+      cleanupUnusedDiagramAssets(urls).catch(console.warn);
+    }
+
+    setDiagramPreloadProgress({ done: 0, total: urls.length });
+
+    try {
+      const res = await preloadAssets(urls, undefined, {
+        concurrency: 3,
+        retries: 2,
+        onProgress: (done, total) => {
+          setDiagramPreloadProgress({ done, total });
+        },
+      });
+
+      if (res.failed.length > 0) {
+        setUncachedDiagramUrls(res.failed);
+      } else {
+        setUncachedDiagramUrls([]);
+      }
+    } catch (err) {
+      console.warn('[ExamContext] Diagram preload warning:', err);
+      setUncachedDiagramUrls(urls);
+    } finally {
+      setTimeout(() => {
+        setDiagramPreloadProgress(null);
+      }, 2000);
+    }
+  }, []);
+
+  // Background retry for uncached/failed diagram images every 15 seconds
+  useEffect(() => {
+    if (!activeAttempt || uncachedDiagramUrls.length === 0) return;
+
+    const timer = setInterval(async () => {
+      try {
+        const stillUncached = await allCached(uncachedDiagramUrls);
+        if (stillUncached) {
+          setUncachedDiagramUrls([]);
+          return;
+        }
+
+        const res = await preloadAssets(uncachedDiagramUrls, undefined, {
+          concurrency: 2,
+          retries: 1,
+        });
+
+        if (res.failed.length === 0) {
+          setUncachedDiagramUrls([]);
+        } else {
+          setUncachedDiagramUrls(res.failed);
+        }
+      } catch {
+        // Non-blocking background retry
+      }
+    }, 15000);
+
+    return () => clearInterval(timer);
+  }, [activeAttempt, uncachedDiagramUrls]);
 
   // Restore active attempt from IndexedDB on initial mount
   useEffect(() => {
@@ -72,6 +149,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (stored) {
             setActiveAttempt(stored);
             setAnswers(stored.answers || {});
+            triggerDiagramPreload(stored.questions || [], false);
           }
         }
       } catch (err) {
@@ -81,7 +159,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     restoreActive();
-  }, []);
+  }, [triggerDiagramPreload]);
 
   const toggleFlagIndex = useCallback((idx: number) => {
     setFlaggedIndices((prev) => {
@@ -160,6 +238,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAnswers({});
           setCurrentIndex(0);
           setFlaggedIndices(new Set());
+          triggerDiagramPreload(snapshot.questions || [], true);
           return { success: true };
         }
 
@@ -255,6 +334,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAnswers({});
         setCurrentIndex(0);
         setFlaggedIndices(new Set());
+        triggerDiagramPreload(questionsToUse, true);
         return { success: true };
       } catch (err: any) {
         return {
@@ -265,7 +345,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsLoading(false);
       }
     },
-    []
+    [triggerDiagramPreload]
   );
 
   const submitExam = useCallback(
@@ -494,6 +574,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastResult,
         pendingSubmission,
         isLoading,
+        diagramPreloadProgress,
       }}
     >
       {children}

@@ -175,51 +175,65 @@ export class PostgresMediaStorage implements MediaStorage {
     const limit = Math.min(50, Math.max(1, params.limit ?? 50));
     const offset = Math.max(0, params.offset ?? 0);
     const includeArchived = Boolean(params.includeArchived);
-    const q = params.query ? params.query.trim().toLowerCase() : '';
+    const rawQuery = params.query ? params.query.trim() : '';
 
-    const allRes = await pool.query(
-      `SELECT id, name, file_name, mime_type, file_size, sha256, width, height, kind, status, archived_at, created_at, keywords
-       FROM media_assets
-       ORDER BY created_at DESC`
-    );
+    // Escape wildcards % and _ and \
+    const escapedQuery = rawQuery.replace(/[%_\\]/g, '\\$&');
 
-    let filtered = allRes.rows;
+    const whereClauses: string[] = [];
+    const queryParams: any[] = [];
+    let pIdx = 1;
 
     if (!includeArchived) {
-      filtered = filtered.filter((row: any) => row.status !== 'archived');
+      whereClauses.push(`m.status != 'archived'`);
     }
 
-    if (q) {
-      filtered = filtered.filter((row: any) => {
-        const idMatch = String(row.id).toLowerCase() === q;
-        const nameMatch = String(row.name || '').toLowerCase().includes(q);
-        const fileMatch = String(row.file_name || '').toLowerCase().includes(q);
-        const kwMatch = Array.isArray(row.keywords) && row.keywords.some((k: string) => String(k).toLowerCase().includes(q));
-        return idMatch || nameMatch || fileMatch || kwMatch;
-      });
+    if (rawQuery) {
+      queryParams.push(rawQuery);
+      const idParamIdx = pIdx++;
+      queryParams.push(`%${escapedQuery}%`);
+      const likeParamIdx = pIdx++;
+
+      whereClauses.push(`(
+        LOWER(m.id::text) = LOWER($${idParamIdx}) OR
+        LOWER(m.name) LIKE LOWER($${likeParamIdx}) ESCAPE '\\' OR
+        LOWER(m.file_name) LIKE LOWER($${likeParamIdx}) ESCAPE '\\' OR
+        EXISTS (
+          SELECT 1 FROM UNNEST(m.keywords) kw
+          WHERE LOWER(kw) LIKE LOWER($${likeParamIdx}) ESCAPE '\\'
+        )
+      )`);
     }
 
-    const total = filtered.length;
-    const pageRows = filtered.slice(offset, offset + limit);
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    // Fetch question references for pageRows
-    const qRes = await pool.query(
-      `SELECT id, content FROM question_bank WHERE question_type = 'diagram_labeling'`
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM media_assets m ${whereSql}`,
+      queryParams
     );
-    const assetRefCounts: Record<string, number> = {};
-    for (const qRow of qRes.rows) {
-      try {
-        const c = typeof qRow.content === 'string' ? JSON.parse(qRow.content) : qRow.content;
-        const aid = c?.diagram?.assetId;
-        if (aid) {
-          assetRefCounts[aid] = (assetRefCounts[aid] || 0) + 1;
-        }
-      } catch {
-        // ignore
-      }
-    }
+    const total = Number(countRes.rows[0]?.total || 0);
 
-    const assets = pageRows.map((row: any) => ({
+    const pageParams = [...queryParams, limit, offset];
+    const limitParamIdx = pageParams.length - 1;
+    const offsetParamIdx = pageParams.length;
+
+    const pageRes = await pool.query(
+      `SELECT m.id, m.name, m.file_name, m.mime_type, m.file_size, m.sha256, m.width, m.height, m.kind, m.status, m.archived_at, m.created_at, m.keywords,
+              COALESCE(q.ref_count, 0)::int AS reference_count
+       FROM media_assets m
+       LEFT JOIN (
+         SELECT (content::jsonb)->'diagram'->>'assetId' AS asset_id, COUNT(*)::int AS ref_count
+         FROM question_bank
+         WHERE question_type = 'diagram_labeling' AND (content::jsonb)->'diagram'->>'assetId' IS NOT NULL
+         GROUP BY (content::jsonb)->'diagram'->>'assetId'
+       ) q ON m.id::text = q.asset_id
+       ${whereSql}
+       ORDER BY m.created_at DESC
+       LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
+      pageParams
+    );
+
+    const assets = pageRes.rows.map((row: any) => ({
       id: String(row.id),
       name: String(row.name || row.file_name),
       fileName: String(row.file_name),
@@ -233,7 +247,7 @@ export class PostgresMediaStorage implements MediaStorage {
       archivedAt: row.archived_at ? new Date(row.archived_at).toISOString() : null,
       createdAt: new Date(row.created_at).toISOString(),
       keywords: Array.isArray(row.keywords) ? row.keywords : [],
-      referenceCount: assetRefCounts[String(row.id)] || 0,
+      referenceCount: Number(row.reference_count || 0),
     }));
 
     return { assets, total };
@@ -313,20 +327,12 @@ export class PostgresMediaStorage implements MediaStorage {
 
   private async getQuestionReferences(assetId: string): Promise<string[]> {
     const res = await pool.query(
-      `SELECT id, content FROM question_bank WHERE question_type = 'diagram_labeling'`
+      `SELECT id FROM question_bank
+       WHERE question_type = 'diagram_labeling'
+         AND (content::jsonb)->'diagram'->>'assetId' = $1`,
+      [assetId]
     );
-    const matched: string[] = [];
-    for (const row of res.rows) {
-      try {
-        const c = typeof row.content === 'string' ? JSON.parse(row.content) : row.content;
-        if (c?.diagram?.assetId === assetId) {
-          matched.push(row.id);
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return matched;
+    return res.rows.map((r: any) => String(r.id));
   }
 }
 

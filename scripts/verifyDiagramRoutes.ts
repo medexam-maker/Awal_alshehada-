@@ -15,8 +15,11 @@
  * 11. question save rejecting an unknown/archived assetId
  */
 
+process.env.NODE_ENV = 'test';
+
 import assert from 'assert';
 import http from 'http';
+import crypto from 'crypto';
 import { app } from '../server';
 import { generateAccessToken } from '../src/server/lib/tokenService';
 import { pool } from '../src/server/db/index';
@@ -30,7 +33,7 @@ function pass(name: string) {
 }
 
 function fail(name: string, err: any) {
-  console.error(`❌ [FAIL] ${name}\n   ${String(err?.message || err).split('\n')[0]}`);
+  console.error(`❌ [FAIL] ${name}\n   ${err?.stack || String(err)}`);
   failed++;
   process.exitCode = 1;
 }
@@ -82,9 +85,14 @@ async function run() {
     let uploadedAssetId = '';
     let uploadedSha256 = '';
 
+    // Generate unique PNG for test run
+    const UNIQUE_PNG = new Uint8Array(64);
+    UNIQUE_PNG.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    UNIQUE_PNG.set(crypto.randomBytes(16), 8);
+
     // 1. upload ok
     try {
-      const b64 = Buffer.from(PNG_VALID).toString('base64');
+      const b64 = Buffer.from(UNIQUE_PNG).toString('base64');
       const res = await fetch(`${baseUrl}/api/admin/media/diagrams`, {
         method: 'POST',
         headers: {
@@ -120,7 +128,7 @@ async function run() {
 
     // 2. duplicate sha256
     try {
-      const b64 = Buffer.from(PNG_VALID).toString('base64');
+      const b64 = Buffer.from(UNIQUE_PNG).toString('base64');
       const res = await fetch(`${baseUrl}/api/admin/media/diagrams`, {
         method: 'POST',
         headers: {
@@ -307,7 +315,7 @@ async function run() {
       fail('8. no DELETE route', e);
     }
 
-    // 9. GET /api/media/:id headers
+    // 9. GET /api/media/:id headers & 304 If-None-Match
     try {
       const resMedia = await fetch(`${baseUrl}/api/media/${uploadedAssetId}`, {
         headers: { Authorization: `Bearer ${studentToken}` },
@@ -316,14 +324,24 @@ async function run() {
       assert.strictEqual(resMedia.headers.get('content-type'), 'image/png');
       assert.strictEqual(resMedia.headers.get('x-content-type-options'), 'nosniff');
       assert.strictEqual(resMedia.headers.get('content-disposition'), 'inline');
-      assert.strictEqual(resMedia.headers.get('etag'), uploadedSha256);
+      assert.strictEqual(resMedia.headers.get('etag'), `"${uploadedSha256}"`, 'ETag header must be quoted string');
       assert.strictEqual(resMedia.headers.get('cache-control'), 'private, max-age=31536000, immutable');
 
       const buf = await resMedia.arrayBuffer();
       assert.strictEqual(buf.byteLength, PNG_VALID.length);
-      pass('9. GET /api/media/:id headers: correct caching, ETag, nosniff, inline, and archived asset is served');
+
+      // Test 304 response with If-None-Match matching quoted ETag
+      const res304 = await fetch(`${baseUrl}/api/media/${uploadedAssetId}`, {
+        headers: {
+          Authorization: `Bearer ${studentToken}`,
+          'If-None-Match': `"${uploadedSha256}"`,
+        },
+      });
+      assert.strictEqual(res304.status, 304, 'Must return 304 Not Modified when If-None-Match matches quoted ETag');
+
+      pass('9. GET /api/media/:id headers & 304: correct caching, quoted ETag, 304 response, nosniff, inline');
     } catch (e) {
-      fail('9. GET /api/media/:id headers', e);
+      fail('9. GET /api/media/:id headers & 304', e);
     }
 
     // 10. unknown id 404
@@ -417,6 +435,56 @@ async function run() {
       pass('11. question save rejecting an unknown/archived assetId: both rejected with 400 VALIDATION_ERROR');
     } catch (e) {
       fail('11. question save rejecting an unknown/archived assetId', e);
+    }
+
+    // 12. H2 Upload and PATCH validation
+    try {
+      const b64 = Buffer.from(PNG_VALID).toString('base64');
+
+      // 12a. base64 string longer than 2.8 MB
+      const hugeB64 = 'A'.repeat(2.8 * 1024 * 1024 + 10);
+      const resHuge = await fetch(`${baseUrl}/api/admin/media/diagrams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ name: 'Huge', mimeType: 'image/png', dataBase64: hugeB64 }),
+      });
+      assert.strictEqual(resHuge.status, 400);
+      const jsonHuge = await resHuge.json();
+      assert.strictEqual(jsonHuge.error.code, 'VALIDATION_ERROR');
+
+      // 12b. name > 120 chars
+      const resLongName = await fetch(`${baseUrl}/api/admin/media/diagrams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ name: 'x'.repeat(121), mimeType: 'image/png', dataBase64: b64 }),
+      });
+      assert.strictEqual(resLongName.status, 400);
+      const jsonLongName = await resLongName.json();
+      assert.strictEqual(jsonLongName.error.code, 'VALIDATION_ERROR');
+
+      // 12c. keywords > 20 items or item > 40 chars
+      const resBadKw = await fetch(`${baseUrl}/api/admin/media/diagrams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ name: 'Bad KW', mimeType: 'image/png', dataBase64: b64, keywords: ['y'.repeat(41)] }),
+      });
+      assert.strictEqual(resBadKw.status, 400);
+      const jsonBadKw = await resBadKw.json();
+      assert.strictEqual(jsonBadKw.error.code, 'VALIDATION_ERROR');
+
+      // 12d. width / height > 20000
+      const resBadDim = await fetch(`${baseUrl}/api/admin/media/diagrams`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+        body: JSON.stringify({ name: 'Bad Dim', mimeType: 'image/png', dataBase64: b64, width: 25000 }),
+      });
+      assert.strictEqual(resBadDim.status, 400);
+      const jsonBadDim = await resBadDim.json();
+      assert.strictEqual(jsonBadDim.error.code, 'VALIDATION_ERROR');
+
+      pass('12. H2 validation: base64 > 2.8MB, name > 120, keywords > 40 chars, dimensions > 20000 rejected with 400 VALIDATION_ERROR');
+    } catch (e) {
+      fail('12. H2 validation', e);
     }
 
   } finally {

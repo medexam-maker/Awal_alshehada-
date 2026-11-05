@@ -27,7 +27,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
+          if (key !== CACHE_NAME && key !== 'exam-diagrams-v1') {
             return caches.delete(key);
           }
         })
@@ -39,7 +39,27 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Do not cache API calls, let network handle them with offline fallback in app
+  // Cache-first for diagram media assets and bundled diagram paths (reads only exam-diagrams-v1)
+  if (url.pathname.startsWith('/api/media/') || url.pathname.startsWith('/assets/diagrams/')) {
+    event.respondWith(
+      caches.open('exam-diagrams-v1').then((cache) => {
+        return cache.match(event.request).then((cached) => {
+          if (cached) return cached;
+          return fetch(event.request).then((response) => {
+            if (response && response.status === 200) {
+              cache.put(event.request, response.clone());
+            }
+            return response;
+          }).catch(() => {
+            return cached || new Response('Offline diagram asset not available', { status: 503 });
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // Do not cache other API calls, let network handle them with offline fallback in app
   if (url.pathname.startsWith('/api/')) {
     return;
   }

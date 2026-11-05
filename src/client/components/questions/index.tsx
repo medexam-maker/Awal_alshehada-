@@ -11,6 +11,7 @@ import { ExplainRenderer } from './ExplainRenderer';
 import { ComparisonTableRenderer } from './ComparisonTableRenderer';
 import { OddOneOutRenderer } from './OddOneOutRenderer';
 import { DiagramLabelingRenderer } from './DiagramLabelingRenderer';
+import { LegacyDiagramLabelingRenderer } from './LegacyDiagramLabelingRenderer';
 import { ContourMapRenderer } from './ContourMapRenderer';
 import { CalculationRenderer } from './CalculationRenderer';
 import { OrderingRenderer } from './OrderingRenderer';
@@ -156,7 +157,26 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       );
 
     case QuestionType.DIAGRAM_LABELING:
-      return <DiagramLabelingRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      if (Array.isArray(content.subQuestions) && content.subQuestions.length > 0) {
+        return (
+          <DiagramLabelingRenderer
+            content={content}
+            answer={answer}
+            onChange={onChange}
+            isReadonly={isReadonly}
+            examMode={examMode}
+            correctAnswer={question.correctAnswer}
+          />
+        );
+      }
+      return (
+        <LegacyDiagramLabelingRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+        />
+      );
 
     case QuestionType.CONTOUR_MAP:
       return (

@@ -47,5 +47,7 @@ pglite/
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
-*.sw?
+
+# AI Studio exports
+public/assets/aistudio/
+
