@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useCallback } from 'react';
+import React, { useState, useEffect, useReducer, useCallback, useMemo } from 'react';
 import {
   Image as ImageIcon,
   Plus,
@@ -12,87 +12,81 @@ import {
   CheckCircle2,
   HelpCircle,
   Target,
-  Tag,
-  Check,
-  X,
-  RotateCcw
+  X
 } from 'lucide-react';
 import { DiagramLibraryDialog, DiagramAsset } from './DiagramLibraryDialog';
 import { RegionEditorCanvas } from './RegionEditorCanvas';
 import {
-  EditorState,
-  EditorAction,
-  initialEditorState,
   editorReducer,
-  toKey,
-  issues
+  initialEditorState
 } from '../../lib/regionEditorState';
-import { Region, validateRegion } from '../../../shared/regionGeometry';
-import { DiagramSubQuestion, DiagramLabelingRenderer } from '../questions/DiagramLabelingRenderer';
-import { validateQuestionContent, validateDiagramLabelingKey } from '../../../shared/validation/schemas';
-
-export interface DiagramFormData {
-  prompt: string;
-  diagram: {
-    assetId?: string;
-    url?: string;
-    alt?: string;
-  };
-  subQuestions: DiagramSubQuestion[];
-  subAnswers: Record<string, any>;
-  totalMarks: number;
-  explanations?: Record<string, string>;
-}
+import { Region } from '../../../shared/regionGeometry';
+import { DiagramLabelingRenderer } from '../questions/DiagramLabelingRenderer';
+import {
+  buildDiagramQuestion,
+  formStateFromQuestion,
+  DiagramFormState,
+  FormSubQuestion,
+  AuthoringIssue
+} from '../../lib/diagramAuthoring';
 
 export interface DiagramAuthoringFormProps {
-  initialValues?: Partial<DiagramFormData>;
-  onChange: (data: DiagramFormData) => void;
+  initialValues?: any;
+  onChange: (result: {
+    ok: boolean;
+    issues: AuthoringIssue[];
+    content?: any;
+    key?: any;
+    formState: DiagramFormState;
+    totalMarks: number;
+  }) => void;
   onSave?: () => void;
 }
 
-const DEFAULT_SUB_QUESTIONS: DiagramSubQuestion[] = [
-  {
-    id: 'sq1',
-    kind: 'locate',
-    prompt: 'حدد موقع المقاومة الكهربائية على الرسم التوضيحي:',
-    marks: 2,
-    skill: 'spatial_reasoning' as any,
-    hints: ['ابحث عن الرمز المتعرج الموصول على التوالي في الدائرة الكهربائية.'],
-    explanation: 'المقاومة هي العنصر المحدد في المسار الأيمن للدائرة.',
-  },
-  {
-    id: 'sq2',
-    kind: 'name',
-    prompt: 'ما اسم الجزء المشار إليه في الدائرة؟',
-    marks: 2,
-    skill: 'terminology_recall' as any,
-    options: [
-      { id: 'sq2_opt1', text: 'مقاومة أومية' },
-      { id: 'sq2_opt2', text: 'مكثف هوائي' },
-      { id: 'sq2_opt3', text: 'ملف حثي' },
-    ],
-    hints: ['الجزء يعمل على إعاقة مرور التيار الكهربائي وتحويل الطاقة إلى حرارة.'],
-    explanation: 'المقاومة الأومية هي المكون الأساسي للتحكم بالجهد والتيار.',
-  },
-  {
-    id: 'sq3',
-    kind: 'function',
-    prompt: 'ما الوظيفة الأساسية لهذا المكون في الدائرة؟',
-    marks: 4,
-    skill: 'functional_analysis' as any,
-    options: [
-      { id: 'sq3_opt1', text: 'التحكم في شدة التيار الكهربائي المار بالدائرة' },
-      { id: 'sq3_opt2', text: 'توليد القوة الدافعة الكهربائية' },
-      { id: 'sq3_opt3', text: 'تخزين الشحنات الكهربائية وتفريغها' },
-    ],
-    hints: ['تذكر قانون أوم: V = I * R وعلاقة المقاومة بتنظيم التيار.'],
-    explanation: 'المقاومة تحد من تدفق الشحنات لحماية المكونات الحساسة وضبط شدة التيار.',
-  },
-];
-
-const DEFAULT_SUB_ANSWERS: Record<string, any> = {
-  sq1: {
-    regions: [
+const DEFAULT_FORM_STATE: DiagramFormState = {
+  prompt: 'ادرس الرسم التوضيحي للدائرة الكهربائية المرفقة ثم أجب عن الفروع التالية:',
+  marks: 8,
+  diagram: { url: '/assets/diagrams/physics_circuit.svg', alt: 'الدائرة الكهربائية' },
+  subQuestions: [
+    {
+      uid: 'sq1',
+      kind: 'locate',
+      prompt: 'حدد موقع المقاومة الكهربائية على الرسم التوضيحي:',
+      weight: 2,
+      skill: 'spatial_reasoning' as any,
+      hints: ['ابحث عن الرمز المتعرج الموصول على التوالي في الدائرة الكهربائية.'],
+      explanation: 'المقاومة هي العنصر المحدد في المسار الأيمن للدائرة.',
+    },
+    {
+      uid: 'sq2',
+      kind: 'name',
+      prompt: 'ما اسم الجزء المشار إليه في الدائرة؟',
+      weight: 2,
+      skill: 'terminology_recall' as any,
+      options: ['مقاومة أومية', 'مكثف هوائي', 'ملف حثي'],
+      correctIndex: 0,
+      acceptedNames: ['مقاومة أومية', 'المقاومة', 'مقاومة'],
+      hints: ['الجزء يعمل على إعاقة مرور التيار الكهربائي وتحويل الطاقة إلى حرارة.'],
+      explanation: 'المقاومة الأومية هي المكون الأساسي للتحكم بالجهد والتيار.',
+    },
+    {
+      uid: 'sq3',
+      kind: 'function',
+      prompt: 'ما الوظيفة الأساسية لهذا المكون في الدائرة؟',
+      weight: 4,
+      skill: 'functional_analysis' as any,
+      options: [
+        'التحكم في شدة التيار الكهربائي المار بالدائرة',
+        'توليد القوة الدافعة الكهربائية',
+        'تخزين الشحنات الكهربائية وتفريغها',
+      ],
+      correctIndex: 0,
+      hints: ['تذكر قانون أوم: V = I * R وعلاقة المقاومة بتنظيم التيار.'],
+      explanation: 'المقاومة تحد من تدفق الشحنات لحماية المكونات الحساسة وضبط شدة التيار.',
+    },
+  ],
+  regions: {
+    sq1: [
       {
         type: 'rect',
         x: 0.65,
@@ -103,13 +97,6 @@ const DEFAULT_SUB_ANSWERS: Record<string, any> = {
       },
     ],
   },
-  sq2: {
-    optionId: 'sq2_opt1',
-    acceptedNames: ['مقاومة أومية', 'المقاومة', 'مقاومة'],
-  },
-  sq3: {
-    optionId: 'sq3_opt1',
-  },
 };
 
 export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
@@ -117,57 +104,32 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
   onChange,
   onSave,
 }) => {
-  // Main Question Prompt
-  const [prompt, setPrompt] = useState<string>(
-    initialValues?.prompt || 'ادرس الرسم التوضيحي للدائرة الكهربائية المرفقة ثم أجب عن الفروع التالية:'
-  );
+  // Initialize form state from props using pure formStateFromQuestion
+  const initialForm = useMemo(() => {
+    if (initialValues) {
+      const restored = formStateFromQuestion(initialValues);
+      if (restored.subQuestions.length > 0) {
+        return restored;
+      }
+    }
+    return DEFAULT_FORM_STATE;
+  }, [initialValues]);
 
-  // Diagram Reference
-  const [diagram, setDiagram] = useState<{ assetId?: string; url?: string; alt?: string }>(
-    initialValues?.diagram || { url: '/assets/diagrams/physics_circuit.svg', alt: 'الدائرة الكهربائية' }
-  );
+  // Form State
+  const [prompt, setPrompt] = useState<string>(initialForm.prompt);
+  const [diagram, setDiagram] = useState<{ assetId?: string; url?: string; alt?: string }>(initialForm.diagram);
+  const [subQuestions, setSubQuestions] = useState<FormSubQuestion[]>(initialForm.subQuestions);
   const [assetMeta, setAssetMeta] = useState<DiagramAsset | null>(null);
-
-  // Sub-questions
-  const [subQuestions, setSubQuestions] = useState<DiagramSubQuestion[]>(
-    initialValues?.subQuestions && initialValues.subQuestions.length > 0
-      ? initialValues.subQuestions
-      : DEFAULT_SUB_QUESTIONS
-  );
-
-  // Sub-answers (keys: optionId, acceptedNames, etc.)
-  const [subAnswersMeta, setSubAnswersMeta] = useState<Record<string, any>>(() => {
-    if (initialValues?.subAnswers && Object.keys(initialValues.subAnswers).length > 0) {
-      return { ...initialValues.subAnswers };
-    }
-    return DEFAULT_SUB_ANSWERS;
-  });
-
-  // Extract initial regions for editor
-  const initialRegions: Record<string, Region[]> = {};
-  if (initialValues?.subAnswers) {
-    for (const [subId, ans] of Object.entries(initialValues.subAnswers)) {
-      if (ans && Array.isArray((ans as any).regions)) {
-        initialRegions[subId] = (ans as any).regions;
-      }
-    }
-  } else {
-    for (const [subId, ans] of Object.entries(DEFAULT_SUB_ANSWERS)) {
-      if (ans && Array.isArray((ans as any).regions)) {
-        initialRegions[subId] = (ans as any).regions;
-      }
-    }
-  }
 
   // Region Editor State Machine
   const [editorState, editorDispatch] = useReducer(
     editorReducer,
-    initialRegions,
+    initialForm.regions,
     initialEditorState
   );
 
   // Active Sub-Question in Form & Editor
-  const [activeSubId, setActiveSubId] = useState<string>(subQuestions[0]?.id || 'sq1');
+  const [activeSubId, setActiveSubId] = useState<string>(subQuestions[0]?.uid || 'sq1');
 
   // UI Modals
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -191,68 +153,49 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
   const activeImageUrl = diagram.assetId ? `/api/media/${diagram.assetId}` : diagram.url || '';
 
   // Calculate total marks from sub-questions
-  const totalMarks = subQuestions.reduce((sum, sq) => sum + (Number(sq.marks) || 1), 0);
+  const totalMarks = subQuestions.reduce((sum, sq) => sum + (Number(sq.weight) || 1), 0);
 
-  // Sync changes up to parent
-  const emitChange = useCallback(() => {
-    const keyRegions = toKey(editorState);
-    const combinedSubAnswers: Record<string, any> = {};
-
+  // Build current Form State
+  const currentFormState: DiagramFormState = useMemo(() => {
+    const cleanRegions: Record<string, Region[]> = {};
     for (const sq of subQuestions) {
-      const meta = subAnswersMeta[sq.id] || {};
-      const regObj = keyRegions[sq.id];
-
-      if (sq.kind === 'locate') {
-        combinedSubAnswers[sq.id] = {
-          regions: regObj?.regions || [],
-        };
-      } else if (sq.kind === 'name') {
-        combinedSubAnswers[sq.id] = {
-          optionId: meta.optionId || sq.options?.[0]?.id || `${sq.id}_opt1`,
-          acceptedNames:
-            Array.isArray(meta.acceptedNames) && meta.acceptedNames.length > 0
-              ? meta.acceptedNames
-              : [sq.options?.[0]?.text || 'الاسم الصحيح'],
-        };
-      } else if (sq.kind === 'function') {
-        combinedSubAnswers[sq.id] = {
-          optionId: meta.optionId || sq.options?.[0]?.id || `${sq.id}_opt1`,
-        };
+      if (editorState.regions[sq.uid]) {
+        cleanRegions[sq.uid] = editorState.regions[sq.uid];
       }
     }
-
-    const explanationsMap: Record<string, string> = {};
-    for (const sq of subQuestions) {
-      if (sq.explanation?.trim()) {
-        explanationsMap[sq.id] = sq.explanation.trim();
-      }
-    }
-
-    const formData: DiagramFormData = {
+    return {
       prompt,
+      marks: totalMarks,
       diagram,
       subQuestions,
-      subAnswers: combinedSubAnswers,
-      totalMarks,
-      explanations: explanationsMap,
+      regions: cleanRegions,
     };
+  }, [prompt, totalMarks, diagram, subQuestions, editorState.regions]);
 
-    onChange(formData);
-  }, [prompt, diagram, subQuestions, subAnswersMeta, editorState, totalMarks, onChange]);
+  // Run pure build & validation engine
+  const buildResult = useMemo(() => buildDiagramQuestion(currentFormState), [currentFormState]);
 
+  // Emit build result and form state to parent
   useEffect(() => {
-    emitChange();
-  }, [emitChange]);
+    onChange({
+      ok: buildResult.ok,
+      issues: buildResult.issues,
+      content: buildResult.content,
+      key: buildResult.key,
+      formState: currentFormState,
+      totalMarks,
+    });
+  }, [buildResult, currentFormState, totalMarks, onChange]);
 
   // Sub-question management
   const handleAddSubQuestion = () => {
     const nextIdx = subQuestions.length + 1;
-    const newId = `sq${nextIdx}`;
+    const newUid = `sq_${Date.now().toString(36)}_${nextIdx}`;
     const newKind: 'locate' | 'name' | 'function' =
       nextIdx % 3 === 1 ? 'locate' : nextIdx % 3 === 2 ? 'name' : 'function';
 
-    const newSub: DiagramSubQuestion = {
-      id: newId,
+    const newSub: FormSubQuestion = {
+      uid: newUid,
       kind: newKind,
       prompt:
         newKind === 'locate'
@@ -260,7 +203,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
           : newKind === 'name'
           ? `ما اسم المكون رقم ${nextIdx}؟`
           : `ما وظيفة المكون رقم ${nextIdx}؟`,
-      marks: newKind === 'function' ? 4 : 2,
+      weight: newKind === 'function' ? 4 : 2,
       skill:
         newKind === 'locate'
           ? ('spatial_reasoning' as any)
@@ -272,46 +215,27 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
     };
 
     if (newKind === 'name') {
-      newSub.options = [
-        { id: `${newId}_opt1`, text: 'الخيار الصحيح' },
-        { id: `${newId}_opt2`, text: 'الخيار الثاني' },
-        { id: `${newId}_opt3`, text: 'الخيار الثالث' },
-      ];
+      newSub.options = ['الخيار الصحيح', 'الخيار الثاني', 'الخيار الثالث'];
+      newSub.correctIndex = 0;
+      newSub.acceptedNames = ['الخيار الصحيح'];
     } else if (newKind === 'function') {
-      newSub.options = [
-        { id: `${newId}_opt1`, text: 'الوظيفة النموذجية المعتمدة' },
-        { id: `${newId}_opt2`, text: 'وظيفة بديلة غير صحيحة' },
-        { id: `${newId}_opt3`, text: 'وظيفة أخرى' },
-      ];
+      newSub.options = ['الوظيفة النموذجية المعتمدة', 'وظيفة بديلة غير صحيحة', 'وظيفة أخرى'];
+      newSub.correctIndex = 0;
     }
 
     setSubQuestions((prev) => [...prev, newSub]);
-    setSubAnswersMeta((prev) => ({
-      ...prev,
-      [newId]:
-        newKind === 'name'
-          ? { optionId: `${newId}_opt1`, acceptedNames: ['الخيار الصحيح'] }
-          : newKind === 'function'
-          ? { optionId: `${newId}_opt1` }
-          : {},
-    }));
-    setActiveSubId(newId);
+    setActiveSubId(newUid);
   };
 
-  const handleDeleteSubQuestion = (id: string) => {
+  const handleDeleteSubQuestion = (uid: string) => {
     if (subQuestions.length <= 1) {
       alert('يجب أن يحتوي السؤال على فرع واحد على الأقل.');
       return;
     }
-    const remaining = subQuestions.filter((s) => s.id !== id);
+    const remaining = subQuestions.filter((s) => s.uid !== uid);
     setSubQuestions(remaining);
-    setSubAnswersMeta((prev) => {
-      const copy = { ...prev };
-      delete copy[id];
-      return copy;
-    });
-    if (activeSubId === id) {
-      setActiveSubId(remaining[0]?.id || 'sq1');
+    if (activeSubId === uid) {
+      setActiveSubId(remaining[0]?.uid || 'sq1');
     }
   };
 
@@ -326,7 +250,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
     setSubQuestions(copy);
   };
 
-  const handleUpdateSubQuestion = (index: number, updates: Partial<DiagramSubQuestion>) => {
+  const handleUpdateSubQuestion = (index: number, updates: Partial<FormSubQuestion>) => {
     setSubQuestions((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...updates };
@@ -336,7 +260,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
 
   // Image Selection Handler (checks confirmation if regions exist)
   const handleSelectAsset = (asset: DiagramAsset) => {
-    const hasExistingRegions = Object.values(editorState.regions).some((list) => ((list as Region[]) || []).length > 0);
+    const hasExistingRegions = Object.values(editorState.regions).some((list) => ((list as any[]) || []).length > 0);
     const hasExistingTargets = subQuestions.some((s) => !!s.target);
 
     if (hasExistingRegions || hasExistingTargets) {
@@ -358,44 +282,12 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
     setConfirmReplaceAsset(null);
   };
 
-  // Validation issues check
-  const regionIssues = issues(editorState, subQuestions);
-  const validationErrors: string[] = [];
-
-  if (!diagram.assetId && !diagram.url) {
-    validationErrors.push('يجب اختيار رسم توضيحي من المكتبة أو تحديد مسار صورة صالح.');
-  }
-
-  for (const sq of subQuestions) {
-    if (!sq.prompt.trim()) {
-      validationErrors.push(`السؤال الفرعي (${sq.id}) يحتاج إلى كتابة نص المطلوب.`);
-    }
-    if ((Number(sq.marks) || 0) <= 0) {
-      validationErrors.push(`درجة السؤال الفرعي (${sq.id}) يجب أن تكون أكبر من صفر.`);
-    }
-    if (sq.kind === 'locate') {
-      const list = editorState.regions[sq.id];
-      if (!list || list.length === 0) {
-        validationErrors.push(`السؤال الفرعي "${sq.prompt}" (تحديد موقع) يتطلب رسم نطاق واحد على الأقل على الصورة.`);
-      }
-    } else if (sq.kind === 'name') {
-      if (!sq.options || sq.options.length !== 3) {
-        validationErrors.push(`السؤال الفرعي (${sq.id}) من نوع تسمية يتطلب 3 خيارات بالضبط.`);
-      }
-      const accepted = subAnswersMeta[sq.id]?.acceptedNames;
-      if (!Array.isArray(accepted) || accepted.length === 0) {
-        validationErrors.push(`السؤال الفرعي (${sq.id}) يحتاج إلى إضافة اسم مقبول واحد على الأقل لتصحيح وضع المحاكاة.`);
-      }
-    } else if (sq.kind === 'function') {
-      if (!sq.options || sq.options.length < 3 || sq.options.length > 4) {
-        validationErrors.push(`السؤال الفرعي (${sq.id}) من نوع وظيفة يتطلب ما بين 3 إلى 4 خيارات.`);
-      }
-    }
-  }
-
   // Active sub-question object
-  const activeSub = subQuestions.find((s) => s.id === activeSubId) || subQuestions[0];
-  const activeSubIndex = subQuestions.findIndex((s) => s.id === activeSubId);
+  const activeSub = subQuestions.find((s) => s.uid === activeSubId) || subQuestions[0];
+  const activeSubIndex = subQuestions.findIndex((s) => s.uid === activeSubId);
+
+  // Filter sub-question specific issues
+  const activeSubIssues = activeSub ? buildResult.issues.filter((i) => i.subUid === activeSub.uid) : [];
 
   return (
     <div className="space-y-6 dir-rtl text-right font-sans">
@@ -449,12 +341,6 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                     </span>
                   </>
                 )}
-                {assetMeta.keywords?.length > 0 && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>{assetMeta.keywords.join(', ')}</span>
-                  </>
-                )}
               </div>
             )}
           </div>
@@ -498,16 +384,20 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
             {/* Sub-Question Navigation Stepper / Tabs */}
             <div className="flex items-center gap-1 overflow-x-auto pb-1">
               {subQuestions.map((sq, idx) => {
-                const isActive = sq.id === activeSubId;
-                const regCount = (editorState.regions[sq.id] || []).length;
+                const isActive = sq.uid === activeSubId;
+                const regCount = (editorState.regions[sq.uid] || []).length;
+                const hasIssue = buildResult.issues.some((i) => i.subUid === sq.uid);
+
                 return (
                   <button
-                    key={sq.id}
+                    key={sq.uid}
                     type="button"
-                    onClick={() => setActiveSubId(sq.id)}
+                    onClick={() => setActiveSubId(sq.uid)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                       isActive
                         ? 'bg-blue-600 text-white shadow-xs'
+                        : hasIssue
+                        ? 'bg-red-50 text-red-700 border border-red-200'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                     }`}
                   >
@@ -561,7 +451,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handleDeleteSubQuestion(activeSub.id)}
+                    onClick={() => handleDeleteSubQuestion(activeSub.uid)}
                     className="text-red-600 hover:text-red-700 p-1 hover:bg-red-50 rounded text-xs flex items-center gap-1"
                     title="حذف هذا الفرع"
                   >
@@ -569,6 +459,18 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                     <span>حذف</span>
                   </button>
                 </div>
+
+                {/* Sub-Question Issues Box */}
+                {activeSubIssues.length > 0 && (
+                  <div className="space-y-1.5 p-2.5 bg-red-50 border border-red-200 rounded-xl">
+                    {activeSubIssues.map((issue, idx) => (
+                      <div key={idx} className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+                        <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                        <span>{issue.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Sub-Question Kind Selector */}
                 <div>
@@ -586,25 +488,18 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                           ? 'terminology_recall'
                           : 'functional_analysis';
 
-                      let defaultOpts = activeSub.options;
-                      if (newKind === 'name') {
-                        defaultOpts = [
-                          { id: `${activeSub.id}_opt1`, text: 'الخيار الصحيح' },
-                          { id: `${activeSub.id}_opt2`, text: 'خيار آخر' },
-                          { id: `${activeSub.id}_opt3`, text: 'خيار ثالث' },
-                        ];
-                      } else if (newKind === 'function' && (!defaultOpts || defaultOpts.length < 3)) {
-                        defaultOpts = [
-                          { id: `${activeSub.id}_opt1`, text: 'الوظيفة النموذجية المعتمدة' },
-                          { id: `${activeSub.id}_opt2`, text: 'وظيفة بديلة' },
-                          { id: `${activeSub.id}_opt3`, text: 'وظيفة ثالثة' },
-                        ];
+                      let defaultOpts = activeSub.options || [];
+                      if (newKind === 'name' && defaultOpts.length < 3) {
+                        defaultOpts = ['الخيار الصحيح', 'خيار آخر', 'خيار ثالث'];
+                      } else if (newKind === 'function' && defaultOpts.length < 3) {
+                        defaultOpts = ['الوظيفة النموذجية المعتمدة', 'وظيفة بديلة', 'وظيفة ثالثة'];
                       }
 
                       handleUpdateSubQuestion(activeSubIndex, {
                         kind: newKind,
                         skill: defaultSkill as any,
                         options: defaultOpts,
+                        correctIndex: activeSub.correctIndex ?? 0,
                       });
                     }}
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
@@ -638,9 +533,9 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                       type="number"
                       min="1"
                       max="20"
-                      value={activeSub.marks || 2}
+                      value={activeSub.weight || 2}
                       onChange={(e) =>
-                        handleUpdateSubQuestion(activeSubIndex, { marks: Number(e.target.value) || 1 })
+                        handleUpdateSubQuestion(activeSubIndex, { weight: Number(e.target.value) || 1 })
                       }
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-center"
                     />
@@ -658,53 +553,28 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      {(activeSub.options || []).slice(0, 3).map((opt, oIdx) => {
-                        const isCorrect =
-                          (subAnswersMeta[activeSub.id]?.optionId || `${activeSub.id}_opt1`) === opt.id;
+                      {(activeSub.options || []).slice(0, 3).map((optText, oIdx) => {
+                        const isCorrect = (activeSub.correctIndex ?? 0) === oIdx;
 
                         return (
-                          <div key={opt.id} className="flex items-center gap-2">
+                          <div key={oIdx} className="flex items-center gap-2">
                             <input
                               type="radio"
-                              name={`correct_${activeSub.id}`}
+                              name={`correct_${activeSub.uid}`}
                               checked={isCorrect}
                               onChange={() => {
-                                setSubAnswersMeta((prev) => ({
-                                  ...prev,
-                                  [activeSub.id]: {
-                                    ...prev[activeSub.id],
-                                    optionId: opt.id,
-                                    acceptedNames: prev[activeSub.id]?.acceptedNames || [opt.text],
-                                  },
-                                }));
+                                handleUpdateSubQuestion(activeSubIndex, { correctIndex: oIdx });
                               }}
                               className="accent-blue-600 cursor-pointer"
                               title="تحديد كإجابة صحيحة"
                             />
                             <input
                               type="text"
-                              value={opt.text}
+                              value={optText}
                               onChange={(e) => {
-                                const newText = e.target.value;
                                 const newOpts = [...(activeSub.options || [])];
-                                newOpts[oIdx] = { ...newOpts[oIdx], text: newText };
+                                newOpts[oIdx] = e.target.value;
                                 handleUpdateSubQuestion(activeSubIndex, { options: newOpts });
-
-                                if (isCorrect) {
-                                  // Update first accepted name as well
-                                  setSubAnswersMeta((prev) => {
-                                    const currAccepted = prev[activeSub.id]?.acceptedNames || [];
-                                    const nextAccepted = [...currAccepted];
-                                    nextAccepted[0] = newText;
-                                    return {
-                                      ...prev,
-                                      [activeSub.id]: {
-                                        ...prev[activeSub.id],
-                                        acceptedNames: nextAccepted,
-                                      },
-                                    };
-                                  });
-                                }
                               }}
                               placeholder={`الخيار ${oIdx + 1}`}
                               className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs"
@@ -714,67 +584,51 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                       })}
                     </div>
 
-                    {/* Accepted Names Tags Editor for Simulator */}
+                    {/* Accepted Names Tags Editor */}
                     <div className="pt-2 border-t border-slate-100 space-y-1.5">
                       <label className="text-[11px] font-bold text-slate-700 block">
                         الأسماء والمترادفات المقبولة لتصحيح وضع المحاكاة (كتابة الطالب):
                       </label>
                       <div className="flex flex-wrap gap-1.5">
-                        {(subAnswersMeta[activeSub.id]?.acceptedNames || []).map(
-                          (nameTag: string, tagIdx: number) => (
-                            <span
-                              key={tagIdx}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-medium"
+                        {(activeSub.acceptedNames || []).map((nameTag: string, tagIdx: number) => (
+                          <span
+                            key={tagIdx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-[11px] font-medium"
+                          >
+                            <span>{nameTag}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextTags = (activeSub.acceptedNames || []).filter(
+                                  (_, i) => i !== tagIdx
+                                );
+                                handleUpdateSubQuestion(activeSubIndex, { acceptedNames: nextTags });
+                              }}
+                              className="hover:text-red-600"
                             >
-                              <span>{nameTag}</span>
-                              {tagIdx > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSubAnswersMeta((prev) => {
-                                      const nextTags = (prev[activeSub.id]?.acceptedNames || []).filter(
-                                        (_: string, i: number) => i !== tagIdx
-                                      );
-                                      return {
-                                        ...prev,
-                                        [activeSub.id]: { ...prev[activeSub.id], acceptedNames: nextTags },
-                                      };
-                                    });
-                                  }}
-                                  className="hover:text-red-600"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              )}
-                            </span>
-                          )
-                        )}
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
                       </div>
 
                       {/* Add Tag Input */}
                       <div className="flex items-center gap-1.5 pt-1">
                         <input
                           type="text"
-                          value={newTagInput[activeSub.id] || ''}
+                          value={newTagInput[activeSub.uid] || ''}
                           onChange={(e) =>
-                            setNewTagInput((prev) => ({ ...prev, [activeSub.id]: e.target.value }))
+                            setNewTagInput((prev) => ({ ...prev, [activeSub.uid]: e.target.value }))
                           }
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              const val = (newTagInput[activeSub.id] || '').trim();
+                              const val = (newTagInput[activeSub.uid] || '').trim();
                               if (val) {
-                                setSubAnswersMeta((prev) => ({
-                                  ...prev,
-                                  [activeSub.id]: {
-                                    ...prev[activeSub.id],
-                                    acceptedNames: [
-                                      ...(prev[activeSub.id]?.acceptedNames || []),
-                                      val,
-                                    ],
-                                  },
-                                }));
-                                setNewTagInput((prev) => ({ ...prev, [activeSub.id]: '' }));
+                                handleUpdateSubQuestion(activeSubIndex, {
+                                  acceptedNames: [...(activeSub.acceptedNames || []), val],
+                                });
+                                setNewTagInput((prev) => ({ ...prev, [activeSub.uid]: '' }));
                               }
                             }
                           }}
@@ -784,16 +638,12 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            const val = (newTagInput[activeSub.id] || '').trim();
+                            const val = (newTagInput[activeSub.uid] || '').trim();
                             if (val) {
-                              setSubAnswersMeta((prev) => ({
-                                ...prev,
-                                [activeSub.id]: {
-                                  ...prev[activeSub.id],
-                                  acceptedNames: [...(prev[activeSub.id]?.acceptedNames || []), val],
-                                },
-                              }));
-                              setNewTagInput((prev) => ({ ...prev, [activeSub.id]: '' }));
+                              handleUpdateSubQuestion(activeSubIndex, {
+                                acceptedNames: [...(activeSub.acceptedNames || []), val],
+                              });
+                              setNewTagInput((prev) => ({ ...prev, [activeSub.uid]: '' }));
                             }
                           }}
                           className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg"
@@ -817,12 +667,8 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                           type="button"
                           onClick={() => {
                             const current = activeSub.options || [];
-                            const newOpt = {
-                              id: `${activeSub.id}_opt${current.length + 1}`,
-                              text: `خيار ${current.length + 1}`,
-                            };
                             handleUpdateSubQuestion(activeSubIndex, {
-                              options: [...current, newOpt],
+                              options: [...current, `خيار ${current.length + 1}`],
                             });
                           }}
                           className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
@@ -834,34 +680,27 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      {(activeSub.options || []).map((opt, oIdx) => {
-                        const isCorrect =
-                          (subAnswersMeta[activeSub.id]?.optionId || `${activeSub.id}_opt1`) === opt.id;
+                      {(activeSub.options || []).map((optText, oIdx) => {
+                        const isCorrect = (activeSub.correctIndex ?? 0) === oIdx;
 
                         return (
-                          <div key={opt.id} className="flex items-center gap-2">
+                          <div key={oIdx} className="flex items-center gap-2">
                             <input
                               type="radio"
-                              name={`correct_func_${activeSub.id}`}
+                              name={`correct_func_${activeSub.uid}`}
                               checked={isCorrect}
                               onChange={() => {
-                                setSubAnswersMeta((prev) => ({
-                                  ...prev,
-                                  [activeSub.id]: {
-                                    ...prev[activeSub.id],
-                                    optionId: opt.id,
-                                  },
-                                }));
+                                handleUpdateSubQuestion(activeSubIndex, { correctIndex: oIdx });
                               }}
                               className="accent-blue-600 cursor-pointer"
                               title="تحديد كإجابة صحيحة"
                             />
                             <input
                               type="text"
-                              value={opt.text}
+                              value={optText}
                               onChange={(e) => {
                                 const newOpts = [...(activeSub.options || [])];
-                                newOpts[oIdx] = { ...newOpts[oIdx], text: e.target.value };
+                                newOpts[oIdx] = e.target.value;
                                 handleUpdateSubQuestion(activeSubIndex, { options: newOpts });
                               }}
                               placeholder={`الوظيفة ${oIdx + 1}`}
@@ -887,13 +726,13 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                   </div>
                 )}
 
-                {/* Training Hints (up to 4) */}
+                {/* Training Hints (up to 3) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-bold text-slate-700">
-                      التلميحات التدريبية (تظهر في وضع التدريب فقط - حتى 4):
+                      التلميحات التدريبية (تظهر في وضع التدريب فقط - حتى 3):
                     </label>
-                    {(!activeSub.hints || activeSub.hints.length < 4) && (
+                    {(!activeSub.hints || activeSub.hints.length < 3) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -970,7 +809,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
             {/* Region Canvas */}
             <RegionEditorCanvas
               imageUrl={activeImageUrl}
-              subQuestions={subQuestions}
+              subQuestions={subQuestions.map((sq, i) => ({ id: sq.uid, kind: sq.kind, prompt: sq.prompt })) as any}
               state={editorState}
               dispatch={editorDispatch}
               testClickMode={testClickMode}
@@ -1007,15 +846,15 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
         </div>
 
         {/* Validation Errors & Issues Banner */}
-        {validationErrors.length > 0 ? (
+        {!buildResult.ok ? (
           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
             <div className="flex items-center gap-2 text-xs font-bold text-amber-800">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>يرجى استيفاء الملاحظات التالية قبل الحفظ النهائي:</span>
+              <span>يرجى استيفاء الملاحظات التالية قبل الحفظ النهائي ({buildResult.issues.length} ملاحظة):</span>
             </div>
             <ul className="list-disc list-inside space-y-1 text-xs text-amber-700">
-              {validationErrors.map((err, i) => (
-                <li key={i}>{err}</li>
+              {buildResult.issues.map((issue, i) => (
+                <li key={i}>{issue.message}</li>
               ))}
             </ul>
           </div>
@@ -1046,7 +885,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
             <p className="text-xs text-slate-600 leading-relaxed">
               تحذير: استبدال الصورة الحالية سيؤدي تلقائياً إلى{' '}
               <strong className="text-red-600 font-bold">مسح جميع النطاقات المرسومة</strong> لجميع الفروع،
-              نظراً لاختلاف أبعاد وإحداثيات الرسم الجديد.
+              نظراً لااختلاف أبعاد وإحداثيات الرسم الجديد.
             </p>
             <p className="text-xs text-slate-500">هل أنت متأكد من استبدال الصورة والبدء برسم النطاقات من جديد؟</p>
             <div className="pt-2 flex items-center justify-end gap-2">
@@ -1126,19 +965,19 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
 
             {/* Preview Body */}
             <div className="flex-1 overflow-y-auto p-6">
-              <DiagramLabelingRenderer
-                content={{
-                  prompt,
-                  diagram,
-                  subQuestions,
-                }}
-                answer={previewAnswer}
-                onChange={(ans) => setPreviewAnswer(ans)}
-                isSimulator={previewMode === 'simulator'}
-                correctAnswer={{
-                  subAnswers: toKey(editorState),
-                }}
-              />
+              {buildResult.content ? (
+                <DiagramLabelingRenderer
+                  content={buildResult.content}
+                  answer={previewAnswer}
+                  onChange={(ans) => setPreviewAnswer(ans)}
+                  isSimulator={previewMode === 'simulator'}
+                  correctAnswer={buildResult.key}
+                />
+              ) : (
+                <div className="p-8 text-center text-amber-700 text-xs font-bold bg-amber-50 rounded-xl">
+                  لا يمكن عرض المعاينة الحية حتى يتم تصحيح الأخطاء وإكمال حقول السؤال المطلوبة.
+                </div>
+              )}
             </div>
           </div>
         </div>

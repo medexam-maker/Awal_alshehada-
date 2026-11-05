@@ -10,7 +10,7 @@ import { Pattern7AuthoringForm } from '../../components/admin/Pattern7AuthoringF
 import { Pattern8AuthoringForm, Pattern8FormFields } from '../../components/admin/Pattern8AuthoringForm';
 import { Pattern11AuthoringForm, Pattern11FormData } from '../../components/admin/Pattern11AuthoringForm';
 import { Pattern14AuthoringForm } from '../../components/admin/Pattern14AuthoringForm';
-import { DiagramAuthoringForm, DiagramFormData } from '../../components/admin/DiagramAuthoringForm';
+import { DiagramAuthoringForm } from '../../components/admin/DiagramAuthoringForm';
 import {
   Settings,
   PlusCircle,
@@ -1176,7 +1176,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const [pattern8Data, setPattern8Data] = useState<Pattern8FormFields | null>(null);
   const [pattern11Data, setPattern11Data] = useState<Pattern11FormData | null>(null);
   const [pattern14Data, setPattern14Data] = useState<any>(null);
-  const [diagramData, setDiagramData] = useState<DiagramFormData | null>(null);
+  const [diagramData, setDiagramData] = useState<any>(null);
+  const [editingDiagramQuestion, setEditingDiagramQuestion] = useState<any>(null);
   const [isLegacyDiagram, setIsLegacyDiagram] = useState<boolean>(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
 
@@ -1285,20 +1286,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
 
     if (q.questionType === QuestionType.DIAGRAM_LABELING) {
       const c = (q.content || {}) as Record<string, any>;
-      const ca = (q.correctAnswer || {}) as Record<string, any>;
 
       if (Array.isArray(c.labels)) {
         setIsLegacyDiagram(true);
       } else {
         setIsLegacyDiagram(false);
-        setDiagramData({
-          prompt: q.prompt || c.prompt || '',
-          diagram: c.diagram || (c.imageUrl ? { url: c.imageUrl } : { url: '/assets/diagrams/physics_circuit.svg' }),
-          subQuestions: Array.isArray(c.subQuestions) ? c.subQuestions : [],
-          subAnswers: ca.subAnswers || (typeof ca === 'object' && ca !== null ? ca : {}),
-          totalMarks: q.allocatedMarks || 5,
-          explanations: ca.explanations || {},
-        });
+        setEditingDiagramQuestion(q);
       }
     }
 
@@ -1560,40 +1553,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
         content = existingQ?.content && typeof existingQ.content === 'object' ? existingQ.content : { prompt: questionPrompt, labels: [] };
         correctAnswer = existingQ?.correctAnswer || {};
       } else if (diagramData) {
-        content = {
-          prompt: diagramData.prompt || questionPrompt,
-          diagram: diagramData.diagram,
-          subQuestions: diagramData.subQuestions,
-        };
-        correctAnswer = {
-          subAnswers: diagramData.subAnswers,
-          ...(diagramData.explanations && Object.keys(diagramData.explanations).length > 0
-            ? { explanations: diagramData.explanations }
-            : {}),
-        };
+        if (!diagramData.ok) {
+          showNotification('يرجى تصحيح أخطاء السؤال التوضيحي قبل الحفظ النهائي', 'info');
+          return;
+        }
+        content = diagramData.content;
+        correctAnswer = diagramData.key;
         setQuestionMarks(diagramData.totalMarks || questionMarks);
-      } else {
-        content = {
-          prompt: questionPrompt.trim(),
-          diagram: { url: '/assets/diagrams/physics_circuit.svg', alt: 'الدائرة الكهربائية' },
-          subQuestions: [
-            {
-              id: 'sq1',
-              kind: 'locate',
-              prompt: 'حدد موقع المقاومة الكهربائية على الرسم التوضيحي:',
-              marks: 2,
-            },
-          ],
-        };
-        correctAnswer = {
-          subAnswers: {
-            sq1: {
-              regions: [
-                { type: 'rect', x: 0.65, y: 0.25, w: 0.2, h: 0.2, tolerance: 0.02 },
-              ],
-            },
-          },
-        };
       }
     } else {
       content = { instructions: questionPrompt };
@@ -2775,14 +2741,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
                 ) : (
                   <DiagramAuthoringForm
                     initialValues={
-                      diagramData || {
+                      editingDiagramQuestion || {
                         prompt: questionPrompt,
                         totalMarks: questionMarks,
                       }
                     }
-                    onChange={(data) => {
+                    onChange={(data: any) => {
                       setDiagramData(data);
-                      if (data.prompt) setQuestionPrompt(data.prompt);
+                      if (data.formState?.prompt) setQuestionPrompt(data.formState.prompt);
                       if (data.totalMarks) setQuestionMarks(data.totalMarks);
                     }}
                   />
