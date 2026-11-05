@@ -113,3 +113,11 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// Clear diagram cache on student logout for multi-user device safety
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'CLEAR_DIAGRAM_CACHE') {
+    event.waitUntil(caches.delete('exam-diagrams-v1'));
+  }
+});
+

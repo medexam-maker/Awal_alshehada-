@@ -86,13 +86,19 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDiagramPreloadProgress({ done: 0, total: urls.length });
 
     try {
-      const res = await preloadAssets(urls, undefined, {
-        concurrency: 3,
-        retries: 2,
-        onProgress: (done, total) => {
-          setDiagramPreloadProgress({ done, total });
+      const res = await preloadAssets(
+        urls,
+        {
+          fetchFn: (u) => apiClient.authenticatedFetch(u),
         },
-      });
+        {
+          concurrency: 3,
+          retries: 2,
+          onProgress: (done, total) => {
+            setDiagramPreloadProgress({ done, total });
+          },
+        }
+      );
 
       if (res.failed.length > 0) {
         setUncachedDiagramUrls(res.failed);
@@ -121,10 +127,16 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        const res = await preloadAssets(uncachedDiagramUrls, undefined, {
-          concurrency: 2,
-          retries: 1,
-        });
+        const res = await preloadAssets(
+          uncachedDiagramUrls,
+          {
+            fetchFn: (u) => apiClient.authenticatedFetch(u),
+          },
+          {
+            concurrency: 2,
+            retries: 1,
+          }
+        );
 
         if (res.failed.length === 0) {
           setUncachedDiagramUrls([]);

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="sporangiumGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#334155" />
+      <stop offset="70%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="stalkGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#86efac" />
+      <stop offset="50%" stop-color="#22c55e" />
+      <stop offset="100%" stop-color="#15803d" />
+    </linearGradient>
+    <linearGradient id="breadGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fed7aa" />
+      <stop offset="100%" stop-color="#fcd34d" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.15" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8fafc" />
+
+  <!-- Bread Substrate (قطعة الخبز) -->
+  <rect x="0" y="490" width="800" height="110" fill="url(#breadGrad)" opacity="0.85" />
+  <line x1="0" y1="490" x2="800" y2="490" stroke="#d97706" stroke-width="3" stroke-dasharray="8 6" />
+  <text x="730" y="550" fill="#92400e" font-size="16" font-family="sans-serif" font-weight="bold" text-anchor="end">قطعة الخبز (الركيزة الغذائية)</text>
+
+  <!-- Horizontal Hypha / Stolon (الخيط الأفقي / الساق الهوائية) -->
+  <path d="M 80 488 Q 240 482 400 488 Q 560 482 720 488" fill="none" stroke="#16a34a" stroke-width="7" stroke-linecap="round" />
+
+  <!-- Rhizoids / Roots (الخيوط الجذرية / أشباه الجذور) [2] -->
+  <g id="rhizoids" stroke="#15803d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 400 490 Q 380 520 360 560" />
+    <path d="M 375 530 Q 350 545 330 570" />
+    <path d="M 400 490 Q 400 530 405 575" />
+    <path d="M 402 525 Q 420 545 435 570" />
+    <path d="M 400 490 Q 430 520 460 565" />
+    <path d="M 440 535 Q 465 550 480 572" />
+  </g>
+
+  <!-- Sporangiophore / Stalk (الخيط القائم / الحامل البوغي) [1] -->
+  <path d="M 400 490 Q 395 320 400 195" fill="none" stroke="url(#stalkGrad)" stroke-width="11" stroke-linecap="round" filter="url(#shadow)" />
+
+  <!-- Columella (العميدة داخل الحافظة) -->
+  <path d="M 370 195 C 370 155 430 155 430 195 Z" fill="#bbf7d0" stroke="#16a34a" stroke-width="3" />
+
+  <!-- Sporangium (الحافظة البوغية) -->
+  <circle cx="400" cy="140" r="68" fill="url(#sporangiumGrad)" stroke="#0f172a" stroke-width="3" filter="url(#shadow)" />
+
+  <!-- Released Spores / Spore Cloud (الأبواغ المتناثرة) -->
+  <g fill="#475569" opacity="0.85">
+    <circle cx="475" cy="100" r="5" />
+    <circle cx="495" cy="120" r="4.5" />
+    <circle cx="510" cy="85" r="5" />
+    <circle cx="530" cy="110" r="4" />
+    <circle cx="550" cy="95" r="4.5" />
+    <circle cx="565" cy="130" r="3.5" />
+    <circle cx="585" cy="105" r="4" />
+    <circle cx="525" cy="145" r="4" />
+  </g>
+  <text x="600" y="100" fill="#334155" font-size="14" font-family="sans-serif" font-weight="bold">الأبواغ (Spores)</text>
+
+  <!-- Numbered Marker [1]: Stalk (الخيط القائم) -->
+  <g transform="translate(320, 310)">
+    <circle cx="0" cy="0" r="18" fill="#2563eb" filter="url(#shadow)" />
+    <text x="0" y="6" fill="#ffffff" font-size="18" font-family="sans-serif" font-weight="bold" text-anchor="middle">1</text>
+    <line x1="20" y1="0" x2="70" y2="0" stroke="#2563eb" stroke-width="2.5" stroke-dasharray="4 3" />
+  </g>
+
+  <!-- Numbered Marker [2]: Rhizoids (الخيوط الجذرية) -->
+  <g transform="translate(240, 530)">
+    <circle cx="0" cy="0" r="18" fill="#2563eb" filter="url(#shadow)" />
+    <text x="0" y="6" fill="#ffffff" font-size="18" font-family="sans-serif" font-weight="bold" text-anchor="middle">2</text>
+    <line x1="20" y1="0" x2="95" y2="0" stroke="#2563eb" stroke-width="2.5" stroke-dasharray="4 3" />
+  </g>
+
+  <!-- Diagram Title / Header Badge -->
+  <rect x="20" y="20" width="340" height="52" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)" />
+  <text x="35" y="42" fill="#0f172a" font-size="16" font-family="sans-serif" font-weight="bold">فطر عفن الخبز (Rhizopus stolonifer)</text>
+  <text x="35" y="60" fill="#64748b" font-size="12" font-family="sans-serif">رسم تخطيطي لتركيب الخيط الفطري والأبواغ</text>
+</svg>

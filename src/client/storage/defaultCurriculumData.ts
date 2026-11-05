@@ -4,6 +4,7 @@ import { TWELVE_CONTRACT_SUBJECTS } from '../data/contractSubjects';
 import { JEBEL_MARRA_CONTOUR_MAP_SVG_URL } from '../../shared/contourUtils';
 import { DEMO_ODD_ONE_OUT, DEMO_COMPARISON_TABLE } from '../../shared/batch1DemoQuestions';
 import { DEMO_DIAGRAM_LABELING } from '../../shared/diagramDemoQuestion';
+import { RHIZOPUS_DIAGRAM_QUESTION } from '../../shared/diagramRhizopusQuestion';
 
 /**
  * Creates default authentic Sudanese Secondary Certificate blueprints for each of the 12 subjects.
@@ -324,6 +325,16 @@ export function generateDefaultBlueprints(): Record<string, SubjectExamBlueprint
           title: 'السؤال الرابع (أ): التخطيط الإقليمي والتنمية المستدامة',
           allocatedMarks: 10,
           instructions: 'اقترح حلولاً جغرافية وتخطيطية لمعالجة المشكلات البيئية المطروحة.',
+        },
+        {
+          id: `${subject.slug}_q4_diagram`,
+          subjectSlug: subject.slug,
+          questionNumber: 4,
+          partLabel: 'د',
+          questionType: QuestionType.DIAGRAM_LABELING,
+          title: 'السؤال الرابع (د): الرسم وتسمية البيانات وتحديد الوظيفة (فطر عفن الخبز)',
+          allocatedMarks: 5,
+          instructions: 'ادرس الرسم التخطيطي المرفق وسمّ الأجزاء المرقمة وحدد وظائفها.',
         },
       ];
     } else {
@@ -1283,6 +1294,40 @@ export function generateInitialQuestions(): AuthoredQuestion[] {
       correctAnswer: DEMO_DIAGRAM_LABELING.row.correct_answer,
       allocatedMarks: DEMO_DIAGRAM_LABELING.row.marks,
       explanationAr: DEMO_DIAGRAM_LABELING.row.explanation,
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: RHIZOPUS_DIAGRAM_QUESTION.row.id,
+      subjectSlug: 'geography',
+      patternId: 'geography_q4_diagram',
+      questionNumber: 4,
+      partLabel: 'د',
+      questionType: RHIZOPUS_DIAGRAM_QUESTION.row.question_type,
+      prompt: RHIZOPUS_DIAGRAM_QUESTION.row.content.prompt,
+      content: RHIZOPUS_DIAGRAM_QUESTION.row.content,
+      correctAnswer: RHIZOPUS_DIAGRAM_QUESTION.row.correct_answer,
+      allocatedMarks: RHIZOPUS_DIAGRAM_QUESTION.row.marks,
+      explanationAr: RHIZOPUS_DIAGRAM_QUESTION.row.explanation,
+      examScope: 'both',
+      examYear: 2024,
+      status: 'approved',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'demo_diagram_rhizopus_bread_mold_bio',
+      subjectSlug: 'biology',
+      patternId: 'biology_q1_d',
+      questionNumber: 1,
+      partLabel: 'د',
+      questionType: RHIZOPUS_DIAGRAM_QUESTION.row.question_type,
+      prompt: RHIZOPUS_DIAGRAM_QUESTION.row.content.prompt,
+      content: RHIZOPUS_DIAGRAM_QUESTION.row.content,
+      correctAnswer: RHIZOPUS_DIAGRAM_QUESTION.row.correct_answer,
+      allocatedMarks: RHIZOPUS_DIAGRAM_QUESTION.row.marks,
+      explanationAr: RHIZOPUS_DIAGRAM_QUESTION.row.explanation,
       examScope: 'both',
       examYear: 2024,
       status: 'approved',

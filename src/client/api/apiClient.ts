@@ -73,6 +73,38 @@ class ApiClient {
     } catch {
       // ignore
     }
+    // Security: Clear exam diagrams cache so another user on the same device cannot read it
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      window.caches.delete('exam-diagrams-v1').catch(() => {});
+    }
+    if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DIAGRAM_CACHE' });
+    }
+  }
+
+  /**
+   * Performs an authenticated fetch sending the Bearer token in the Authorization header.
+   * On 401, attempts token refresh and retries once with the renewed token.
+   */
+  public async authenticatedFetch(url: string, init: RequestInit = {}): Promise<Response> {
+    const headers: Record<string, string> = {
+      ...(init.headers as Record<string, string>),
+    };
+    if (this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+
+    let response = await fetch(url, { ...init, headers });
+
+    if (response.status === 401) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        headers['Authorization'] = `Bearer ${newToken}`;
+        response = await fetch(url, { ...init, headers });
+      }
+    }
+
+    return response;
   }
 
   public getVerifiedUser(): UserProfile | null {
