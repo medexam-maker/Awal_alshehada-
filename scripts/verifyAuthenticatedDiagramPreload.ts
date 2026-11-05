@@ -1,11 +1,12 @@
 /**
  * CR-2026-11-09 Point D: Authentication & Security Verification Suite
  * Verifies authenticated preloading, Bearer token inclusion, 401 token refresh retry,
- * blob URL lifecycle (creation and revocation on unmount), and logout cache purging.
+ * blob URL lifecycle (creation and revocation on unmount via loadDiagramImage), and logout cache purging.
  */
 import assert from 'assert';
 import { MemoryCache, preloadAssets } from '../src/client/lib/examAssetPreload';
 import { apiClient } from '../src/client/api/apiClient';
+import { loadDiagramImage } from '../src/client/lib/diagramImageLoader';
 
 let passed = 0;
 let failed = 0;
@@ -143,47 +144,34 @@ async function run() {
     }
   });
 
-  // Test 3: Object URL creation and revocation
-  await t('D3: renderer creates blob URL from authenticated response and revokes on unmount', () => {
-    const createdUrls: string[] = [];
-    const revokedUrls: string[] = [];
+  // Test 3: Object URL creation and revocation via pure loadDiagramImage
+  await t('D3: loadDiagramImage creates blob URL from cached/authenticated response and revokes on unmount', async () => {
+    let createdUrl: string | null = null;
+    let revokedUrl: string | null = null;
 
-    const mockCreateObjectURL = (blob: any) => {
-      const u = `blob:http://localhost:3000/${Math.random().toString(36).slice(2)}`;
-      createdUrls.push(u);
-      return u;
-    };
+    const fakeCache = new MemoryCache();
+    await fakeCache.put('/api/media/asset-cached', {
+      blob: async () => new Blob(['cached bytes'], { type: 'image/png' }),
+    });
 
-    const mockRevokeObjectURL = (url: string) => {
-      revokedUrls.push(url);
-    };
+    const res = await loadDiagramImage('/api/media/asset-cached', {
+      cache: fakeCache,
+      createObjectUrl: (b) => {
+        createdUrl = 'blob:http://localhost:3000/mock-uuid-1';
+        return createdUrl;
+      },
+      revokeObjectUrl: (u) => {
+        revokedUrl = u;
+      },
+    });
 
-    const origCreate = globalThis.URL.createObjectURL;
-    const origRevoke = globalThis.URL.revokeObjectURL;
-    globalThis.URL.createObjectURL = mockCreateObjectURL;
-    globalThis.URL.revokeObjectURL = mockRevokeObjectURL;
+    assert.strictEqual(res.error, false);
+    assert.strictEqual(res.imageUrl, 'blob:http://localhost:3000/mock-uuid-1');
+    assert.strictEqual(createdUrl, 'blob:http://localhost:3000/mock-uuid-1');
 
-    try {
-      const mockBlob = new Blob(['fake image bytes'], { type: 'image/png' });
-      let currentBlobUrl: string | null = null;
-
-      // Simulate renderer mount / load
-      currentBlobUrl = globalThis.URL.createObjectURL(mockBlob);
-      assert.strictEqual(createdUrls.length, 1);
-      assert.strictEqual(currentBlobUrl, createdUrls[0]);
-
-      // Simulate renderer unmount cleanup
-      if (currentBlobUrl) {
-        globalThis.URL.revokeObjectURL(currentBlobUrl);
-        currentBlobUrl = null;
-      }
-
-      assert.strictEqual(revokedUrls.length, 1);
-      assert.strictEqual(revokedUrls[0], createdUrls[0]);
-    } finally {
-      globalThis.URL.createObjectURL = origCreate;
-      globalThis.URL.revokeObjectURL = origRevoke;
-    }
+    // Call returned revoke function (simulating unmount cleanup)
+    res.revoke();
+    assert.strictEqual(revokedUrl, 'blob:http://localhost:3000/mock-uuid-1');
   });
 
   // Test 4: Logout purges diagram cache
@@ -230,23 +218,19 @@ async function run() {
   });
 
   // Test 5: Rejection of bare <img> fallback for /api/media/ on network error
-  await t('D5: failure to load /api/media/:id sets error state and never falls back to bare <img>', () => {
+  await t('D5: failure to load /api/media/:id returns null imageUrl and never falls back to bare <img>', async () => {
     const src = '/api/media/unauthorized-id-999';
-    let displayedImageUrl: string | null = null;
-    let isErrorState = false;
+    const fakeCache = new MemoryCache();
 
-    // Simulate error handler logic from DiagramLabelingRenderer
-    const onErrorHandler = (url: string) => {
-      if (!url.startsWith('/api/media/')) {
-        displayedImageUrl = url;
-      } else {
-        isErrorState = true;
-      }
-    };
+    const res = await loadDiagramImage(src, {
+      cache: fakeCache,
+      authenticatedFetch: async () => {
+        return { ok: false, status: 401 } as any;
+      },
+    });
 
-    onErrorHandler(src);
-    assert.strictEqual(displayedImageUrl, null, 'Must NOT set bare /api/media/ URL');
-    assert.strictEqual(isErrorState, true, 'Must set error state');
+    assert.strictEqual(res.imageUrl, null, 'Must NOT set bare /api/media/ URL');
+    assert.strictEqual(res.error, true, 'Must set error state');
   });
 
   console.log(`\n===============================================================`);

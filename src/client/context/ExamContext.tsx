@@ -86,22 +86,48 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDiagramPreloadProgress({ done: 0, total: urls.length });
 
     try {
-      const res = await preloadAssets(
-        urls,
+      const failedUrls: string[] = [];
+      const [firstUrl, ...remainingUrls] = urls;
+      let completedCount = 0;
+      const totalCount = urls.length;
+
+      // Phase 1: Fetch FIRST diagram alone (concurrency 1) for rapid first-question readiness
+      const firstRes = await preloadAssets(
+        [firstUrl],
         {
           fetchFn: (u) => apiClient.authenticatedFetch(u),
         },
         {
-          concurrency: 3,
+          concurrency: 1,
           retries: 2,
-          onProgress: (done, total) => {
-            setDiagramPreloadProgress({ done, total });
+          onProgress: (done) => {
+            completedCount = done;
+            setDiagramPreloadProgress({ done: completedCount, total: totalCount });
           },
         }
       );
+      failedUrls.push(...firstRes.failed);
 
-      if (res.failed.length > 0) {
-        setUncachedDiagramUrls(res.failed);
+      // Phase 2: Fetch remaining diagrams with concurrency 2
+      if (remainingUrls.length > 0) {
+        const remainingRes = await preloadAssets(
+          remainingUrls,
+          {
+            fetchFn: (u) => apiClient.authenticatedFetch(u),
+          },
+          {
+            concurrency: 2,
+            retries: 2,
+            onProgress: (done) => {
+              setDiagramPreloadProgress({ done: completedCount + done, total: totalCount });
+            },
+          }
+        );
+        failedUrls.push(...remainingRes.failed);
+      }
+
+      if (failedUrls.length > 0) {
+        setUncachedDiagramUrls(failedUrls);
       } else {
         setUncachedDiagramUrls([]);
       }

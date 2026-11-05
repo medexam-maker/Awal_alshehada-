@@ -28,6 +28,7 @@ import {
   Viewport
 } from '../../../client/lib/imageViewport';
 import { inMemoryDiagramCache } from '../../../client/lib/examAssetPreload';
+import { loadDiagramImage } from '../../../client/lib/diagramImageLoader';
 import { apiClient } from '../../api/apiClient';
 import { Region, pointInRegion } from '../../../shared/regionGeometry';
 
@@ -113,18 +114,9 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
   // Keyboard navigation marker position (0..1)
   const [kbdMarker, setKbdMarker] = useState<Point>({ x: 0.5, y: 0.5 });
 
-  // Helper to safely set blob URL and revoke prior one
-  const setBlobUrl = useCallback((blob: Blob) => {
-    if (createdBlobUrlRef.current) {
-      URL.revokeObjectURL(createdBlobUrlRef.current);
-    }
-    const objUrl = URL.createObjectURL(blob);
-    createdBlobUrlRef.current = objUrl;
-    setImageUrl(objUrl);
-    setImgLoading(false);
-  }, []);
+  // 1. Resolve and cache image through pure loadDiagramImage
+  const revokeRef = useRef<(() => void) | null>(null);
 
-  // 1. Resolve and cache image through authenticated client
   const loadImage = useCallback(async () => {
     setImgLoading(true);
     setImgError(false);
@@ -134,74 +126,25 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
       src = `/api/media/${content.diagram.assetId}`;
     }
 
-    if (!src) {
-      setImgLoading(false);
-      setImgError(true);
-      return;
+    if (revokeRef.current) {
+      revokeRef.current();
+      revokeRef.current = null;
     }
 
-    try {
-      // 1. Check Cache Storage
-      if ('caches' in window) {
-        const cache = await caches.open('exam-diagrams-v1');
-        const cachedRes = await cache.match(src);
-        if (cachedRes) {
-          const blob = await cachedRes.blob();
-          setBlobUrl(blob);
-          return;
-        }
-      } else {
-        const cachedRes = await inMemoryDiagramCache.match(src);
-        if (cachedRes) {
-          const blob = typeof cachedRes.blob === 'function' ? await cachedRes.blob() : cachedRes;
-          setBlobUrl(blob);
-          return;
-        }
-      }
-
-      // 2. Fetch through authenticated client for /api/media/ or standard fetch for bundled
-      let res: Response;
-      if (src.startsWith('/api/media/')) {
-        res = await apiClient.authenticatedFetch(src);
-      } else {
-        res = await fetch(src);
-      }
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-
-      // Put in cache for offline zero-request stability
-      if ('caches' in window) {
-        try {
-          const cache = await caches.open('exam-diagrams-v1');
-          await cache.put(src, new Response(blob));
-        } catch {
-          // ignore cache storage put errors
-        }
-      } else {
-        await inMemoryDiagramCache.put(src, blob);
-      }
-
-      setBlobUrl(blob);
-    } catch (err) {
-      console.warn('[DiagramLabelingRenderer] Error loading authenticated image:', err);
-      // For /api/media/, NEVER fall back to bare <img src> which causes 401 Unauthorized
-      if (!src.startsWith('/api/media/')) {
-        setImageUrl(src);
-      } else {
-        setImgError(true);
-      }
-      setImgLoading(false);
-    }
-  }, [content.diagram?.assetId, content.diagram?.url, setBlobUrl]);
+    const res = await loadDiagramImage(src);
+    revokeRef.current = res.revoke;
+    setImageUrl(res.imageUrl);
+    setImgError(res.error);
+    setImgLoading(false);
+  }, [content.diagram?.assetId, content.diagram?.url]);
 
   useEffect(() => {
     loadImage();
     return () => {
       // Clean up object URL on unmount to prevent memory leaks
-      if (createdBlobUrlRef.current) {
-        URL.revokeObjectURL(createdBlobUrlRef.current);
-        createdBlobUrlRef.current = null;
+      if (revokeRef.current) {
+        revokeRef.current();
+        revokeRef.current = null;
       }
     };
   }, [loadImage]);
