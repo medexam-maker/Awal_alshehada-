@@ -114,3 +114,48 @@ export function validateImageUpload(payload: ImageUploadPayload): ImageValidatio
 
   return { valid: true, detectedMime: detected };
 }
+
+import fs from 'fs';
+import path from 'path';
+
+/**
+ * Validates that a bundled diagram image URL (e.g. /assets/diagrams/ok.png)
+ * exists as a real file under the public/assets directory on disk.
+ * Rejects non-string input, path traversal (..), query params, non-image files, and directories.
+ */
+export function bundledDiagramExists(url: unknown, baseDir?: string): boolean {
+  if (!url || typeof url !== 'string' || !url.startsWith('/assets/')) {
+    return false;
+  }
+
+  if (url.includes('?') || url.includes('#') || url.includes('..')) {
+    return false;
+  }
+
+  const ext = path.extname(url).toLowerCase();
+  const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    return false;
+  }
+
+  const root = baseDir || process.cwd();
+  const relPath = url.slice(1); // e.g. 'assets/diagrams/ok.png'
+
+  let fullPath = path.resolve(root, 'public', relPath);
+  if (!fs.existsSync(fullPath)) {
+    fullPath = path.resolve(root, relPath);
+  }
+
+  // Ensure resolved path stays inside an 'assets' folder
+  const relFromRoot = path.relative(root, fullPath);
+  if (relFromRoot.startsWith('..') || path.isAbsolute(relFromRoot)) {
+    return false;
+  }
+
+  try {
+    const stat = fs.statSync(fullPath);
+    return stat.isFile();
+  } catch {
+    return false;
+  }
+}

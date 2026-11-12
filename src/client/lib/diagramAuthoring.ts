@@ -1,6 +1,7 @@
 /**
- * VISUAL MASTERY LAB — DIAGRAM AUTHORING HELPERS (CR-2026-11-10)
- * Pure functions: buildDiagramQuestion(formState) and formStateFromQuestion(question)
+ * VISUAL MASTERY LAB — DIAGRAM AUTHORING HELPERS (CR-2026-11-10 & CR-2026-11-11)
+ * Pure functions: buildDiagramQuestion(formState, options), formStateFromQuestion(question),
+ * emptyDiagramForm(), newSubQuestion(kind, uid)
  */
 
 import { validateRegion, Region } from '../../shared/regionGeometry';
@@ -45,11 +46,59 @@ export interface BuildDiagramQuestionResult {
   key?: any;
 }
 
+export interface BuildOptions {
+  allowBundledUrl?: boolean;
+}
+
+/**
+ * Returns a completely blank diagram authoring form state with no pre-filled sample content.
+ */
+export function emptyDiagramForm(): DiagramFormState {
+  return {
+    prompt: '',
+    diagram: {},
+    subQuestions: [],
+    regions: {},
+  };
+}
+
+/**
+ * Creates a brand new blank sub-question object for authoring.
+ */
+export function newSubQuestion(
+  kind: 'locate' | 'name' | 'function',
+  uid: string
+): FormSubQuestion {
+  const sub: FormSubQuestion = {
+    uid,
+    kind,
+    prompt: '',
+    weight: 1,
+    hints: [],
+    explanation: '',
+    target: null,
+  };
+
+  if (kind === 'name') {
+    sub.options = ['', '', ''];
+    sub.correctIndex = null;
+    sub.acceptedNames = [];
+  } else if (kind === 'function') {
+    sub.options = ['', '', ''];
+    sub.correctIndex = null;
+  }
+
+  return sub;
+}
+
 /**
  * Builds a diagram labeling question's content and correct_answer key from form state.
  * Generates canonical IDs (sq1, sq2, sq1_a, sq1_b, etc.) so teachers never deal with internal IDs.
  */
-export function buildDiagramQuestion(formState: any): BuildDiagramQuestionResult {
+export function buildDiagramQuestion(
+  formState: any,
+  options?: BuildOptions
+): BuildDiagramQuestionResult {
   const issues: AuthoringIssue[] = [];
 
   if (!formState || typeof formState !== 'object') {
@@ -59,6 +108,8 @@ export function buildDiagramQuestion(formState: any): BuildDiagramQuestionResult
     };
   }
 
+  const allowBundledUrl = options?.allowBundledUrl !== false;
+
   // 1. Diagram reference validation
   const diagram = formState.diagram || {};
   const assetId = typeof diagram.assetId === 'string' ? diagram.assetId.trim() : '';
@@ -67,6 +118,8 @@ export function buildDiagramQuestion(formState: any): BuildDiagramQuestionResult
 
   if (!assetId && !url) {
     issues.push({ code: 'NO_IMAGE', message: 'يرجى إضافة صورة أو اختيار ملف للرسم التوضيحي' });
+  } else if (!assetId && url && !allowBundledUrl) {
+    issues.push({ code: 'BUNDLED_IMAGE_NOT_ALLOWED', message: 'يجب اختيار صورة مرفوعة من المكتبة لهذا السؤال' });
   }
 
   // 2. Main prompt validation
@@ -92,6 +145,12 @@ export function buildDiagramQuestion(formState: any): BuildDiagramQuestionResult
     const weight = sub.weight;
     if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
       issues.push({ code: 'BAD_WEIGHT', message: 'درجة السؤال غير صالحة', subUid });
+    }
+
+    if (sub.skill !== undefined && sub.skill !== null && sub.skill !== '') {
+      if (typeof sub.skill !== 'string' || !['recognition', 'identification', 'understanding'].includes(sub.skill)) {
+        issues.push({ code: 'BAD_SKILL', message: 'مستوى المهارة العلمية غير صالح', subUid });
+      }
     }
 
     const rawHints = Array.isArray(sub.hints) ? sub.hints : [];
@@ -181,7 +240,7 @@ export function buildDiagramQuestion(formState: any): BuildDiagramQuestionResult
       sqObj.hints = cleanHints;
     }
 
-    if (sub.skill) {
+    if (sub.skill && ['recognition', 'identification', 'understanding'].includes(sub.skill)) {
       sqObj.skill = sub.skill;
     }
 
@@ -313,7 +372,7 @@ export function formStateFromQuestion(question: any): DiagramFormState {
       target,
     };
 
-    if (skill) {
+    if (skill && ['recognition', 'identification', 'understanding'].includes(skill)) {
       formSub.skill = skill;
     }
 

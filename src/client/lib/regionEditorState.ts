@@ -47,6 +47,7 @@ export type EditorAction =
   | { type: 'DELETE_SELECTED' }
   | { type: 'MOVE_VERTEX'; subId: string; index: number; vertex: number; point: Point }
   | { type: 'SET_TOLERANCE'; subId: string; index: number; value: number }
+  | { type: 'REMOVE_SUB'; subId: string }
   | { type: 'RESET_ALL' }
   | { type: 'UNDO' }
   | { type: 'REDO' };
@@ -132,6 +133,27 @@ export function editorReducer(state: EditorState, action: unknown): EditorState 
       return {
         ...state,
         draft: null,
+      };
+    }
+
+    case 'REMOVE_SUB': {
+      const { subId } = act;
+      if (!subId || !state.regions[subId]) return state;
+
+      const nextRegions = cloneRegions(state.regions);
+      delete nextRegions[subId];
+
+      const nextActive = state.activeSubId === subId ? null : state.activeSubId;
+      const nextSelected = state.selected?.subId === subId ? null : state.selected;
+
+      return {
+        ...state,
+        regions: nextRegions,
+        activeSubId: nextActive,
+        selected: nextSelected,
+        draft: null,
+        past: [...state.past, cloneRegions(state.regions)],
+        future: [],
       };
     }
 

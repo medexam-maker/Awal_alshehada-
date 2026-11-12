@@ -25,6 +25,8 @@ import { DiagramLabelingRenderer } from '../questions/DiagramLabelingRenderer';
 import {
   buildDiagramQuestion,
   formStateFromQuestion,
+  emptyDiagramForm,
+  newSubQuestion,
   DiagramFormState,
   FormSubQuestion,
   AuthoringIssue
@@ -43,68 +45,12 @@ export interface DiagramAuthoringFormProps {
   onSave?: () => void;
 }
 
-const DEFAULT_FORM_STATE: DiagramFormState = {
-  prompt: 'ادرس الرسم التوضيحي للدائرة الكهربائية المرفقة ثم أجب عن الفروع التالية:',
-  marks: 8,
-  diagram: { url: '/assets/diagrams/physics_circuit.svg', alt: 'الدائرة الكهربائية' },
-  subQuestions: [
-    {
-      uid: 'sq1',
-      kind: 'locate',
-      prompt: 'حدد موقع المقاومة الكهربائية على الرسم التوضيحي:',
-      weight: 2,
-      skill: 'spatial_reasoning' as any,
-      hints: ['ابحث عن الرمز المتعرج الموصول على التوالي في الدائرة الكهربائية.'],
-      explanation: 'المقاومة هي العنصر المحدد في المسار الأيمن للدائرة.',
-    },
-    {
-      uid: 'sq2',
-      kind: 'name',
-      prompt: 'ما اسم الجزء المشار إليه في الدائرة؟',
-      weight: 2,
-      skill: 'terminology_recall' as any,
-      options: ['مقاومة أومية', 'مكثف هوائي', 'ملف حثي'],
-      correctIndex: 0,
-      acceptedNames: ['مقاومة أومية', 'المقاومة', 'مقاومة'],
-      hints: ['الجزء يعمل على إعاقة مرور التيار الكهربائي وتحويل الطاقة إلى حرارة.'],
-      explanation: 'المقاومة الأومية هي المكون الأساسي للتحكم بالجهد والتيار.',
-    },
-    {
-      uid: 'sq3',
-      kind: 'function',
-      prompt: 'ما الوظيفة الأساسية لهذا المكون في الدائرة؟',
-      weight: 4,
-      skill: 'functional_analysis' as any,
-      options: [
-        'التحكم في شدة التيار الكهربائي المار بالدائرة',
-        'توليد القوة الدافعة الكهربائية',
-        'تخزين الشحنات الكهربائية وتفريغها',
-      ],
-      correctIndex: 0,
-      hints: ['تذكر قانون أوم: V = I * R وعلاقة المقاومة بتنظيم التيار.'],
-      explanation: 'المقاومة تحد من تدفق الشحنات لحماية المكونات الحساسة وضبط شدة التيار.',
-    },
-  ],
-  regions: {
-    sq1: [
-      {
-        type: 'rect',
-        x: 0.65,
-        y: 0.25,
-        w: 0.2,
-        h: 0.2,
-        tolerance: 0.02,
-      },
-    ],
-  },
-};
-
 export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
   initialValues,
   onChange,
   onSave,
 }) => {
-  // Initialize form state from props using pure formStateFromQuestion
+  // Initialize form state from props using pure formStateFromQuestion or emptyDiagramForm
   const initialForm = useMemo(() => {
     if (initialValues) {
       const restored = formStateFromQuestion(initialValues);
@@ -112,7 +58,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
         return restored;
       }
     }
-    return DEFAULT_FORM_STATE;
+    return emptyDiagramForm();
   }, [initialValues]);
 
   // Form State
@@ -172,8 +118,23 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
     };
   }, [prompt, totalMarks, diagram, subQuestions, editorState.regions]);
 
+  // Check if initialValues was an existing question with a bundled URL
+  const isEditingExistingBundledQuestion = useMemo(() => {
+    return Boolean(
+      initialValues?.content?.diagram?.url ||
+      initialValues?.diagram?.url ||
+      initialForm.diagram?.url
+    );
+  }, [initialValues, initialForm.diagram?.url]);
+
   // Run pure build & validation engine
-  const buildResult = useMemo(() => buildDiagramQuestion(currentFormState), [currentFormState]);
+  const buildResult = useMemo(
+    () =>
+      buildDiagramQuestion(currentFormState, {
+        allowBundledUrl: isEditingExistingBundledQuestion,
+      }),
+    [currentFormState, isEditingExistingBundledQuestion]
+  );
 
   // Emit build result and form state to parent
   useEffect(() => {
@@ -194,34 +155,7 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
     const newKind: 'locate' | 'name' | 'function' =
       nextIdx % 3 === 1 ? 'locate' : nextIdx % 3 === 2 ? 'name' : 'function';
 
-    const newSub: FormSubQuestion = {
-      uid: newUid,
-      kind: newKind,
-      prompt:
-        newKind === 'locate'
-          ? `حدد موقع الجزء رقم ${nextIdx} على الرسم:`
-          : newKind === 'name'
-          ? `ما اسم المكون رقم ${nextIdx}؟`
-          : `ما وظيفة المكون رقم ${nextIdx}؟`,
-      weight: newKind === 'function' ? 4 : 2,
-      skill:
-        newKind === 'locate'
-          ? ('spatial_reasoning' as any)
-          : newKind === 'name'
-          ? ('terminology_recall' as any)
-          : ('functional_analysis' as any),
-      hints: ['راجع الرسم التوضيحي والمعلومات المنهجية.'],
-      explanation: '',
-    };
-
-    if (newKind === 'name') {
-      newSub.options = ['الخيار الصحيح', 'الخيار الثاني', 'الخيار الثالث'];
-      newSub.correctIndex = 0;
-      newSub.acceptedNames = ['الخيار الصحيح'];
-    } else if (newKind === 'function') {
-      newSub.options = ['الوظيفة النموذجية المعتمدة', 'وظيفة بديلة غير صحيحة', 'وظيفة أخرى'];
-      newSub.correctIndex = 0;
-    }
+    const newSub = newSubQuestion(newKind, newUid);
 
     setSubQuestions((prev) => [...prev, newSub]);
     setActiveSubId(newUid);
@@ -234,8 +168,9 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
     }
     const remaining = subQuestions.filter((s) => s.uid !== uid);
     setSubQuestions(remaining);
+    editorDispatch({ type: 'REMOVE_SUB', subId: uid });
     if (activeSubId === uid) {
-      setActiveSubId(remaining[0]?.uid || 'sq1');
+      setActiveSubId(remaining[0]?.uid || '');
     }
   };
 
@@ -473,41 +408,63 @@ export const DiagramAuthoringForm: React.FC<DiagramAuthoringFormProps> = ({
                 )}
 
                 {/* Sub-Question Kind Selector */}
-                <div>
-                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                    نوع المطلوب (Sub-question Kind):
-                  </label>
-                  <select
-                    value={activeSub.kind}
-                    onChange={(e) => {
-                      const newKind = e.target.value as 'locate' | 'name' | 'function';
-                      const defaultSkill =
-                        newKind === 'locate'
-                          ? 'spatial_reasoning'
-                          : newKind === 'name'
-                          ? 'terminology_recall'
-                          : 'functional_analysis';
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      نوع المطلوب (Sub-question Kind):
+                    </label>
+                    <select
+                      value={activeSub.kind}
+                      onChange={(e) => {
+                        const newKind = e.target.value as 'locate' | 'name' | 'function';
+                        const defaultSkill =
+                          newKind === 'locate'
+                            ? 'recognition'
+                            : newKind === 'name'
+                            ? 'identification'
+                            : 'understanding';
 
-                      let defaultOpts = activeSub.options || [];
-                      if (newKind === 'name' && defaultOpts.length < 3) {
-                        defaultOpts = ['الخيار الصحيح', 'خيار آخر', 'خيار ثالث'];
-                      } else if (newKind === 'function' && defaultOpts.length < 3) {
-                        defaultOpts = ['الوظيفة النموذجية المعتمدة', 'وظيفة بديلة', 'وظيفة ثالثة'];
-                      }
+                        let defaultOpts = activeSub.options || [];
+                        if (newKind === 'name' && defaultOpts.length < 3) {
+                          defaultOpts = ['', '', ''];
+                        } else if (newKind === 'function' && defaultOpts.length < 3) {
+                          defaultOpts = ['', '', ''];
+                        }
 
-                      handleUpdateSubQuestion(activeSubIndex, {
-                        kind: newKind,
-                        skill: defaultSkill as any,
-                        options: defaultOpts,
-                        correctIndex: activeSub.correctIndex ?? 0,
-                      });
-                    }}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
-                  >
-                    <option value="locate">تحديد موقع الجزء على الرسم (Locate - نقر/تحديد)</option>
-                    <option value="name">تسمية الجزء العلمي (Name - اختيار/كتابة)</option>
-                    <option value="function">وظيفة أو أهمية الجزء (Function - متعدد الخيارات)</option>
-                  </select>
+                        handleUpdateSubQuestion(activeSubIndex, {
+                          kind: newKind,
+                          skill: defaultSkill as any,
+                          options: defaultOpts,
+                          correctIndex: activeSub.correctIndex ?? 0,
+                        });
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                    >
+                      <option value="locate">تحديد موقع الجزء على الرسم (Locate - نقر/تحديد)</option>
+                      <option value="name">تسمية الجزء العلمي (Name - اختيار/كتابة)</option>
+                      <option value="function">وظيفة أو أهمية الجزء (Function - متعدد الخيارات)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      المهارة العلمية (Skill):
+                    </label>
+                    <select
+                      value={activeSub.skill || ''}
+                      onChange={(e) => {
+                        handleUpdateSubQuestion(activeSubIndex, {
+                          skill: e.target.value ? (e.target.value as any) : undefined,
+                        });
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                    >
+                      <option value="">بدون مهارة محددة</option>
+                      <option value="recognition">تعرف (recognition)</option>
+                      <option value="identification">تحديد (identification)</option>
+                      <option value="understanding">فهم واستيعاب (understanding)</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Prompt & Marks */}

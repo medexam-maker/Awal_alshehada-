@@ -423,6 +423,12 @@ export function validateQuestionContent(type: keyof typeof ContentSchemas, conte
         return { valid: false, errors: [`Sub-question '${s.id}' has invalid kind '${String(s.kind)}'. Allowed: locate, name, function`] };
       }
 
+      if (s.skill !== undefined && s.skill !== null) {
+        if (typeof s.skill !== 'string' || !['recognition', 'identification', 'understanding'].includes(s.skill)) {
+          return { valid: false, errors: [`Sub-question '${s.id}' has invalid skill '${String(s.skill)}'. Allowed: recognition, identification, understanding`] };
+        }
+      }
+
       if (s.hints !== undefined) {
         if (!Array.isArray(s.hints) || s.hints.length > 4) {
           return { valid: false, errors: [`Sub-question '${s.id}' hints must not exceed 4 items`] };

@@ -487,6 +487,93 @@ async function run() {
       fail('12. H2 validation', e);
     }
 
+    // 13. question save rejecting non-existent bundled diagram url (CR-2026-11-11)
+    try {
+      const dummyContentWithUrl = (url: string) => ({
+        prompt: 'سؤال برسم مجمّع',
+        diagram: { url },
+        subQuestions: [
+          {
+            id: 'sq1',
+            kind: 'locate',
+            prompt: 'حدد الجزء',
+            marks: 1,
+          },
+        ],
+      });
+
+      const dummyKey = {
+        subAnswers: {
+          sq1: { regions: [{ type: 'rect', x: 0.1, y: 0.1, w: 0.2, h: 0.2 }] },
+        },
+      };
+
+      // 13a. non-existent bundled url
+      const resNonExistent = await fetch(`${baseUrl}/api/admin/questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          subjectSlug: 'physics',
+          questionType: 'diagram_labeling',
+          prompt: 'سؤال برسم غير موجود',
+          content: dummyContentWithUrl('/assets/diagrams/does_not_exist_image.svg'),
+          correctAnswer: dummyKey,
+          allocatedMarks: 1,
+        }),
+      });
+      assert.strictEqual(resNonExistent.status, 400);
+      const jsonNonExistent = await resNonExistent.json();
+      assert.strictEqual(jsonNonExistent.error.code, 'VALIDATION_ERROR');
+      assert.ok(jsonNonExistent.error.message.includes('does not exist or has an invalid path'));
+
+      // 13b. path traversal bundled url
+      const resTraversal = await fetch(`${baseUrl}/api/admin/questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          subjectSlug: 'physics',
+          questionType: 'diagram_labeling',
+          prompt: 'سؤال باختراق مسار',
+          content: dummyContentWithUrl('/assets/diagrams/../../package.json'),
+          correctAnswer: dummyKey,
+          allocatedMarks: 1,
+        }),
+      });
+      assert.strictEqual(resTraversal.status, 400);
+      const jsonTraversal = await resTraversal.json();
+      assert.strictEqual(jsonTraversal.error.code, 'VALIDATION_ERROR');
+
+      // 13c. valid existing bundled url is accepted
+      const resValidBundled = await fetch(`${baseUrl}/api/admin/questions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify({
+          subjectSlug: 'physics',
+          questionType: 'diagram_labeling',
+          prompt: 'سؤال برسم تجريبي صالح',
+          content: dummyContentWithUrl('/assets/diagrams/convex_lens.svg'),
+          correctAnswer: dummyKey,
+          allocatedMarks: 1,
+        }),
+      });
+      assert.strictEqual(resValidBundled.status, 201);
+      const jsonValid = await resValidBundled.json();
+      assert.strictEqual(jsonValid.success, true);
+
+      pass('13. question save rejects non-existent/traversal bundled diagram url and accepts valid file (400 VALIDATION_ERROR)');
+    } catch (e) {
+      fail('13. question save rejecting non-existent bundled url', e);
+    }
+
   } finally {
     server.close();
     try {

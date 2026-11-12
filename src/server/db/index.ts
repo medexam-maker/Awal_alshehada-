@@ -118,7 +118,7 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     );
 
     CREATE TABLE IF NOT EXISTS question_bank (
-      id TEXT PRIMARY KEY,
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
       subject_id TEXT NOT NULL,
       question_type TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -235,9 +235,9 @@ async function initPgliteDb(): Promise<PGlitePoolWrapper> {
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS training_set_id TEXT;
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMPTZ;
-    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-    ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS total_marks NUMERIC(8,2) DEFAULT 0;
     ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS obtained_marks NUMERIC(8,2);
+    ALTER TABLE question_bank ALTER COLUMN id SET DEFAULT gen_random_uuid();
+    ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS created_by TEXT;
     ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS canonical_content_hash TEXT;
     ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS approved_content_hash TEXT;
     ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS grading_mode TEXT DEFAULT 'auto';

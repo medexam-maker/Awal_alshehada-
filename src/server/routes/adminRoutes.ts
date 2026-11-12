@@ -16,7 +16,7 @@ import {
 } from '../../shared/validation/schemas';
 import { QUESTION_TYPE_REGISTRY } from '../../shared/questionTypeRegistry';
 import { buildCanonicalAssessmentPayload, computeCanonicalSha256Node } from '../../shared/canonicalHash';
-import { validateImageUpload } from '../lib/mediaValidation';
+import { validateImageUpload, bundledDiagramExists } from '../lib/mediaValidation';
 import { mediaStorage } from '../lib/mediaStorage';
 
 const router = Router();
@@ -255,6 +255,19 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
           });
           return;
         }
+      } else if (fullContent.diagram?.url) {
+        if (!bundledDiagramExists(fullContent.diagram.url)) {
+          res.status(400).json({
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: `Bundled diagram image '${fullContent.diagram.url}' does not exist or has an invalid path`,
+              details: {},
+            },
+            timestamp: new Date().toISOString(),
+          });
+          return;
+        }
       }
     }
   }
@@ -481,6 +494,16 @@ router.put('/questions/:id', async (req: AuthenticatedRequest, res: Response): P
             res.status(400).json({
               success: false,
               error: { code: 'VALIDATION_ERROR', message: `Referenced diagram asset '${parsedNewContent.diagram.assetId}' is archived and cannot be used for new questions`, details: {} },
+              timestamp: new Date().toISOString(),
+            });
+            return;
+          }
+        } else if (parsedNewContent.diagram?.url) {
+          if (!bundledDiagramExists(parsedNewContent.diagram.url)) {
+            await client.query('ROLLBACK');
+            res.status(400).json({
+              success: false,
+              error: { code: 'VALIDATION_ERROR', message: `Bundled diagram image '${parsedNewContent.diagram.url}' does not exist or has an invalid path`, details: {} },
               timestamp: new Date().toISOString(),
             });
             return;
