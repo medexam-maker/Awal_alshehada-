@@ -1,0 +1,46 @@
+--- G. Region geometry (normalized 0..1 coordinates, tolerance in normalized units, default 0.01) ---
+✅ [PASS] G1 ellipse: inside / outside
+✅ [PASS] G2 ellipse tolerance: default 0.01 forgives 0.005, not 0.03; explicit tolerance respected
+✅ [PASS] G3 rectangle: inside / outside / tolerance
+✅ [PASS] G4 polygon (triangle): inside / outside / near vertex tolerance
+✅ [PASS] G5 concave polygon (L shape): notch is outside
+✅ [PASS] G6 invalid points never match and never throw
+✅ [PASS] G7 validateRegion accepts valid regions
+✅ [PASS] G8 validateRegion rejects bad regions
+--- U. Image upload validation (no new dependency; magic bytes) ---
+✅ [PASS] U1 PNG / JPEG / WebP accepted with detectedMime
+✅ [PASS] U2 SVG (script risk) and GIF rejected
+✅ [PASS] U3 declared type must match the real bytes
+✅ [PASS] U4 empty and oversize (> 2 MB) rejected
+--- S. Schemas (new shape + legacy still valid) ---
+✅ [PASS] S1 valid new content passes; legacy content still passes
+✅ [PASS] S2 diagram needs exactly one of assetId | bundled /assets url; external urls rejected
+✅ [PASS] S3 subQuestion rules: unique ids, kinds, option counts, hints <= 4, valid target, non-empty list
+✅ [PASS] S4 student answer shape: point / optionId / text
+✅ [PASS] S5 answer-key validator: complete and consistent with the content
+--- R. Grading: three abilities graded independently, weights, no fuzzy text ---
+✅ [PASS] R1 perfect answer => full marks, components [2,2,4]
+✅ [PASS] R2 wrong location only => name and function still earned independently
+✅ [PASS] R3 typed name (simulator): diacritics / hamza / taa-marbuta tolerated, substring and wrong text are not
+✅ [PASS] R4 robustness: missing / malformed / unknown values score 0 for that part only
+✅ [PASS] R5 tap tolerance: just outside the region counts, far outside does not
+✅ [PASS] R6 several acceptable regions: any of them counts
+✅ [PASS] R7 skill tags: defaults by kind, explicit override respected
+✅ [PASS] R8 optionId wins over text when both are sent
+✅ [PASS] R9 never negative, never above max; autoGrade delegates to the same result
+✅ [PASS] R10 legacy labels question grades exactly as before
+--- N. Snapshots: simulator hides every key; training keeps feedback data; option order persisted ---
+✅ [PASS] N1 SIMULATOR client snapshot: no regions, accepted names, hints, explanations or answer keys
+✅ [PASS] N2 SIMULATOR keeps the question itself: diagram ref, prompts, kinds, options, display target
+✅ [PASS] N3 TRAINING snapshot: hints and the answer key (regions) are available for feedback
+✅ [PASS] N4 option order is shuffled per attempt, persisted in the DB snapshot, and stable on rebuild
+✅ [PASS] N4b SIMULATOR snapshot rebuilt from the stored DB snapshot (resume) is also free of keys
+✅ [PASS] N5 end-to-end: answer built from what the student saw scores full on the server
+✅ [PASS] N6 DB snapshot (grading copy) keeps the full key
+--- D. Demo question (physics) ---
+✅ [PASS] D1 belongs to physics, content and key validate, all three kinds present
+✅ [PASS] D2 a perfect answer (centre of the key regions, key option ids) scores full marks
+✅ [PASS] D3 the bundled diagram file exists under public/
+✅ [PASS] D4 the client default curriculum contains the physics diagram demo
+
+38 passed, 0 failed

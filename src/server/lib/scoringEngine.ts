@@ -1449,10 +1449,23 @@ export function gradeReadingComprehension(
             evMatched = true;
           }
         }
-        if (!evMatched && Array.isArray(evidenceSpec.acceptedQuoteKeywords) && studentEv.selectedQuote) {
+        if (!evMatched && Array.isArray(evidenceSpec.acceptedQuoteKeywords) && typeof studentEv.selectedQuote === 'string') {
+          const rawQuoteWords = studentEv.selectedQuote.trim().split(/\s+/).filter(Boolean);
           const normQuote = normalizeArabicText(studentEv.selectedQuote);
-          if (evidenceSpec.acceptedQuoteKeywords.some((kw: string) => normQuote.includes(normalizeArabicText(kw)))) {
-            evMatched = true;
+          const quoteTokens = normQuote ? normQuote.split(/\s+/).filter(Boolean) : [];
+          if (rawQuoteWords.length > 0 && rawQuoteWords.length <= 60 && quoteTokens.length > 0 && quoteTokens.length <= 60) {
+            if (
+              evidenceSpec.acceptedQuoteKeywords.some((kw: string) => {
+                if (typeof kw !== 'string') return false;
+                const kwWords = normalizeArabicText(kw).split(/\s+/).filter(Boolean);
+                return (
+                  kwWords.length > 0 &&
+                  kwWords.every((kwWord) => quoteTokens.some((uToken) => tokenMatchesWord(uToken, kwWord)))
+                );
+              })
+            ) {
+              evMatched = true;
+            }
           }
         }
         if (evMatched) {

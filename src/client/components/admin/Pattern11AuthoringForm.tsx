@@ -39,7 +39,7 @@ export const Pattern11AuthoringForm: React.FC<Pattern11AuthoringFormProps> = ({
     initialValues?.prompt ||
       'من خلال الخريطة الكنتورية الطوبوغرافية المرفقة، اقرأ البيانات والخطوط الكنتورية ثم أجب عن الفروع التالية:'
   );
-  const [mapUrl, setMapUrl] = useState<string>(initialValues?.mapUrl || '/assets/maps/contour_01.png');
+  const [mapUrl, setMapUrl] = useState<string>(initialValues?.mapUrl || '/assets/maps/contour_01.svg');
   const [mapCode, setMapCode] = useState<string>(initialValues?.mapCode || 'MAP_SUDAN_CONTOUR_01');
   const [totalMarks, setTotalMarks] = useState<number>(initialValues?.totalMarks || 10);
 
@@ -419,7 +419,7 @@ export const Pattern11AuthoringForm: React.FC<Pattern11AuthoringFormProps> = ({
                       setMapUrl(e.target.value);
                       notifyChange(prompt, e.target.value, mapCode, subQuestions, subAnswers, totalMarks);
                     }}
-                    placeholder="/assets/maps/contour_01.png"
+                    placeholder="/assets/maps/contour_01.svg"
                     className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                   <label className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-1 cursor-pointer shrink-0">

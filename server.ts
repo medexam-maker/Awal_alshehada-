@@ -12,7 +12,6 @@ import { requireAuth, AuthenticatedRequest } from './src/server/middleware/auth'
 import { mediaStorage } from './src/server/lib/mediaStorage';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 

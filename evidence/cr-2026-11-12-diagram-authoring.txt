@@ -1,0 +1,24 @@
+--- A. Build: generated ids, shapes, hygiene ---
+✅ [PASS] A1 a valid form builds content + key with generated ids and no leftovers
+✅ [PASS] A2 text hygiene: trimmed, hints without blanks, accepted names de-duplicated, empty explanations omitted, null target omitted
+✅ [PASS] A3 diagram reference: exactly one of assetId | url (assetId wins), alt trimmed or omitted
+✅ [PASS] A4 deleting or reordering a sub-question renumbers ids and keeps regions with the right sub-question
+✅ [PASS] A5 build never mutates its input
+--- V. Validation: every problem is reported at once with an Arabic message ---
+✅ [PASS] V1 form-level problems
+✅ [PASS] V2 locate: no region / invalid region
+✅ [PASS] V3 options: wrong count, empty, duplicate (after trim/case), missing or out-of-range correct choice
+✅ [PASS] V4 name needs accepted names; weights and hints limits; sub-question prompt
+✅ [PASS] V5 invalid display target is reported
+✅ [PASS] V6 several problems are all reported together and nothing is built
+✅ [PASS] V7 every issue has an Arabic message; sub-question issues name the sub-question uid
+--- R. Round trip and server agreement ---
+✅ [PASS] R1 built content passes the server validators
+✅ [PASS] R2 end to end: the authored question grades full marks for a perfect answer and hides every key in the simulator
+✅ [PASS] R3 round trip: form -> question -> form -> question gives identical content and key
+✅ [PASS] R4 loading restores what the teacher typed: texts, correct choice index, names, hints, explanations, targets, all regions with tolerance and polygon points
+✅ [PASS] R5 the correct choice position is kept for any index (not always the first)
+✅ [PASS] R6 loading the shipped physics demo and rebuilding keeps every authored value (ids may differ)
+✅ [PASS] R7 loading tolerates legacy or malformed input without throwing (returns an empty form)
+
+19 passed, 0 failed

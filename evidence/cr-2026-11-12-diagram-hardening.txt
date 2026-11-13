@@ -1,0 +1,17 @@
+--- B. A new form starts blank (no sample content) ---
+✅ [PASS] B1 emptyDiagramForm() is blank and does not build
+✅ [PASS] B2 newSubQuestion(kind, uid) creates a BLANK sub-question of each kind
+✅ [PASS] B3 adding a blank sub-question to a valid form can never build silently
+--- K. Skill values ---
+✅ [PASS] K1 builder: only recognition | identification | understanding (or omitted) are accepted
+✅ [PASS] K2 server schema rejects an unknown skill and accepts the three canonical ones
+--- I. Image source rules ---
+✅ [PASS] I1 new questions can forbid bundled urls (uploaded assetId only); the default stays permissive
+✅ [PASS] I2 bundledDiagramExists accepts only existing image files under the public/assets folder
+✅ [PASS] I3 the shipped demo images exist (run from the repository root)
+--- E. Editor: removing a sub-question removes its regions (undoable) ---
+✅ [PASS] E1 REMOVE_SUB deletes the regions, clears active/selected when they point to it, and can be undone
+✅ [PASS] E2 REMOVE_SUB for another or unknown sub-question keeps the active one; unknown ids change nothing
+✅ [PASS] E3 reducer immutability still holds for REMOVE_SUB
+
+11 passed, 0 failed

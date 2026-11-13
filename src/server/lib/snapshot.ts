@@ -981,6 +981,33 @@ export function createSnapshotPair(
             marks: row.marks,
             explanation: row.explanation,
         };
+    } else if (row.question_type === 'arabic_grammar') {
+        const rawComponents = Array.isArray(rawContentObj.components) ? rawContentObj.components : [];
+        const componentsWithShuffledChoices = rawComponents.map((c: any) => {
+            if (Array.isArray(c?.choices) && c.choices.length > 0) {
+                const shuffled = [...c.choices];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                return { ...c, choices: shuffled };
+            }
+            return c;
+        });
+
+        dbSnapshot = {
+            id: row.id,
+            subject_id: row.subject_id,
+            question_type: row.question_type,
+            content: {
+                ...rawContentObj,
+                ...(Array.isArray(rawContentObj.components) ? { components: componentsWithShuffledChoices } : {}),
+            },
+            correct_answer: row.correct_answer,
+            primary_interaction_mode: row.primary_interaction_mode,
+            marks: row.marks,
+            explanation: row.explanation,
+        };
     } else {
         dbSnapshot = createDbSnapshot(row);
     }

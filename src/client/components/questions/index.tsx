@@ -142,7 +142,16 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
       );
 
     case QuestionType.COMPARISON_TABLE:
-      return <ComparisonTableRenderer content={content} answer={answer} onChange={onChange} isReadonly={isReadonly} />;
+      return (
+        <ComparisonTableRenderer
+          content={content}
+          answer={answer}
+          onChange={onChange}
+          isReadonly={isReadonly}
+          correctAnswer={question.correctAnswer}
+          examMode={examMode}
+        />
+      );
 
     case QuestionType.ODD_ONE_OUT:
       return (

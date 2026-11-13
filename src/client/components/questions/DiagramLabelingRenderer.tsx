@@ -13,7 +13,9 @@ import {
   RefreshCw,
   Layers,
   Sparkles,
-  Info
+  Info,
+  Check,
+  X
 } from 'lucide-react';
 import {
   fitRect,
@@ -31,6 +33,8 @@ import { inMemoryDiagramCache } from '../../../client/lib/examAssetPreload';
 import { loadDiagramImage } from '../../../client/lib/diagramImageLoader';
 import { apiClient } from '../../api/apiClient';
 import { Region, pointInRegion } from '../../../shared/regionGeometry';
+import { playFeedbackSound } from '../../utils/soundManager';
+import { playWaterDrop } from '../../utils/soundEffects';
 
 export interface DiagramSubQuestion {
   id: string;
@@ -166,6 +170,52 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
     return () => observer.disconnect();
   }, []);
 
+  // Resolve correct sub-answers safely in Training/Review mode only
+  const resolvedCorrectSubAnswers: Record<string, any> = React.useMemo(() => {
+    if (isSimulator && !isReadonly) return {};
+    let raw: any = correctAnswer;
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        raw = null;
+      }
+    }
+    return raw?.subAnswers && typeof raw.subAnswers === 'object' ? raw.subAnswers : {};
+  }, [correctAnswer, isSimulator, isReadonly]);
+
+  const evaluateSubAnswer = useCallback(
+    (sq: DiagramSubQuestion, sa: any): boolean | null => {
+      if (isSimulator && !isReadonly) return null;
+      const caKey = resolvedCorrectSubAnswers[sq.id];
+      if (!caKey || !sa) return null;
+
+      if (sq.kind === 'locate') {
+        if (!sa.point || !Array.isArray(caKey.regions)) return null;
+        return caKey.regions.some((reg: Region) => pointInRegion(sa.point, reg));
+      }
+      if (sq.kind === 'name') {
+        if (sa.optionId && caKey.optionId) {
+          return sa.optionId === caKey.optionId;
+        }
+        if (sa.text && Array.isArray(caKey.acceptedNames)) {
+          const norm = sa.text.trim().toLowerCase();
+          if (!norm) return null;
+          return caKey.acceptedNames.some((acc: string) => acc.trim().toLowerCase() === norm);
+        }
+        return null;
+      }
+      if (sq.kind === 'function') {
+        if (sa.optionId && caKey.optionId) {
+          return sa.optionId === caKey.optionId;
+        }
+        return null;
+      }
+      return null;
+    },
+    [isSimulator, isReadonly, resolvedCorrectSubAnswers]
+  );
+
   // Update sub-answer helper
   const handleSubChange = (subId: string, val: { point?: { x: number; y: number }; optionId?: string; text?: string }) => {
     if (isReadonly) return;
@@ -177,6 +227,27 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
         [subId]: updated,
       },
     });
+  };
+
+  // Option selection with instant feedback & sound in Training mode (never in Simulator)
+  const handleSelectOption = (subId: string, optionId: string) => {
+    if (isReadonly) return;
+    handleSubChange(subId, { optionId });
+
+    if (!isSimulator) {
+      const caKey = resolvedCorrectSubAnswers[subId];
+      if (caKey?.optionId) {
+        if (optionId === caKey.optionId) {
+          playFeedbackSound('correct');
+          setAnnouncement('إجابة صحيحة! أحسنت.');
+        } else {
+          playFeedbackSound('incorrect');
+          setAnnouncement('إجابة خاطئة. حاول مرة أخرى أو راجع التلميح.');
+        }
+        return;
+      }
+    }
+    playWaterDrop();
   };
 
   // Handle pointer down (tap / pan / zoom)
@@ -264,7 +335,7 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
 
     const sq = subQuestions.find((s) => s.id === subId);
     const sa = subAnswers[subId];
-    const caKey = correctAnswer?.subAnswers?.[subId];
+    const caKey = resolvedCorrectSubAnswers[subId];
 
     let isCorrect = false;
     if (sq?.kind === 'locate' && sa?.point && caKey?.regions) {
@@ -279,6 +350,7 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
       isCorrect = sa.optionId === caKey.optionId;
     }
 
+    playFeedbackSound(isCorrect ? 'correct' : 'incorrect');
     setAnnouncement(isCorrect ? 'إجابة صحيحة! أحسنت.' : 'إجابة خاطئة. حاول مرة أخرى أو راجع التلميح.');
   };
 
@@ -332,7 +404,7 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
       )}
 
       {/* Main Diagram Area */}
-      <div className="relative border border-slate-300 rounded-2xl bg-slate-950 overflow-hidden min-h-[55vh] flex flex-col justify-center items-center shadow-md select-none">
+      <div className="relative border border-slate-300 rounded-2xl bg-slate-950 overflow-hidden h-[42vh] sm:h-[52vh] min-h-[280px] flex flex-col justify-center items-center shadow-md select-none">
         {/* Viewport Control Bar */}
         <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-xs p-1.5 rounded-xl border border-slate-700/80 shadow-lg text-white">
           <button
@@ -391,7 +463,7 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           style={{ touchAction: 'none' }}
-          className="w-full h-full min-h-[55vh] relative flex items-center justify-center cursor-crosshair focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl"
+          className="w-full h-full relative flex items-center justify-center cursor-crosshair focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded-2xl"
         >
           {imgLoading && (
             <div className="flex flex-col items-center justify-center text-slate-400 space-y-2 py-20">
@@ -510,16 +582,23 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
               const sa = subAnswers[sq.id];
               const isAnswered = sa?.point !== undefined || sa?.optionId !== undefined || (sa?.text && sa.text.trim().length > 0);
               const isChecked = checkedSubAnswers[sq.id];
+              const evalResult = evaluateSubAnswer(sq, sa);
 
               let bg = 'bg-slate-100 border-slate-300 text-slate-500';
               let icon = String(idx + 1);
 
-              if (isAnswered) {
+              if (!isSimulator && isChecked) {
+                if (evalResult === true) {
+                  bg = 'bg-emerald-600 border-emerald-600 text-white';
+                  icon = '✓';
+                } else {
+                  bg = 'bg-rose-600 border-rose-600 text-white';
+                  icon = '✗';
+                }
+              } else if (!isSimulator && isAnswered && evalResult === false) {
+                bg = 'bg-rose-100 border-rose-500 text-rose-900';
+              } else if (isAnswered) {
                 bg = 'bg-emerald-100 border-emerald-400 text-emerald-900';
-              }
-              if (isChecked && !isSimulator) {
-                bg = 'bg-emerald-600 border-emerald-600 text-white';
-                icon = '✓';
               }
 
               return (
@@ -584,20 +663,43 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
                 {!isSimulator && currentSub.options && currentSub.options.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {currentSub.options.map((opt) => {
-                      const isSelected = subAnswers[currentSub.id]?.optionId === opt.id;
+                      const selectedOptionId = subAnswers[currentSub.id]?.optionId;
+                      const isSelected = selectedOptionId === opt.id;
+                      const expectedOptionId = resolvedCorrectSubAnswers[currentSub.id]?.optionId;
+                      const isChecked = checkedSubAnswers[currentSub.id];
+
+                      const showFeedback = !isSimulator && Boolean(expectedOptionId);
+                      const isSelectedCorrect = showFeedback && isSelected && opt.id === expectedOptionId;
+                      const isSelectedIncorrect = showFeedback && isSelected && opt.id !== expectedOptionId;
+                      const isRevealedCorrect =
+                        showFeedback && (isChecked || isReadonly) && !isSelected && opt.id === expectedOptionId;
+
+                      let btnStyle = 'border-slate-200 bg-white text-slate-700 hover:border-slate-300';
+                      let statusIcon: React.ReactNode = null;
+
+                      if (isSelectedCorrect) {
+                        btnStyle = 'border-emerald-600 bg-emerald-100 text-emerald-950 shadow-xs ring-1 ring-emerald-500';
+                        statusIcon = <Check className="w-4 h-4 text-emerald-700 stroke-[3] shrink-0" />;
+                      } else if (isSelectedIncorrect) {
+                        btnStyle = 'border-rose-600 bg-rose-100 text-rose-950 shadow-xs ring-1 ring-rose-500';
+                        statusIcon = <X className="w-4 h-4 text-rose-700 stroke-[3] shrink-0" />;
+                      } else if (isRevealedCorrect) {
+                        btnStyle = 'border-dashed border-emerald-500 bg-emerald-50 text-emerald-900';
+                        statusIcon = <Check className="w-4 h-4 text-emerald-600 stroke-[2.5] shrink-0" />;
+                      } else if (isSelected) {
+                        btnStyle = 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-1 ring-emerald-500';
+                      }
+
                       return (
                         <button
                           key={opt.id}
                           type="button"
-                          onClick={() => handleSubChange(currentSub.id, { optionId: opt.id })}
+                          onClick={() => handleSelectOption(currentSub.id, opt.id)}
                           disabled={isReadonly}
-                          className={`p-3 rounded-xl border text-right text-xs font-bold transition-all min-h-[44px] cursor-pointer ${
-                            isSelected
-                              ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-1 ring-emerald-500'
-                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                          }`}
+                          className={`p-3 rounded-xl border text-right text-xs font-bold transition-all min-h-[44px] cursor-pointer flex items-center justify-between gap-2 ${btnStyle}`}
                         >
-                          {opt.text}
+                          <span className="flex-1">{opt.text}</span>
+                          {statusIcon}
                         </button>
                       );
                     })}
@@ -621,20 +723,43 @@ export const DiagramLabelingRenderer: React.FC<DiagramLabelingProps> = ({
             {currentSub.kind === 'function' && currentSub.options && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {currentSub.options.map((opt) => {
-                  const isSelected = subAnswers[currentSub.id]?.optionId === opt.id;
+                  const selectedOptionId = subAnswers[currentSub.id]?.optionId;
+                  const isSelected = selectedOptionId === opt.id;
+                  const expectedOptionId = resolvedCorrectSubAnswers[currentSub.id]?.optionId;
+                  const isChecked = checkedSubAnswers[currentSub.id];
+
+                  const showFeedback = !isSimulator && Boolean(expectedOptionId);
+                  const isSelectedCorrect = showFeedback && isSelected && opt.id === expectedOptionId;
+                  const isSelectedIncorrect = showFeedback && isSelected && opt.id !== expectedOptionId;
+                  const isRevealedCorrect =
+                    showFeedback && (isChecked || isReadonly) && !isSelected && opt.id === expectedOptionId;
+
+                  let btnStyle = 'border-slate-200 bg-white text-slate-700 hover:border-slate-300';
+                  let statusIcon: React.ReactNode = null;
+
+                  if (isSelectedCorrect) {
+                    btnStyle = 'border-emerald-600 bg-emerald-100 text-emerald-950 shadow-xs ring-1 ring-emerald-500';
+                    statusIcon = <Check className="w-4 h-4 text-emerald-700 stroke-[3] shrink-0" />;
+                  } else if (isSelectedIncorrect) {
+                    btnStyle = 'border-rose-600 bg-rose-100 text-rose-950 shadow-xs ring-1 ring-rose-500';
+                    statusIcon = <X className="w-4 h-4 text-rose-700 stroke-[3] shrink-0" />;
+                  } else if (isRevealedCorrect) {
+                    btnStyle = 'border-dashed border-emerald-500 bg-emerald-50 text-emerald-900';
+                    statusIcon = <Check className="w-4 h-4 text-emerald-600 stroke-[2.5] shrink-0" />;
+                  } else if (isSelected) {
+                    btnStyle = 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-1 ring-emerald-500';
+                  }
+
                   return (
                     <button
                       key={opt.id}
                       type="button"
-                      onClick={() => handleSubChange(currentSub.id, { optionId: opt.id })}
+                      onClick={() => handleSelectOption(currentSub.id, opt.id)}
                       disabled={isReadonly}
-                      className={`p-3 rounded-xl border text-right text-xs font-bold transition-all min-h-[44px] cursor-pointer ${
-                        isSelected
-                          ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-1 ring-emerald-500'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                      }`}
+                      className={`p-3 rounded-xl border text-right text-xs font-bold transition-all min-h-[44px] cursor-pointer flex items-center justify-between gap-2 ${btnStyle}`}
                     >
-                      {opt.text}
+                      <span className="flex-1">{opt.text}</span>
+                      {statusIcon}
                     </button>
                   );
                 })}

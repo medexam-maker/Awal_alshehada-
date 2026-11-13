@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, X, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { playFeedbackSound } from '../../utils/soundManager';
+import { playWaterDrop } from '../../utils/soundEffects';
 
 interface ComparisonTableOption {
   id: string;
@@ -49,18 +50,34 @@ export const ComparisonTableRenderer: React.FC<ComparisonTableProps> = ({
   const isTraining = examMode === 'training';
   const cellsAnswer = answer?.cells || {};
 
-  // Active bottom sheet modal state for cell option picking
-  const [activeCellModal, setActiveCellModal] = useState<{
-    rowLabel: string;
-    header: string;
-    cell: ComparisonTableCell;
-  } | null>(null);
+  // Active inline dropdown cell key (anchored directly below the clicked button)
+  const [openCellKey, setOpenCellKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openCellKey) return;
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('[data-comparison-dropdown]')) return;
+      setOpenCellKey(null);
+    };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenCellKey(null);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [openCellKey]);
 
   const headers = content?.tableHeaders || content?.headers || [];
   const rows = content?.rows || [];
 
-  // Correct answers map for training mode
-  const correctMap: Record<string, string> = correctAnswer?.cells || {};
+  // Correct answers map for training mode only
+  const correctMap: Record<string, string> = isTraining ? (correctAnswer?.cells || {}) : {};
 
   // Count total interactive cells and answered cells
   let totalInteractive = 0;
@@ -82,18 +99,14 @@ export const ComparisonTableRenderer: React.FC<ComparisonTableProps> = ({
     const nextCells = { ...cellsAnswer, [cellId]: optionId };
     onChange({ cells: nextCells });
 
-    if (isTraining) {
-      const expected = correctMap[cellId];
-      if (expected) {
-        if (optionId === expected) {
-          playFeedbackSound('correct');
-        } else {
-          playFeedbackSound('incorrect');
-        }
-      }
+    const expected = correctMap[cellId];
+    if (isTraining && expected) {
+      playFeedbackSound(optionId === expected ? 'correct' : 'incorrect');
+    } else {
+      playWaterDrop();
     }
 
-    setActiveCellModal(null);
+    setOpenCellKey(null);
   };
 
   const normalizeOptions = (opts?: Array<string | ComparisonTableOption>): ComparisonTableOption[] => {
@@ -128,13 +141,17 @@ export const ComparisonTableRenderer: React.FC<ComparisonTableProps> = ({
       {/* Mobile-First Card View of Comparison Rows */}
       <div className="space-y-4">
         {rows.map((row, rIdx) => {
+          const rowKey = String(row.id || rIdx);
           const rowLabel = row.label || row.criteria || `المعيار ${rIdx + 1}`;
           const rowCells = row.cells || [];
+          const rowHasOpenDropdown = Boolean(openCellKey && openCellKey.startsWith(`${rowKey}::`));
 
           return (
             <div
-              key={row.id || rIdx}
-              className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3"
+              key={rowKey}
+              className={`relative p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3 ${
+                rowHasOpenDropdown ? 'z-30' : 'z-0'
+              }`}
             >
               <div className="font-bold text-slate-900 text-sm md:text-base border-b border-slate-100 pb-2">
                 {rowLabel}
@@ -164,25 +181,29 @@ export const ComparisonTableRenderer: React.FC<ComparisonTableProps> = ({
                     );
                   }
 
-                  // Interactive Cell Dropdown Button
+                  // Interactive Cell Dropdown Trigger + Inline Menu
+                  const cellKey = `${rowKey}::${cell.id || cIdx}`;
+                  const isOpen = openCellKey === cellKey;
                   const expectedOptionId = correctMap[cell.id];
                   const isAnswered = Boolean(currentSelectedId);
-                  const isCorrect = isTraining && isAnswered && expectedOptionId && currentSelectedId === expectedOptionId;
-                  const isIncorrect = isTraining && isAnswered && expectedOptionId && currentSelectedId !== expectedOptionId;
+                  const isCorrect = isTraining && isAnswered && Boolean(expectedOptionId) && currentSelectedId === expectedOptionId;
+                  const isIncorrect = isTraining && isAnswered && Boolean(expectedOptionId) && currentSelectedId !== expectedOptionId;
 
-                  let cellBtnClass = 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300';
-                  let feedbackIcon = <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />;
+                  let cellBtnClass = isOpen
+                    ? 'bg-white border-emerald-500 text-slate-800 ring-2 ring-emerald-500/15'
+                    : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300';
+                  let statusIcon: React.ReactNode = null;
 
                   if (isTraining && isAnswered) {
                     if (isCorrect) {
                       cellBtnClass = 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold';
-                      feedbackIcon = <Check className="w-4 h-4 text-emerald-700 stroke-[3] shrink-0" />;
+                      statusIcon = <Check className="w-4 h-4 text-emerald-700 stroke-[3] shrink-0" />;
                     } else if (isIncorrect) {
                       cellBtnClass = 'bg-rose-50 border-rose-500 text-rose-950 font-bold';
-                      feedbackIcon = <X className="w-4 h-4 text-rose-700 stroke-[3] shrink-0" />;
+                      statusIcon = <X className="w-4 h-4 text-rose-700 stroke-[3] shrink-0" />;
                     }
                   } else if (isAnswered) {
-                    // Simulator selected
+                    // Simulator selected (neutral highlight without revealing correctness)
                     cellBtnClass = 'bg-emerald-50/60 border-emerald-500 text-emerald-950 font-bold';
                   }
 
@@ -191,24 +212,77 @@ export const ComparisonTableRenderer: React.FC<ComparisonTableProps> = ({
                       <span className="text-xs font-semibold text-slate-500 block">
                         {headerTitle}
                       </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          !isReadonly &&
-                          setActiveCellModal({
-                            rowLabel,
-                            header: headerTitle,
-                            cell,
-                          })
-                        }
-                        disabled={isReadonly}
-                        className={`w-full p-3 rounded-xl border-2 text-right text-sm transition-all flex items-center justify-between gap-2 cursor-pointer ${cellBtnClass}`}
-                      >
-                        <span className="truncate">
-                          {selectedOption ? selectedOption.text : 'اضغط لاختيار الإجابة...'}
-                        </span>
-                        {feedbackIcon}
-                      </button>
+                      <div className="relative" data-comparison-dropdown>
+                        <button
+                          type="button"
+                          aria-expanded={isOpen}
+                          aria-haspopup="listbox"
+                          onClick={() => {
+                            if (isReadonly) return;
+                            setOpenCellKey((prev) => (prev === cellKey ? null : cellKey));
+                          }}
+                          disabled={isReadonly}
+                          className={`w-full px-3 py-2.5 rounded-xl border-2 text-right text-sm transition-all flex items-center justify-between gap-2 cursor-pointer ${cellBtnClass}`}
+                        >
+                          <span className="truncate">
+                            {selectedOption ? selectedOption.text : 'اضغط لاختيار الإجابة...'}
+                          </span>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            {statusIcon}
+                            <ChevronDown
+                              className={`w-4 h-4 transition-transform duration-150 ${
+                                isOpen ? 'rotate-180 text-emerald-600' : 'text-slate-400'
+                              }`}
+                            />
+                          </span>
+                        </button>
+
+                        {isOpen && (
+                          <div
+                            role="listbox"
+                            className="absolute left-0 right-0 top-full mt-1.5 z-40 w-full bg-white border border-slate-200 rounded-xl shadow-lg shadow-slate-900/10 py-1 divide-y divide-slate-100 max-h-60 overflow-y-auto animate-in fade-in-0 zoom-in-95 duration-150 origin-top"
+                            dir="rtl"
+                          >
+                            {options.map((opt) => {
+                              const isSelected = currentSelectedId === opt.id;
+                              const isOptCorrect = isTraining && expectedOptionId === opt.id;
+                              const isOptWrong = isTraining && isSelected && expectedOptionId && expectedOptionId !== opt.id;
+
+                              let optStyle = 'text-slate-700 hover:bg-slate-50';
+                              let optIcon: React.ReactNode = null;
+
+                              if (isSelected) {
+                                if (isTraining && expectedOptionId) {
+                                  if (isOptCorrect) {
+                                    optStyle = 'bg-emerald-50 text-emerald-950 font-bold';
+                                    optIcon = <Check className="w-4 h-4 text-emerald-700 stroke-[2.5] shrink-0" />;
+                                  } else if (isOptWrong) {
+                                    optStyle = 'bg-rose-50 text-rose-950 font-bold';
+                                    optIcon = <X className="w-4 h-4 text-rose-700 stroke-[2.5] shrink-0" />;
+                                  }
+                                } else {
+                                  optStyle = 'bg-emerald-50/70 text-emerald-950 font-semibold';
+                                  optIcon = <Check className="w-4 h-4 text-emerald-600 stroke-[2.5] shrink-0" />;
+                                }
+                              }
+
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => handleSelectOption(cell.id, opt.id)}
+                                  className={`w-full px-3 py-2.5 text-right text-sm leading-snug transition-colors cursor-pointer flex items-center justify-between gap-2 ${optStyle}`}
+                                >
+                                  <span className="break-words">{opt.text}</span>
+                                  {optIcon}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -217,69 +291,6 @@ export const ComparisonTableRenderer: React.FC<ComparisonTableProps> = ({
           );
         })}
       </div>
-
-      {/* Bottom Sheet / Modal for 3-Option Dropdown Selection */}
-      {activeCellModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div
-            className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-5 space-y-4 shadow-2xl animate-in slide-in-from-bottom-6 duration-200 max-h-[85vh] overflow-y-auto"
-            dir="rtl"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-xs font-semibold text-emerald-600 block">
-                  {activeCellModal.rowLabel} — {activeCellModal.header}
-                </span>
-                <h4 className="text-base font-bold text-slate-900">
-                  اختر القيمة المطابقة للخلية:
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveCellModal(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-full"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* 3 Large Tap-Friendly Buttons */}
-            <div className="grid grid-cols-1 gap-2.5">
-              {normalizeOptions(activeCellModal.cell.options).map((opt) => {
-                const isSelected = cellsAnswer[activeCellModal.cell.id] === opt.id;
-                const isCorrect = isTraining && correctMap[activeCellModal.cell.id] === opt.id;
-
-                let btnStyle = 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-emerald-50/50 hover:border-emerald-300';
-                if (isSelected) {
-                  btnStyle = 'bg-emerald-100 border-emerald-600 text-emerald-950 font-bold ring-2 ring-emerald-500/20';
-                }
-
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => handleSelectOption(activeCellModal.cell.id, opt.id)}
-                    className={`p-4 rounded-2xl border-2 text-right text-sm md:text-base leading-relaxed transition-all cursor-pointer flex items-center justify-between gap-3 ${btnStyle}`}
-                  >
-                    <span>{opt.text}</span>
-                    {isSelected && (
-                      <Check className="w-5 h-5 text-emerald-700 stroke-[3] shrink-0" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setActiveCellModal(null)}
-              className="w-full py-2.5 text-center text-xs text-slate-500 font-bold hover:text-slate-700"
-            >
-              إلغاء
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

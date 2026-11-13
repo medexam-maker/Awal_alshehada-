@@ -8,7 +8,11 @@ import {
   Compass,
   Layers,
   RotateCcw,
-  Check
+  Check,
+  X,
+  ZoomIn,
+  MapPin,
+  Undo2
 } from 'lucide-react';
 import {
   checkContourBranch,
@@ -20,11 +24,9 @@ import {
   playClick,
   playWaterDrop,
   playScratchpad,
-  playBookmark,
-  playSuccess,
-  playPartial,
-  playError
+  playBookmark
 } from '../../utils/soundEffects';
+import { playFeedbackSound } from '../../utils/soundManager';
 
 export interface ContourSubQuestion {
   id: string;
@@ -70,6 +72,9 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
   onAnswerChange,
   autoSaveKey,
 }) => {
+  const isTraining = examMode === 'training';
+  const isReview = examMode === 'review';
+
   // Normalize subQuestions from content or legacy questions
   const subQuestions: ContourSubQuestion[] = Array.isArray(content?.subQuestions)
     ? content.subQuestions
@@ -95,18 +100,29 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
     }
   }, [answer?.subAnswers, studentAnswers]);
 
-  // Model answers map
-  const rawCorrectSubAnswers =
-    (correctAnswer as any)?.subAnswers ||
-    (typeof correctAnswer === 'object' && correctAnswer !== null ? correctAnswer : {});
+  // Model answers map (hidden in simulator mode)
+  const rawCorrectSubAnswers: Record<string, any> =
+    isTraining || isReview
+      ? (correctAnswer as any)?.subAnswers ||
+        (typeof correctAnswer === 'object' && correctAnswer !== null ? correctAnswer : {})
+      : {};
 
   // Training mode: instant verification state
   const [hasVerifiedTraining, setHasVerifiedTraining] = useState<boolean>(false);
 
-  // Hints display state per sub-question
+  // Hints display state per sub-question (Training only)
   const [openHints, setOpenHints] = useState<Record<string, boolean>>({});
 
+  // Map load fallback & zoom modal state
+  const [mapLoadError, setMapLoadError] = useState<boolean>(false);
+  const [isZoomOpen, setIsZoomOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    setMapLoadError(false);
+  }, [content?.mapUrl]);
+
   const toggleHint = (subQId: string) => {
+    if (!isTraining) return;
     playBookmark();
     setOpenHints((prev) => ({
       ...prev,
@@ -120,10 +136,12 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
     overlayBranches[0]?.id || ''
   );
 
-  // Map image ref for coordinate translation
+  // Map image refs for coordinate translation and scroll-to-map navigation
+  const mapCardRef = useRef<HTMLDivElement>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const zoomContainerRef = useRef<HTMLDivElement>(null);
 
-  // Draft auto-save in simulator mode
+  // Draft auto-save
   const saveDraft = (updated: Record<string, any>) => {
     if (autoSaveKey && typeof window !== 'undefined') {
       try {
@@ -134,9 +152,7 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
     }
   };
 
-  const handleSubChange = (id: string, val: any) => {
-    if (isReadonly) return;
-    playClick();
+  const commitSubAnswer = (id: string, val: any) => {
     const updated = {
       ...subAnswers,
       [id]: val,
@@ -147,13 +163,35 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
     saveDraft(updated);
   };
 
-  // Polygon click handler for mapOverlay
-  const handleMapClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isReadonly || examMode === 'review') return;
+  const handleSubChange = (id: string, val: any) => {
+    if (isReadonly) return;
+    playClick();
+    commitSubAnswer(id, val);
+  };
+
+  // Immediate feedback for Training MCQ buttons (direction8 & text options)
+  const handleSelectOption = (sq: ContourSubQuestion, optVal: string) => {
+    if (isReadonly) return;
+    commitSubAnswer(sq.id, optVal);
+
+    if (isTraining && rawCorrectSubAnswers[sq.id] !== undefined) {
+      const res = checkContourBranch(optVal, rawCorrectSubAnswers[sq.id], sq);
+      playFeedbackSound(res.isCorrect ? 'correct' : 'incorrect');
+    } else {
+      playWaterDrop();
+    }
+  };
+
+  // Polygon click handler for mapOverlay (supports both inline and zoomed view)
+  const handleMapClick = (
+    e: React.MouseEvent<HTMLDivElement>,
+    containerEl: HTMLDivElement | null = imageContainerRef.current
+  ) => {
+    if (isReadonly || isReview) return;
     if (!activeOverlaySubQId) return;
 
-    const rect = imageContainerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const rect = containerEl?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
 
     playWaterDrop();
 
@@ -165,13 +203,21 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
       extractPolygonPoints(subAnswers[activeOverlaySubQId]) || [];
 
     const updatedPoly = [...currentPoly, [x, y] as [number, number]];
-    handleSubChange(activeOverlaySubQId, { polygon: updatedPoly });
+    commitSubAnswer(activeOverlaySubQId, { polygon: updatedPoly });
+  };
+
+  const handleUndoPolygonPoint = (subQId: string) => {
+    if (isReadonly || isReview) return;
+    const currentPoly: [number, number][] = extractPolygonPoints(subAnswers[subQId]) || [];
+    if (currentPoly.length === 0) return;
+    playScratchpad();
+    commitSubAnswer(subQId, { polygon: currentPoly.slice(0, -1) });
   };
 
   const handleClearPolygon = (subQId: string) => {
-    if (isReadonly || examMode === 'review') return;
+    if (isReadonly || isReview) return;
     playScratchpad();
-    handleSubChange(subQId, { polygon: [] });
+    commitSubAnswer(subQId, { polygon: [] });
   };
 
   // Check branch correctness
@@ -183,6 +229,7 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
 
   // Instant Verification with Audio Feedback
   const handleVerifyTraining = () => {
+    if (!isTraining) return;
     setHasVerifiedTraining(true);
     let correctCount = 0;
     subQuestions.forEach((sq) => {
@@ -191,121 +238,147 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
     });
 
     if (subQuestions.length > 0 && correctCount === subQuestions.length) {
-      playSuccess();
-    } else if (correctCount > 0) {
-      playPartial();
+      playFeedbackSound('correct');
     } else {
-      playError();
+      playFeedbackSound('incorrect');
     }
   };
 
-  // Effective mapUrl fallback to vector topographic map SVG Data URL
+  const scrollToMap = (sqId?: string) => {
+    if (sqId) setActiveOverlaySubQId(sqId);
+    mapCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Effective mapUrl fallback to guaranteed explicit-dimension vector topographic map SVG Data URL
+  const rawMapUrl = typeof content?.mapUrl === 'string' ? content.mapUrl.trim() : '';
+  const isLegacyMissingUrl = !rawMapUrl || rawMapUrl === '/assets/maps/contour_01.png';
   const effectiveMapUrl =
-    content?.mapUrl && content.mapUrl !== '/assets/maps/contour_01.png'
-      ? content.mapUrl
-      : JEBEL_MARRA_CONTOUR_MAP_SVG_URL;
+    !mapLoadError && !isLegacyMissingUrl ? rawMapUrl : JEBEL_MARRA_CONTOUR_MAP_SVG_URL;
+
+  const isDrawingActive = overlayBranches.length > 0 && !isReadonly && !isReview;
+
+  const renderOverlaySvg = () => (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+    >
+      {/* Show correct polygon in review mode or when training is verified */}
+      {(isReview || (isTraining && hasVerifiedTraining)) &&
+        overlayBranches.map((sq) => {
+          const correctPoly = extractPolygonPoints(rawCorrectSubAnswers[sq.id]);
+          if (!correctPoly || correctPoly.length < 3) return null;
+          const ptsString = correctPoly.map(([px, py]) => `${px},${py}`).join(' ');
+          return (
+            <polygon
+              key={`correct_${sq.id}`}
+              points={ptsString}
+              fill="rgba(16, 185, 129, 0.35)"
+              stroke="#059669"
+              strokeWidth="0.9"
+              strokeDasharray="2,2"
+            />
+          );
+        })}
+
+      {/* Show student polygon */}
+      {overlayBranches.map((sq) => {
+        const studentPoly = extractPolygonPoints(subAnswers[sq.id]);
+        if (!studentPoly || studentPoly.length === 0) return null;
+
+        const ptsString = studentPoly.map(([px, py]) => `${px},${py}`).join(' ');
+        const isCorrect = evaluateBranch(sq).isCorrect;
+        const strokeColor =
+          isReview || (isTraining && hasVerifiedTraining)
+            ? isCorrect
+              ? '#10b981'
+              : '#ef4444'
+            : '#2563eb';
+        const fillColor =
+          isReview || (isTraining && hasVerifiedTraining)
+            ? isCorrect
+              ? 'rgba(16, 185, 129, 0.25)'
+              : 'rgba(239, 68, 68, 0.25)'
+            : 'rgba(37, 99, 235, 0.22)';
+
+        return (
+          <g key={`student_${sq.id}`}>
+            <polygon
+              points={ptsString}
+              fill={studentPoly.length >= 3 ? fillColor : 'none'}
+              stroke={strokeColor}
+              strokeWidth="0.9"
+            />
+            {studentPoly.map(([px, py], pIdx) => (
+              <circle
+                key={pIdx}
+                cx={px}
+                cy={py}
+                r="1.4"
+                fill="#ffffff"
+                stroke={strokeColor}
+                strokeWidth="0.7"
+              />
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 dir-rtl text-right" dir="rtl">
       {/* 1. Map Visual Presentation Card */}
-      <div className="p-4 bg-amber-950/5 border border-amber-800/20 rounded-3xl flex flex-col items-center justify-center relative overflow-hidden">
-        {content?.prompt && (
-          <div className="w-full text-right mb-3 text-xs font-black text-slate-800 flex items-center justify-between border-b border-amber-800/10 pb-2">
-            <span className="flex items-center gap-1.5 text-amber-950">
-              <Compass className="w-4 h-4 text-amber-700" />
-              <span>{content.prompt}</span>
+      <div
+        ref={mapCardRef}
+        className="p-3.5 sm:p-4 bg-amber-950/5 border border-amber-800/20 rounded-3xl flex flex-col items-center justify-center relative overflow-hidden space-y-3"
+      >
+        {/* Clear Header Locating the Attached Map */}
+        <div className="w-full flex flex-wrap items-center justify-between gap-2 border-b border-amber-800/15 pb-2.5">
+          <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-amber-950">
+            <span className="w-7 h-7 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+              <MapPin className="w-4 h-4" />
             </span>
+            <span>الخريطة الكنتورية المرفقة للسؤال</span>
+          </div>
+
+          <div className="flex items-center gap-2">
             {content.mapCode && (
-              <span className="font-mono text-[10px] bg-amber-100/70 text-amber-900 px-2.5 py-0.5 rounded-md font-bold">
+              <span className="font-mono text-[10px] bg-amber-100/80 text-amber-900 px-2.5 py-1 rounded-lg font-bold">
                 {content.mapCode}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setIsZoomOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            >
+              <ZoomIn className="w-3.5 h-3.5 text-amber-700" />
+              <span>تكبير الخريطة</span>
+            </button>
           </div>
-        )}
+        </div>
 
+        {/* Definite Aspect-Ratio Map Canvas (never collapses on mobile) */}
         {effectiveMapUrl ? (
           <div
             ref={imageContainerRef}
-            onClick={overlayBranches.length > 0 ? handleMapClick : undefined}
-            className={`relative max-w-full rounded-2xl overflow-hidden shadow-xs border border-amber-850/15 select-none ${
-              overlayBranches.length > 0 && !isReadonly && examMode !== 'review'
-                ? 'cursor-crosshair'
-                : 'cursor-default'
+            onClick={isDrawingActive ? (e) => handleMapClick(e, imageContainerRef.current) : undefined}
+            className={`relative w-full max-w-2xl aspect-[8/5] rounded-2xl overflow-hidden shadow-sm border-2 bg-amber-50/60 select-none transition-all ${
+              isDrawingActive
+                ? 'cursor-crosshair border-indigo-500 ring-4 ring-indigo-500/15'
+                : 'cursor-default border-amber-800/20'
             }`}
           >
             <img
               src={effectiveMapUrl}
+              onError={() => setMapLoadError(true)}
               alt="خريطة كنتورية طوبوغرافية"
-              className="max-h-96 w-auto object-contain block mx-auto pointer-events-none"
+              className="w-full h-full object-contain block pointer-events-none"
             />
 
             {/* Interactive SVG Overlay for mapOverlay polygons */}
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-            >
-              {/* Show correct polygon in review mode or when training is verified */}
-              {(examMode === 'review' || (examMode === 'training' && hasVerifiedTraining)) &&
-                overlayBranches.map((sq) => {
-                  const correctPoly = extractPolygonPoints(rawCorrectSubAnswers[sq.id]);
-                  if (!correctPoly || correctPoly.length < 3) return null;
-                  const ptsString = correctPoly.map(([px, py]) => `${px},${py}`).join(' ');
-                  return (
-                    <polygon
-                      key={`correct_${sq.id}`}
-                      points={ptsString}
-                      fill="rgba(16, 185, 129, 0.35)"
-                      stroke="#059669"
-                      strokeWidth="0.8"
-                      strokeDasharray="2,2"
-                    />
-                  );
-                })}
-
-              {/* Show student polygon */}
-              {overlayBranches.map((sq) => {
-                const studentPoly = extractPolygonPoints(subAnswers[sq.id]);
-                if (!studentPoly || studentPoly.length === 0) return null;
-
-                const ptsString = studentPoly.map(([px, py]) => `${px},${py}`).join(' ');
-                const isCorrect = evaluateBranch(sq).isCorrect;
-                const strokeColor =
-                  examMode === 'review' || (examMode === 'training' && hasVerifiedTraining)
-                    ? isCorrect
-                      ? '#10b981'
-                      : '#ef4444'
-                    : '#3b82f6';
-                const fillColor =
-                  examMode === 'review' || (examMode === 'training' && hasVerifiedTraining)
-                    ? isCorrect
-                      ? 'rgba(16, 185, 129, 0.25)'
-                      : 'rgba(239, 68, 68, 0.25)'
-                    : 'rgba(59, 130, 246, 0.25)';
-
-                return (
-                  <g key={`student_${sq.id}`}>
-                    <polygon
-                      points={ptsString}
-                      fill={studentPoly.length >= 3 ? fillColor : 'none'}
-                      stroke={strokeColor}
-                      strokeWidth="0.8"
-                    />
-                    {studentPoly.map(([px, py], pIdx) => (
-                      <circle
-                        key={pIdx}
-                        cx={px}
-                        cy={py}
-                        r="1.2"
-                        fill="#ffffff"
-                        stroke={strokeColor}
-                        strokeWidth="0.6"
-                      />
-                    ))}
-                  </g>
-                );
-              })}
-            </svg>
+            {renderOverlaySvg()}
           </div>
         ) : (
           <div className="text-center text-amber-900/60 py-8">
@@ -317,28 +390,95 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
         )}
 
         {/* Overlay tools hint if drawing is active */}
-        {overlayBranches.length > 0 && !isReadonly && examMode !== 'review' && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 w-full max-w-xl text-xs bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-indigo-950">
+        {isDrawingActive && (
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full max-w-2xl text-xs bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-indigo-950">
             <div className="flex items-center gap-1.5 font-bold">
-              <Layers className="w-4 h-4 text-indigo-600" />
-              <span>أداة التحديد المكاني: انقر على الخريطة لرسم حدود المنطقة المطلوبة.</span>
+              <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>أداة التحديد المكاني نشطة: انقر مباشرة على الخريطة أعلاه لرسم حدود المنطقة المطلوبة.</span>
             </div>
             {activeOverlaySubQId && (
-              <button
-                type="button"
-                onClick={() => handleClearPolygon(activeOverlaySubQId)}
-                className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>إعادة رسم المنطقة</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleUndoPolygonPoint(activeOverlaySubQId)}
+                  className="px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Undo2 className="w-3 h-3" />
+                  <span>تراجع نقطة</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleClearPolygon(activeOverlaySubQId)}
+                  className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>إعادة رسم المنطقة</span>
+                </button>
+              </div>
             )}
           </div>
         )}
       </div>
 
+      {/* Zoom Modal for Mobile Inspection & Precision Tapping */}
+      {isZoomOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6"
+          onClick={() => setIsZoomOpen(false)}
+        >
+          <div
+            className="w-full max-w-4xl bg-white rounded-3xl p-4 sm:p-5 space-y-3 shadow-2xl"
+            dir="rtl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+                <Compass className="w-4 h-4 text-amber-700" />
+                <span>عرض مكبّر للخريطة الكنتورية</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsZoomOpen(false)}
+                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                aria-label="إغلاق التكبير"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div
+              ref={zoomContainerRef}
+              onClick={isDrawingActive ? (e) => handleMapClick(e, zoomContainerRef.current) : undefined}
+              className={`relative w-full aspect-[8/5] rounded-2xl overflow-hidden border-2 bg-amber-50/60 select-none ${
+                isDrawingActive ? 'cursor-crosshair border-indigo-500' : 'border-amber-800/20'
+              }`}
+            >
+              <img
+                src={effectiveMapUrl}
+                alt="عرض مكبر للخريطة الكنتورية"
+                className="w-full h-full object-contain block pointer-events-none"
+              />
+              {renderOverlaySvg()}
+            </div>
+
+            {isDrawingActive && activeOverlaySubQId && (
+              <div className="flex items-center justify-between text-xs text-indigo-900 bg-indigo-50 px-3 py-2 rounded-xl border border-indigo-200">
+                <span className="font-bold">يمكنك النقر مباشرة على الخريطة المكبّرة لتحديد النقاط بدقة.</span>
+                <button
+                  type="button"
+                  onClick={() => handleClearPolygon(activeOverlaySubQId)}
+                  className="px-2.5 py-1 bg-white text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer"
+                >
+                  مسح النقاط
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 2. Review Mode Table (جدول مقارنة تفصيلي للمراجعة بعد التسليم) */}
-      {examMode === 'review' && (
+      {isReview && (
         <div className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
           <div className="flex items-center gap-2 text-sm font-black text-slate-900 border-b border-slate-100 pb-3">
             <Sparkles className="w-4 h-4 text-emerald-600" />
@@ -403,26 +543,33 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
       )}
 
       {/* 3. Sub-questions Inputs (وضع الطالب والمحاكاة والتدريب) */}
-      {examMode !== 'review' && (
+      {!isReview && (
         <div className="space-y-4">
           {subQuestions.map((sq, idx) => {
             const evalRes = evaluateBranch(sq);
-            const isEvaluated = examMode === 'training' && hasVerifiedTraining;
+            const hasKey = isTraining && rawCorrectSubAnswers[sq.id] !== undefined;
+            const isMcqBranch =
+              isTraining &&
+              (sq.inputType === 'direction8' || (sq.options && sq.options.length > 0 && sq.inputType !== 'numeric' && sq.inputType !== 'mapOverlay'));
+            const hasMcqSelection = isMcqBranch && Boolean(subAnswers[sq.id]);
+            const isEvaluated = isTraining && hasVerifiedTraining;
             const isCorrect = evalRes.isCorrect;
             const rawCorrect = rawCorrectSubAnswers[sq.id];
+
+            // Card border/background: Training shows red if verified wrong (or MCQ selected wrong), green if verified right
+            let cardTone = 'bg-white border-slate-200';
+            if (isEvaluated) {
+              cardTone = isCorrect ? 'bg-emerald-50/40 border-emerald-300' : 'bg-rose-50/40 border-rose-300';
+            } else if (hasMcqSelection && hasKey) {
+              cardTone = isCorrect ? 'bg-emerald-50/25 border-emerald-300' : 'bg-rose-50/25 border-rose-300';
+            }
 
             return (
               <div
                 key={sq.id}
-                className={`p-4 rounded-2xl border transition-all ${
-                  isEvaluated
-                    ? isCorrect
-                      ? 'bg-emerald-50/40 border-emerald-300'
-                      : 'bg-rose-50/40 border-rose-300'
-                    : 'bg-white border-slate-200'
-                } space-y-3 shadow-2xs`}
+                className={`p-4 rounded-2xl border transition-all ${cardTone} space-y-3 shadow-2xs`}
               >
-                <div className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                <div className="text-sm font-bold text-slate-900 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-950 text-xs flex items-center justify-center font-black shrink-0">
                       {idx + 1}
@@ -431,7 +578,7 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                   </div>
 
                   {/* Input Type Badge */}
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 shrink-0">
                     {sq.inputType === 'numeric'
                       ? 'قيمة رقمية'
                       : sq.inputType === 'direction8'
@@ -445,8 +592,8 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                 {/* Input Controls */}
                 {sq.inputType === 'direction8' ? (
                   <div className="space-y-2">
-                    {examMode === 'training' ? (
-                      /* وضع التدريب: اختيار من متعدد للاتجاهات */
+                    {isTraining ? (
+                      /* وضع التدريب: اختيار من متعدد للاتجاهات مع تلوين أحمر/أخضر فوري */
                       <div className="space-y-2">
                         <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
                           <span>اختر اتجاه انحدار الوادي أو الجريان من الخيارات المعتمدة:</span>
@@ -457,26 +604,68 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                           {(sq.options && sq.options.length > 0 ? sq.options : EIGHT_DIRECTIONS).map((dir) => {
                             const isSelected = subAnswers[sq.id] === dir;
+                            const optEval = hasKey ? checkContourBranch(dir, rawCorrect, sq) : { isCorrect: false };
+
+                            let btnStyle =
+                              'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300';
+                            let icon: React.ReactNode = null;
+
+                            if (isSelected) {
+                              if (hasKey) {
+                                if (optEval.isCorrect) {
+                                  btnStyle =
+                                    'bg-emerald-100 text-emerald-950 border-emerald-600 ring-2 ring-emerald-500/20 shadow-xs';
+                                  icon = <Check className="w-4 h-4 text-emerald-700 stroke-[3] shrink-0" />;
+                                } else {
+                                  btnStyle =
+                                    'bg-rose-100 text-rose-950 border-rose-600 ring-2 ring-rose-500/20 shadow-xs';
+                                  icon = <X className="w-4 h-4 text-rose-700 stroke-[3] shrink-0" />;
+                                }
+                              } else {
+                                btnStyle = 'bg-emerald-600 text-white border-emerald-600 shadow-xs';
+                              }
+                            } else if ((isEvaluated || isReadonly) && hasKey && optEval.isCorrect) {
+                              btnStyle =
+                                'bg-emerald-50 text-emerald-900 border-emerald-500 border-dashed';
+                              icon = <Check className="w-4 h-4 text-emerald-600 shrink-0" />;
+                            }
+
                             return (
                               <button
                                 key={dir}
                                 type="button"
                                 disabled={isReadonly}
-                                onClick={() => handleSubChange(sq.id, dir)}
-                                className={`p-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-center ${
-                                  isSelected
-                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs scale-[1.02]'
-                                    : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
-                                }`}
+                                onClick={() => handleSelectOption(sq, dir)}
+                                className={`p-2.5 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 ${btnStyle}`}
                               >
-                                {dir}
+                                <span>{dir}</span>
+                                {icon}
                               </button>
                             );
                           })}
                         </div>
+                        {hasMcqSelection && hasKey && !isEvaluated && (
+                          <div
+                            className={`text-xs font-bold flex items-center gap-1.5 ${
+                              isCorrect ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {isCorrect ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>إجابة صحيحة!</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>إجابة خاطئة، راجع اتجاه السهم والمناسيب على الخريطة.</span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      /* وضع الامتحان الكامل أو المحاكي: فراغ نصي حر */
+                      /* وضع المحاكي: فراغ نصي حر بدون تلميحات أو ألوان */
                       <div className="space-y-1">
                         <label className="text-[11px] font-bold text-slate-600 block">
                           اكتب اتجاه انحدار الوادي في الفراغ التالي:
@@ -493,18 +682,18 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                     )}
                   </div>
                 ) : sq.inputType === 'mapOverlay' ? (
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                      <span>تحديد المنطقة والظاهرة على الخريطة:</span>
-                      <span className="text-indigo-700 font-mono">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-700">
+                      <span>تحديد المنطقة والظاهرة بالنقر على الخريطة الكنتورية في الأعلى:</span>
+                      <span className="text-indigo-700 font-mono bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
                         {extractPolygonPoints(subAnswers[sq.id])?.length || 0} نقاط محددة
                       </span>
                     </div>
                     {!isReadonly && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => setActiveOverlaySubQId(sq.id)}
+                          onClick={() => scrollToMap(sq.id)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
                             activeOverlaySubQId === sq.id
                               ? 'bg-indigo-600 text-white shadow-xs'
@@ -512,7 +701,15 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                           }`}
                         >
                           <Layers className="w-3.5 h-3.5" />
-                          <span>{activeOverlaySubQId === sq.id ? 'أداة الرسم نشطة الآن' : 'تفعيل أداة الرسم'}</span>
+                          <span>{activeOverlaySubQId === sq.id ? 'عرض الخريطة والتحديد عليها' : 'تفعيل الرسم على الخريطة'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUndoPolygonPoint(sq.id)}
+                          className="px-3 py-1.5 bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Undo2 className="w-3.5 h-3.5" />
+                          <span>تراجع نقطة</span>
                         </button>
                         <button
                           type="button"
@@ -535,7 +732,13 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                         onChange={(e) => handleSubChange(sq.id, e.target.value)}
                         disabled={isReadonly}
                         placeholder="أدخل القيمة الحسابية المقروءة للفاصل..."
-                        className="flex-1 p-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-900 bg-white"
+                        className={`flex-1 p-2.5 text-xs border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold transition-colors ${
+                          isEvaluated
+                            ? isCorrect
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-950'
+                              : 'border-rose-500 bg-rose-50 text-rose-950'
+                            : 'border-slate-300 bg-white text-slate-900'
+                        }`}
                       />
                       {sq.unit && (
                         <span className="text-xs font-extrabold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl">
@@ -544,39 +747,41 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                       )}
                     </div>
 
-                    {/* زر التلميح الثابت لطريقة حساب الفاصل الكنتوري الرأسي */}
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => toggleHint(sq.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-                      >
-                        <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{openHints[sq.id] ? 'إخفاء طريقة حساب الفاصل' : '💡 تلميح: طريقة حساب الفاصل الرأسي'}</span>
-                      </button>
+                    {/* زر التلميح لطريقة حساب الفاصل الكنتوري الرأسي (وضع التدريب فقط) */}
+                    {isTraining && (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => toggleHint(sq.id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5 text-amber-600" />
+                          <span>{openHints[sq.id] ? 'إخفاء طريقة حساب الفاصل' : '💡 تلميح: طريقة حساب الفاصل الرأسي'}</span>
+                        </button>
 
-                      {openHints[sq.id] && (
-                        <div className="mt-2 p-3.5 bg-amber-50/90 border border-amber-300 rounded-2xl text-xs space-y-2 text-amber-950 animate-fadeIn">
-                          <div className="flex items-center gap-1.5 font-black text-amber-900">
-                            <Sparkles className="w-4 h-4 text-amber-600" />
-                            <span>قانون حساب الفاصل الكنتوري الرأسي:</span>
+                        {openHints[sq.id] && (
+                          <div className="mt-2 p-3.5 bg-amber-50/90 border border-amber-300 rounded-2xl text-xs space-y-2 text-amber-950 animate-fadeIn">
+                            <div className="flex items-center gap-1.5 font-black text-amber-900">
+                              <Sparkles className="w-4 h-4 text-amber-600" />
+                              <span>قانون حساب الفاصل الكنتوري الرأسي:</span>
+                            </div>
+                            <div className="p-2.5 bg-white rounded-xl border border-amber-200 font-mono text-center font-black text-amber-950 text-xs shadow-2xs">
+                              الفاصل الرأسي = (الفرق بين منسوبي خطين رئيسيين متجاورين) ÷ (عدد الفواصل بينهما)
+                            </div>
+                            <p className="leading-relaxed text-[11px] text-amber-900/90">
+                              {sq.hint ||
+                                'طريقة الحل: اختر خطي كنتور رئيسيين مكتوب عليهما الارتفاع بوضوح (مثلاً 1200م و 1000م)، ثم اطرح المنسوب الأصغر من الأكبر، واقسم الناتج على عدد المسافات والخطوط بينهما للحصول على قيمة الفاصل الثابت.'}
+                            </p>
                           </div>
-                          <div className="p-2.5 bg-white rounded-xl border border-amber-200 font-mono text-center font-black text-amber-950 text-xs shadow-2xs">
-                            الفاصل الرأسي = (الفرق بين منسوبي خطين رئيسيين متجاورين) ÷ (عدد الفواصل بينهما)
-                          </div>
-                          <p className="leading-relaxed text-[11px] text-amber-900/90">
-                            {sq.hint ||
-                              'طريقة الحل: اختر خطي كنتور رئيسيين مكتوب عليهما الارتفاع بوضوح (مثلاً 1200م و 1000م)، ثم اطرح المنسوب الأصغر من الأكبر، واقسم الناتج على عدد المسافات والخطوط بينهما للحصول على قيمة الفاصل الثابت.'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   /* إدخال نصي عام / وصف الظاهرة التضاريسية */
                   <div className="space-y-2">
-                    {sq.options && sq.options.length > 0 && examMode === 'training' ? (
-                      /* وضع التدريب: اختيار من متعدد لوصف الظاهرة */
+                    {sq.options && sq.options.length > 0 && isTraining ? (
+                      /* وضع التدريب: اختيار من متعدد مع تلوين أحمر للخطأ وأخضر للصواب */
                       <div className="space-y-2">
                         <div className="text-[11px] font-bold text-slate-600 flex items-center justify-between">
                           <span>اختر وصف الظاهرة التضاريسية من الخيارات المتاحة:</span>
@@ -587,29 +792,71 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {sq.options.map((opt) => {
                             const isSelected = subAnswers[sq.id] === opt;
+                            const optEval = hasKey ? checkContourBranch(opt, rawCorrect, sq) : { isCorrect: false };
+
+                            let btnStyle =
+                              'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300';
+                            let icon: React.ReactNode = null;
+
+                            if (isSelected) {
+                              if (hasKey) {
+                                if (optEval.isCorrect) {
+                                  btnStyle =
+                                    'bg-emerald-100 text-emerald-950 border-emerald-600 ring-2 ring-emerald-500/20 shadow-xs';
+                                  icon = <Check className="w-4 h-4 text-emerald-700 stroke-[3] shrink-0" />;
+                                } else {
+                                  btnStyle =
+                                    'bg-rose-100 text-rose-950 border-rose-600 ring-2 ring-rose-500/20 shadow-xs';
+                                  icon = <X className="w-4 h-4 text-rose-700 stroke-[3] shrink-0" />;
+                                }
+                              } else {
+                                btnStyle = 'bg-emerald-600 text-white border-emerald-600 shadow-xs';
+                                icon = <Check className="w-4 h-4 text-white shrink-0" />;
+                              }
+                            } else if ((isEvaluated || isReadonly) && hasKey && optEval.isCorrect) {
+                              btnStyle =
+                                'bg-emerald-50 text-emerald-900 border-emerald-500 border-dashed';
+                              icon = <Check className="w-4 h-4 text-emerald-600 shrink-0" />;
+                            }
+
                             return (
                               <button
                                 key={opt}
                                 type="button"
                                 disabled={isReadonly}
-                                onClick={() => handleSubChange(sq.id, opt)}
-                                className={`p-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer text-right flex items-center justify-between ${
-                                  isSelected
-                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                    : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 hover:border-slate-300'
-                                }`}
+                                onClick={() => handleSelectOption(sq, opt)}
+                                className={`p-2.5 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer text-right flex items-center justify-between gap-2 ${btnStyle}`}
                               >
                                 <span>{opt}</span>
-                                {isSelected && <Check className="w-4 h-4 text-white shrink-0" />}
+                                {icon}
                               </button>
                             );
                           })}
                         </div>
+                        {hasMcqSelection && hasKey && !isEvaluated && (
+                          <div
+                            className={`text-xs font-bold flex items-center gap-1.5 ${
+                              isCorrect ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {isCorrect ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>إجابة صحيحة!</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>إجابة خاطئة، راجع شكل خطوط الكنتور على الخريطة.</span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       /* وضع الامتحان الكامل أو المحاكي: فراغ كتابة نصية حرة */
                       <div className="space-y-1">
-                        {examMode !== 'training' && (
+                        {!isTraining && (
                           <label className="text-[11px] font-bold text-slate-600 block">
                             أدخل الإجابة / وصف الظاهرة في الفراغ:
                           </label>
@@ -621,7 +868,13 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                             onChange={(e) => handleSubChange(sq.id, e.target.value)}
                             disabled={isReadonly}
                             placeholder="أدخل الإجابة المطلوبة (فراغ)..."
-                            className="flex-1 p-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-900 bg-white"
+                            className={`flex-1 p-2.5 text-xs border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold transition-colors ${
+                              isEvaluated
+                                ? isCorrect
+                                  ? 'border-emerald-500 bg-emerald-50 text-emerald-950'
+                                  : 'border-rose-500 bg-rose-50 text-rose-950'
+                                : 'border-slate-300 bg-white text-slate-900'
+                            }`}
                           />
                           {sq.unit && (
                             <span className="text-xs font-extrabold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl">
@@ -632,8 +885,8 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
                       </div>
                     )}
 
-                    {/* تلميح إضافي إن وجد لفرع نصي */}
-                    {sq.hint && (
+                    {/* تلميح إضافي إن وجد لفرع نصي (وضع التدريب فقط) */}
+                    {isTraining && sq.hint && (
                       <div>
                         <button
                           type="button"
@@ -695,7 +948,7 @@ export const ContourMapRenderer: React.FC<ContourMapProps> = ({
           })}
 
           {/* Training Mode: Check Answers Button */}
-          {examMode === 'training' && (
+          {isTraining && (
             <div className="pt-2 flex justify-end">
               <button
                 type="button"

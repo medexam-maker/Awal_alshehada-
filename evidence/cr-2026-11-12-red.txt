@@ -1,0 +1,24 @@
+--- G. Arabic grammar lab ---
+✅ [PASS] G1 SIMULATOR snapshot: no answer key, hints or explanation
+✅ [PASS] G2 a perfect answer built from the choice ids the student saw scores full marks; one wrong component loses exactly its share
+✅ [PASS] G3 a choice id that belongs to another component earns nothing; missing or malformed answers score 0 without throwing
+✅ [PASS] G4 TRAINING snapshot keeps hints and the answer key for instant feedback
+✅ [PASS] G5 SIMULATOR snapshot rebuilt from the stored DB snapshot (resume) is also free of keys
+❌ [FAIL] G6 choices are shuffled per attempt (the authored correct choice is not always first), persisted in the DB snapshot, and stable on rebuild
+   choices look unshuffled (not-first 0/120)
+--- R. Active reading journey ---
+✅ [PASS] R1 SIMULATOR snapshot: no answer keys, evidence targets, hints, vocabulary definitions or explanation
+✅ [PASS] R2 a perfect answer built from the option ids the student saw scores full marks on the DB snapshot
+✅ [PASS] R3 options are shuffled per attempt, persisted in the DB snapshot, and stable on rebuild
+✅ [PASS] R4 SIMULATOR snapshot rebuilt from the stored DB snapshot (resume) is also free of keys
+✅ [PASS] R5 core answer and evidence are graded independently (70% / 30%)
+✅ [PASS] R6 missing or malformed answers score 0 without throwing
+✅ [PASS] R7 TRAINING snapshot keeps hints, vocabulary definitions and the key
+✅ [PASS] R8 a quoted sentence containing the keyword earns the evidence marks (full 10)
+❌ [FAIL] R9 pasting the whole passage as the quote must NOT earn evidence marks
+   Expected values to be strictly equal:
+❌ [FAIL] R10 evidence keywords match whole words: "علم" is not found inside "متعلمون"
+   Expected values to be strictly equal:
+✅ [PASS] R11 Arabic prefixes are still accepted: "والعلم" matches the keyword "علم"
+
+14 passed, 3 failed

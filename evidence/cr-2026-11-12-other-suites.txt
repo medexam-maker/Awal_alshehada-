@@ -1,0 +1,18 @@
+scripts/verifyArgon2WasmMigration.ts (exit 0): Summary: 3/3 tests passed successfully.
+scripts/verifyAssetPreload.ts (exit 0): 14 passed, 0 failed
+scripts/verifyAuthFoundation.ts (exit 1):     at runTests (/app/applet/scripts/verifyAuthFoundation.ts:54:3) {
+scripts/verifyAuthSecurityFixes.ts (exit 0): ===========================================================
+scripts/verifyAuthenticatedDiagramPreload.ts (exit 0): POINT D VERIFICATION RESULTS: 5 passed, 0 failed
+scripts/verifyBatch1Followup.ts (exit 0): 12 passed, 0 failed
+scripts/verifyBatch1Patterns.ts (exit 0): 44 passed, 0 failed
+scripts/verifyBulkImporter.ts (exit 0): All bulk importer verification tests passed successfully.
+scripts/verifyExplainPattern.ts (exit 0): 11 passed
+scripts/verifyFillBlankPattern.ts (exit 0): Summary: 27/27 tests passed successfully.
+scripts/verifyGmailSmtpRecovery.ts (exit 0): ===========================================================
+scripts/verifyMCQPattern.ts (exit 0): Summary: 14/14 tests passed successfully.
+scripts/verifyMatchingOrderingEssayPatterns.ts (exit 0): 19 passed
+scripts/verifyPD003Lifecycle.ts (exit 0):    ALL PD-003 LIFECYCLE TESTS PASSED CLEANLY ✅       
+scripts/verifyPipelineIntegrity.ts (exit 0): 24 passed
+scripts/verifyRegionEditor.ts (exit 0): 21 passed, 0 failed
+scripts/verifyTrueFalsePattern.ts (exit 0): Summary: 24/24 tests passed successfully.
+scripts/verifyViewportMath.ts (exit 0): 14 passed, 0 failed

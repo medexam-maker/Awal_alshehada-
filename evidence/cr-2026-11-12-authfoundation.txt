@@ -1,0 +1,16 @@
+◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+--- Starting Authentication Foundation Verification ---
+
+[1] Verifying Argon2id password hashing...
+✅ Argon2id password hashing verified.
+
+[2] Verifying access token issuance and verification...
+VERIFICATION FAILED: AssertionError [ERR_ASSERTION]: JWT_SECRET must be configured in environment
+    at runTests (/app/applet/scripts/verifyAuthFoundation.ts:54:3) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}

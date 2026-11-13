@@ -389,7 +389,7 @@ const PATTERN_TEMPLATES: Record<string, string> = {
         prompt: 'من خلال الخريطة الكنتورية المرفقة، حدد اتجاه انحدار الوادي وقيمة الفاصل الكنتوري:',
         content: {
           mapCode: 'MAP_SUDAN_CONTOUR_01',
-          mapUrl: '/assets/maps/contour_01.png',
+          mapUrl: '/assets/maps/contour_01.svg',
           subQuestions: [
             {
               id: 'cm_1',
@@ -1529,7 +1529,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       } else {
         content = {
           prompt: questionPrompt.trim(),
-          mapUrl: '/assets/maps/contour_01.png',
+          mapUrl: '/assets/maps/contour_01.svg',
           mapCode: 'MAP_SUDAN_CONTOUR_01',
           subQuestions: [
             {

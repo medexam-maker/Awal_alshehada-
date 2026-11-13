@@ -1,0 +1,5 @@
+scripts/verifyPipelineGrammarReading.ts 8d28f15992253b62
+scripts/verifyDiagramAuthoringHardening.ts 39e69cbad6b120c7
+scripts/verifyDiagramAuthoring.ts f5f55514c1bcdd23
+scripts/verifyDiagramFoundation.ts 8523e69b37b7ca2c
+scripts/verifyAssetPreload.ts 32916b488820ebbc

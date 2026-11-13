@@ -1,0 +1,51 @@
+================================================================
+VERIFYING PATTERN 14 — C1 ADAPTIVE ARABIC GRAMMAR LAB FIXES
+================================================================
+
+--- TEST 1: Simulator Answer Protection (Zero Leakage) ---
+✅ PASS: 1.1 SIMULATOR client snapshot excludes top-level correctAnswer
+✅ PASS: 1.2 SIMULATOR client snapshot excludes explanation
+✅ PASS: 1.3 SIMULATOR content contains student components
+✅ PASS: 1.4 SIMULATOR components scrub all training hints
+✅ PASS: 1.5 SIMULATOR components and choices scrub all nested answer keys
+
+--- TEST 2: Saving New Question Without Field Edits ---
+✅ PASS: 2.1 Form emits initial state on mount
+✅ PASS: 2.2 Emitted initial components contain default component
+✅ PASS: 2.3 Emitted initial correctComponents contain correct choice
+
+--- TEST 3: Restoring Actual Question Data On Edit ---
+✅ PASS: 3.1 Restored custom component ID
+✅ PASS: 3.2 Restored custom component points (5)
+✅ PASS: 3.3 Restored custom component hints
+✅ PASS: 3.4 Restored custom correct choice ID
+
+--- TEST 4: Choice Deletion Reflects Instantly Without Stale Choices ---
+✅ PASS: 4.1 Emitted choice list has 2 choices after deletion
+✅ PASS: 4.2 Deleted choice ch_3 is strictly absent from emitted state
+
+--- TEST 5: Rejection of Invalid Component / Choice IDs ---
+✅ PASS: 5.1 Rejects student answer referencing non-existent component ID
+✅ PASS: 5.2 Rejects student answer referencing non-existent choice ID
+
+--- TEST 6: Rejection when sum(component.points) !== totalMarks ---
+✅ PASS: 6.1 Validation fails when sum of component points (10) != total allocated marks (20)
+
+--- TEST 7: Autograding (Full, Partial, Zero Scores) ---
+✅ PASS: 7.1 Perfect answer gets 100% marks (10/10)
+✅ PASS: 7.2 Grading status is AUTO_GRADED
+✅ PASS: 7.3 Partial answer gets exact proportional score (6/10)
+✅ PASS: 7.4 All wrong answer gets 0 marks (0/10)
+
+--- TEST 8: Progressive Hints in Training Mode ---
+✅ PASS: 8.1 Progressive hints are retained in TRAINING mode snapshot
+
+--- TEST 9: No Hints or Answers in Simulator Mode ---
+✅ PASS: 9.1 No correctAnswer in SIMULATOR snapshot
+✅ PASS: 9.2 No explanation in SIMULATOR snapshot
+✅ PASS: 9.3 Zero hints present in SIMULATOR snapshot
+
+================================================================
+SUMMARY: 25 PASSED, 0 FAILED
+================================================================
+

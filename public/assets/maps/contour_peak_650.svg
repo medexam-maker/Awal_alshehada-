@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <defs>
+    <linearGradient id="paperPeak" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcf9f1"/>
+      <stop offset="100%" stop-color="#f2ead7"/>
+    </linearGradient>
+    <radialGradient id="summitShade" cx="46%" cy="46%" r="44%">
+      <stop offset="0%" stop-color="#b45309" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#d97706" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid650" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#d6ccb5" stroke-width="0.7" stroke-dasharray="3,3"/>
+    </pattern>
+  </defs>
+
+  <rect width="800" height="500" fill="url(#paperPeak)" rx="12"/>
+  <rect x="28" y="20" width="744" height="460" fill="url(#grid650)" stroke="#78350f" stroke-width="2" rx="6"/>
+  <rect x="33" y="25" width="734" height="450" fill="url(#summitShade)" stroke="#b45309" stroke-width="0.8" rx="4"/>
+
+  <!-- 450m outer contour (deep valley notch at SW) -->
+  <path d="M 84 378 C 145 432 250 440 315 396 C 345 420 450 432 575 385 C 675 348 708 265 695 170 C 682 88 575 68 410 72 C 235 76 115 135 80 238 C 60 296 64 348 84 378 Z"
+        fill="#fef3c7" fill-opacity="0.45" stroke="#92400e" stroke-width="2.2"/>
+
+  <!-- 500m Index Contour (bold) -->
+  <path d="M 132 346 C 185 388 262 394 316 358 C 350 382 446 392 552 350 C 625 320 650 250 640 178 C 630 112 540 98 408 102 C 258 106 155 158 128 238 C 110 288 112 325 132 346 Z"
+        fill="#fde68a" fill-opacity="0.4" stroke="#78350f" stroke-width="3"/>
+
+  <!-- 550m Contour (tighter on East steep slope) -->
+  <path d="M 185 314 C 232 348 286 352 330 322 C 362 342 440 348 525 312 C 578 288 594 238 586 188 C 578 138 504 132 406 136 C 282 140 202 184 180 242 C 166 278 168 300 185 314 Z"
+        fill="#fcd34d" fill-opacity="0.42" stroke="#92400e" stroke-width="2.2"/>
+
+  <!-- 600m Contour (steep conical rise) -->
+  <path d="M 250 282 C 292 308 355 312 435 292 C 505 274 542 238 538 198 C 534 162 476 156 398 160 C 312 164 252 198 242 238 C 236 262 238 274 250 282 Z"
+        fill="#fbbf24" fill-opacity="0.48" stroke="#78350f" stroke-width="2.3"/>
+
+  <!-- 650m Summit Contour (Peak أ) -->
+  <path d="M 326 248 C 356 264 412 262 456 244 C 488 230 494 206 476 192 C 454 178 394 180 352 194 C 318 206 310 234 326 248 Z"
+        fill="#b45309" fill-opacity="0.72" stroke="#451a03" stroke-width="2.8"/>
+
+  <!-- Peak Marker (أ) -->
+  <polygon points="402,208 393,224 411,224" fill="#ffffff" stroke="#451a03" stroke-width="1.8"/>
+  <circle cx="402" cy="196" r="11" fill="#dc2626" stroke="#ffffff" stroke-width="2"/>
+  <text x="402" y="200" font-family="'Noto Sans Arabic', sans-serif" font-size="12" font-weight="900" fill="#ffffff" text-anchor="middle">أ</text>
+  <rect x="342" y="230" width="120" height="20" rx="5" fill="#fffbeb" fill-opacity="0.95" stroke="#92400e" stroke-width="1"/>
+  <text x="402" y="244" font-family="'Noto Sans Arabic', sans-serif" font-size="11" font-weight="900" fill="#78350f" text-anchor="middle">القمة (أ): 650م</text>
+
+  <!-- River Valley Flowing SW -->
+  <path d="M 318 358 C 296 392 262 432 214 468" fill="none" stroke="#0284c7" stroke-width="4.5" stroke-linecap="round"/>
+  <polygon points="246,442 262,436 254,452" fill="#0369a1"/>
+  <rect x="275" y="405" width="110" height="20" rx="5" fill="#e0f2fe" fill-opacity="0.95" stroke="#0284c7" stroke-width="1"/>
+  <text x="330" y="419" font-family="'Noto Sans Arabic', sans-serif" font-size="10" font-weight="900" fill="#0c4a6e" text-anchor="middle">وادي نهري عميق</text>
+
+  <!-- Steep Eastern Slope Callout -->
+  <rect x="546" y="210" width="118" height="22" rx="5" fill="#fffbeb" fill-opacity="0.94" stroke="#b45309" stroke-width="1"/>
+  <text x="605" y="225" font-family="'Noto Sans Arabic', sans-serif" font-size="10" font-weight="900" fill="#78350f" text-anchor="middle">سفح شديد الانحدار</text>
+
+  <!-- Contour Value Labels -->
+  <g font-family="'Noto Sans Arabic', sans-serif" font-size="11" font-weight="900" fill="#78350f">
+    <rect x="108" y="138" width="44" height="16" rx="3" fill="#fcf9f1" fill-opacity="0.92"/>
+    <text x="130" y="150" text-anchor="middle">450م</text>
+
+    <rect x="160" y="160" width="44" height="16" rx="3" fill="#fef3c7" fill-opacity="0.95"/>
+    <text x="182" y="172" text-anchor="middle">500م</text>
+
+    <rect x="212" y="182" width="44" height="16" rx="3" fill="#fde68a" fill-opacity="0.95"/>
+    <text x="234" y="194" text-anchor="middle">550م</text>
+
+    <rect x="266" y="204" width="44" height="16" rx="3" fill="#fcd34d" fill-opacity="0.95"/>
+    <text x="288" y="216" text-anchor="middle">600م</text>
+  </g>
+
+  <!-- Header Banner -->
+  <g transform="translate(42, 32)">
+    <rect x="0" y="0" width="335" height="32" fill="#ffffff" fill-opacity="0.96" rx="8" stroke="#92400e" stroke-width="1.5"/>
+    <text x="168" y="20" font-family="'Noto Sans Arabic', sans-serif" font-size="12" font-weight="900" fill="#78350f" text-anchor="middle">خريطة كنتورية طوبوغرافية (خط رئيسي: 500م)</text>
+  </g>
+
+  <!-- Compass Rose -->
+  <g transform="translate(725, 70)">
+    <circle cx="0" cy="0" r="28" fill="#ffffff" fill-opacity="0.96" stroke="#78350f" stroke-width="2"/>
+    <polygon points="0,-21 6,0 0,-4 -6,0" fill="#dc2626"/>
+    <polygon points="0,21 6,0 0,4 -6,0" fill="#475569"/>
+    <text x="0" y="-23" font-family="'Noto Sans Arabic', sans-serif" font-size="11" font-weight="900" fill="#dc2626" text-anchor="middle">ش</text>
+  </g>
+
+  <!-- Scale Bar -->
+  <g transform="translate(44, 438)">
+    <rect x="0" y="0" width="215" height="30" fill="#ffffff" fill-opacity="0.95" rx="7" stroke="#92400e" stroke-width="1.2"/>
+    <text x="204" y="19" font-family="'Noto Sans Arabic', sans-serif" font-size="10" font-weight="900" fill="#78350f" text-anchor="end">مقياس الرسم:</text>
+    <rect x="20" y="16" width="50" height="5" fill="#1e293b"/>
+    <rect x="70" y="16" width="50" height="5" fill="#ffffff" stroke="#1e293b" stroke-width="1"/>
+    <text x="20" y="12" font-family="'Noto Sans Arabic', sans-serif" font-size="8" font-weight="800" fill="#1e293b" text-anchor="middle">0</text>
+    <text x="70" y="12" font-family="'Noto Sans Arabic', sans-serif" font-size="8" font-weight="800" fill="#1e293b" text-anchor="middle">1 كم</text>
+    <text x="120" y="12" font-family="'Noto Sans Arabic', sans-serif" font-size="8" font-weight="800" fill="#1e293b" text-anchor="middle">2 كم</text>
+  </g>
+</svg>

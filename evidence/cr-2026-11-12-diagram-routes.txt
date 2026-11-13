@@ -1,0 +1,20 @@
+◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+◇ injected env (0) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+--- Visual Mastery Lab: Media Library & Question Save Route Tests ---
+[DB] Using embedded PGlite storage for local development.
+[DB Seed] Successfully seeded contract subjects and initial questions into database.
+✅ [PASS] 1. upload ok: valid PNG returns metadata without bytes
+✅ [PASS] 2. duplicate sha256: returns existing asset with duplicate: true
+✅ [PASS] 3. bad magic bytes: mismatched types and SVG are rejected (400)
+✅ [PASS] 4. oversize: images larger than 2MB are rejected (400)
+✅ [PASS] 5. non-admin rejected: student role cannot access admin media upload (403)
+✅ [PASS] 6. search by name/keyword/id and detail retrieval return referenceCount and questionIds
+✅ [PASS] 7. PATCH archive: sets status to archived and records archivedAt without touching bytes
+✅ [PASS] 8. no DELETE route: DELETE requests are not implemented and return 404
+✅ [PASS] 9. GET /api/media/:id headers & 304: correct caching, quoted ETag, 304 response, nosniff, inline
+✅ [PASS] 10. unknown id 404: non-existent asset ID returns 404 NOT_FOUND
+✅ [PASS] 11. question save rejecting an unknown/archived assetId: both rejected with 400 VALIDATION_ERROR
+✅ [PASS] 12. H2 validation: base64 > 2.8MB, name > 120, keywords > 40 chars, dimensions > 20000 rejected with 400 VALIDATION_ERROR
+✅ [PASS] 13. question save rejects non-existent/traversal bundled diagram url and accepts valid file (400 VALIDATION_ERROR)
+
+Route Verification Results: 13 passed, 0 failed

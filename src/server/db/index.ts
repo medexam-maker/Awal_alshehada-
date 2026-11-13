@@ -287,72 +287,83 @@ function sanitizeDbError(error: unknown): string {
 
 class DatabaseProxy {
   private delegate: any = null;
+  private initPromise: Promise<any> | null = null;
 
   private async getDelegate() {
     if (this.delegate) return this.delegate;
+    if (this.initPromise) return this.initPromise;
 
-    const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.NETLIFY);
-    const connectionString = process.env.DATABASE_URL;
-    const hasUnreachableHost = connectionString && (
-      connectionString.includes('placeholder') ||
-      connectionString.includes('[YOUR-HOST]') ||
-      connectionString.includes('ehdchhfnlidvvyhdoqzz') ||
-      connectionString.includes('invalid')
-    );
+    this.initPromise = (async () => {
+      const isProduction = process.env.NODE_ENV === 'production' || Boolean(process.env.NETLIFY);
+      const connectionString = process.env.DATABASE_URL;
+      const hasUnreachableHost = connectionString && (
+        connectionString.includes('placeholder') ||
+        connectionString.includes('[YOUR-HOST]') ||
+        connectionString.includes('ehdchhfnlidvvyhdoqzz') ||
+        connectionString.includes('invalid')
+      );
 
-    if (!connectionString || hasUnreachableHost) {
-      const reason = !connectionString
-        ? 'DATABASE_URL environment variable is not defined.'
-        : 'DATABASE_URL contains an unreachable or placeholder host.';
+      if (!connectionString || hasUnreachableHost) {
+        const reason = !connectionString
+          ? 'DATABASE_URL environment variable is not defined.'
+          : 'DATABASE_URL contains an unreachable or placeholder host.';
 
-      if (isProduction) {
-        console.error(`[DB Fatal] Production database configuration error: ${reason}`);
-        throw new Error(`[Database Error] Connection failed: ${reason} Falling back to embedded database is disabled in production.`);
+        if (isProduction) {
+          console.error(`[DB Fatal] Production database configuration error: ${reason}`);
+          throw new Error(`[Database Error] Connection failed: ${reason} Falling back to embedded database is disabled in production.`);
+        }
+
+        console.log(`[DB] Using embedded PGlite storage for local development.`);
+        this.delegate = await initPgliteDb();
+        return this.delegate;
       }
 
-      console.log(`[DB] Using embedded PGlite storage for local development.`);
-      this.delegate = await initPgliteDb();
-      return this.delegate;
-    }
+      try {
+        const isRemoteDb = Boolean(
+          connectionString.includes('supabase.co') ||
+          connectionString.includes('neon.tech') ||
+          connectionString.includes('sslmode=require') ||
+          connectionString.includes('pooler')
+        );
+        const cleanConnectionString = connectionString.replace(/([?&])sslmode=[^&]+(&|$)/, '$1').replace(/[?&]$/, '');
+        const poolConfig: PoolConfig = {
+          connectionString: cleanConnectionString,
+          ssl: isRemoteDb ? { rejectUnauthorized: false } : undefined,
+          connectionTimeoutMillis: 5000,
+          max: isProduction ? 5 : 10,
+        };
+
+        const testPool = new Pool(poolConfig);
+        await testPool.query('SELECT 1 AS ok');
+
+        // In production, do NOT automatically alter database contents on connect
+        if (!isProduction && process.env.AUTO_SEED === 'true') {
+          await seedDatabase(testPool);
+        }
+
+        console.log('[DB] Connected to PostgreSQL database successfully.');
+        this.delegate = testPool;
+        return this.delegate;
+      } catch (err: unknown) {
+        const safeError = sanitizeDbError(err);
+
+        if (isProduction) {
+          console.error('[DB Error] Failed to connect to remote PostgreSQL database:', safeError);
+          // Strictly fail in production without attempting any filesystem write or PGlite fallback
+          throw new Error(`[Database Error] Remote PostgreSQL connection failed in production: ${safeError}`);
+        }
+
+        console.log('[DB] Remote PostgreSQL unavailable in local environment; using embedded PGlite database.');
+        this.delegate = await initPgliteDb();
+        return this.delegate;
+      }
+    })();
 
     try {
-      const isRemoteDb = Boolean(
-        connectionString.includes('supabase.co') ||
-        connectionString.includes('neon.tech') ||
-        connectionString.includes('sslmode=require') ||
-        connectionString.includes('pooler')
-      );
-      const cleanConnectionString = connectionString.replace(/([?&])sslmode=[^&]+(&|$)/, '$1').replace(/[?&]$/, '');
-      const poolConfig: PoolConfig = {
-        connectionString: cleanConnectionString,
-        ssl: isRemoteDb ? { rejectUnauthorized: false } : undefined,
-        connectionTimeoutMillis: 5000,
-        max: isProduction ? 5 : 10,
-      };
-
-      const testPool = new Pool(poolConfig);
-      await testPool.query('SELECT 1 AS ok');
-
-      // In production, do NOT automatically alter database contents on connect
-      if (!isProduction && process.env.AUTO_SEED === 'true') {
-        await seedDatabase(testPool);
-      }
-
-      console.log('[DB] Connected to PostgreSQL database successfully.');
-      this.delegate = testPool;
-      return this.delegate;
-    } catch (err: unknown) {
-      const safeError = sanitizeDbError(err);
-
-      if (isProduction) {
-        console.error('[DB Error] Failed to connect to remote PostgreSQL database:', safeError);
-        // Strictly fail in production without attempting any filesystem write or PGlite fallback
-        throw new Error(`[Database Error] Remote PostgreSQL connection failed in production: ${safeError}`);
-      }
-
-      console.log('[DB] Remote PostgreSQL unavailable in local environment; using embedded PGlite database.');
-      this.delegate = await initPgliteDb();
-      return this.delegate;
+      return await this.initPromise;
+    } catch (err) {
+      this.initPromise = null;
+      throw err;
     }
   }
 

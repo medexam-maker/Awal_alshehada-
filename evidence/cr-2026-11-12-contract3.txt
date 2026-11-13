@@ -1,0 +1,37 @@
+====================================================
+VERIFYING CONTRACT 3: ACTIVE READING JOURNEY
+====================================================
+
+--- Test Suite 1: Full Correct Autograding (100% Score) ---
+[PASS] Full correct attempt returns isCorrect = true
+[PASS] Full correct attempt returns 10 / 10 marks
+[PASS] Evaluates all 5 sub-questions
+
+--- Test Suite 2: 5-Level Reading Skill Mastery Breakdown ---
+[PASS] Skill "literal" (الفهم الحرفي) = 100%
+[PASS] Skill "vocabulary" (فهم المفردات) = 100%
+[PASS] Skill "inference" (الاستنتاج) = 100%
+[PASS] Skill "analysis" (التحليل) = 100%
+[PASS] Skill "evaluation" (التقييم النقدية) = 100%
+
+--- Test Suite 3: Partial Credit (Core vs Evidence) ---
+[PASS] Partial credit attempt returns isCorrect = false
+[PASS] Partial credit returns 9.4 / 10 marks (obtained: 9.4)
+[PASS] Core answer awarded 1.4 / 1.4 (70%)
+[PASS] Wrong evidence awarded 0 / 0.6 (30%)
+
+--- Test Suite 4: Simulator Snapshot Scrubbing ---
+[PASS] Simulator snapshot strictly omits correctAnswer
+[PASS] Simulator snapshot strictly omits explanation
+[PASS] Simulator snapshot contains reading passage text
+[PASS] Simulator snapshot contains subQuestions array
+[PASS] ZERO answer keys or evidence targets leaked in Simulator subQuestions
+[PASS] ZERO hints or explanations leaked in Simulator subQuestions
+
+--- Test Suite 5: Training Mode Snapshot ---
+[PASS] Training snapshot includes correctAnswer
+[PASS] Training snapshot includes vocabulary gloss
+
+====================================================
+SUMMARY: 20 / 20 TESTS PASSED
+====================================================
