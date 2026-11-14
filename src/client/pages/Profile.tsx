@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { PasswordChangeModal } from '../components/auth/PasswordChangeModal';
 import {
   User as UserIcon,
   Mail,
@@ -9,6 +10,7 @@ import {
   GraduationCap,
   Calendar,
   CheckCircle2,
+  KeyRound,
 } from 'lucide-react';
 
 interface ProfileProps {
@@ -17,9 +19,12 @@ interface ProfileProps {
 
 export const Profile: React.FC<ProfileProps> = ({ onBackToSubjects }) => {
   const { user, logout } = useAuth();
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   const getRoleBadge = (role?: string) => {
-    switch (role) {
+    switch ((role || '').trim().toLowerCase()) {
+      case 'owner':
+        return { label: 'مالك النظام (Owner)', color: 'bg-amber-50 text-amber-900 border-amber-300' };
       case 'admin':
         return { label: 'مسؤول النظام (Admin)', color: 'bg-purple-50 text-purple-800 border-purple-200' };
       case 'student':
@@ -108,13 +113,13 @@ export const Profile: React.FC<ProfileProps> = ({ onBackToSubjects }) => {
               <span>الدور الأكاديمي:</span>
             </div>
             <div className="text-sm font-extrabold text-slate-900 pr-6">
-              {user?.role === 'admin' ? 'إدارة الامتحانات والأنماط' : 'الشهادة السودانية (المساقات الأكاديمية)'}
+              {['owner', 'admin'].includes((user?.role || '').trim().toLowerCase()) ? 'إدارة الامتحانات والأنماط' : 'الشهادة السودانية (المساقات الأكاديمية)'}
             </div>
           </div>
         </div>
 
         {/* Action Controls */}
-        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={onBackToSubjects}
@@ -123,16 +128,32 @@ export const Profile: React.FC<ProfileProps> = ({ onBackToSubjects }) => {
             الذهاب للمواد والامتحانات
           </button>
 
-          <button
-            type="button"
-            onClick={logout}
-            className="w-full sm:w-auto px-5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>تسجيل الخروج من الحساب</span>
-          </button>
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsPasswordModalOpen(true)}
+              className="w-full sm:w-auto px-5 py-2.5 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <KeyRound className="w-4 h-4 text-emerald-600" />
+              <span>تغيير كلمة المرور</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="w-full sm:w-auto px-5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>تسجيل الخروج من الحساب</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      <PasswordChangeModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </div>
   );
 };

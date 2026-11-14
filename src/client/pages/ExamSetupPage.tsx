@@ -1,6 +1,7 @@
 import React from 'react';
 import { ContractSubject } from '../data/contractSubjects';
 import { useAuth } from '../hooks/useAuth';
+import { isAdminOrOwnerRole } from '../../shared/constants';
 import { playWaterDrop } from '../utils/soundEffects';
 import {
   ArrowRight,
@@ -69,9 +70,9 @@ export const ExamSetupPage: React.FC<ExamSetupPageProps> = ({
           </span>
         </div>
 
-        {/* Left Actions: Profile & Admin (Admin only) */}
+        {/* Left Actions: Profile & Admin (Admin or Owner) */}
         <div className="flex items-center gap-2">
-          {user?.role === 'admin' && onOpenAdmin && (
+          {isAdminOrOwnerRole(user?.role) && onOpenAdmin && (
             <button
               type="button"
               onClick={onOpenAdmin}

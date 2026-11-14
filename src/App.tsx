@@ -17,6 +17,7 @@ import { ExamReview } from './client/pages/ExamReview';
 import { ExamLandingPage } from './client/pages/ExamLandingPage';
 import { AdminDashboard } from './client/pages/admin/AdminDashboard';
 import { ContractSubject, TWELVE_CONTRACT_SUBJECTS } from './client/data/contractSubjects';
+import { isAdminOrOwnerRole } from './shared/constants';
 import { ShieldAlert, AlertCircle, X } from 'lucide-react';
 
 type AppView =
@@ -83,7 +84,7 @@ function AppRouter() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { activeAttempt, lastResult, startNewExam, isLoading: isExamLoading } = useExam();
   const [authPage, setAuthPage] = useState<'login' | 'register'>('login');
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isAdminOrOwnerRole(user?.role);
   const handleOpenAdmin = isAdmin ? () => navigateTo('admin', '/admin') : undefined;
 
   const [landingParams, setLandingParams] = useState<{ subjectSlug: string; year: number } | null>(() => {
@@ -267,7 +268,7 @@ function AppRouter() {
         </Layout>
       );
     }
-    if (user.role !== 'admin') {
+    if (!isAdminOrOwnerRole(user.role)) {
       return (
         <Layout
           onNavigateHome={() => navigateTo('subjects', '/')}

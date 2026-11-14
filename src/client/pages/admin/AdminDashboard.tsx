@@ -2,8 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { TWELVE_CONTRACT_SUBJECTS, ContractSubject } from '../../data/contractSubjects';
 import { curriculumStorage } from '../../storage/curriculumStorage';
 import { SubjectExamBlueprint, QuestionPattern, AuthoredQuestion } from '../../types/curriculum';
-import { QuestionType } from '../../../shared/constants';
+import { QuestionType, isOwnerRole } from '../../../shared/constants';
 import { apiClient } from '../../api/apiClient';
+import { useAuth } from '../../hooks/useAuth';
 import { MatchingRenderer } from '../../components/questions/MatchingRenderer';
 import { QuestionDispatcher } from '../../components/questions';
 import { Pattern7AuthoringForm } from '../../components/admin/Pattern7AuthoringForm';
@@ -46,6 +47,8 @@ import {
   Search,
   Filter,
   X,
+  Users,
+  UserPlus,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -632,8 +635,30 @@ interface BulkValidationData {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentView }) => {
+  const { user: currentUser } = useAuth();
+  const isOwner = isOwnerRole(currentUser?.role);
   const [selectedSubjectSlug, setSelectedSubjectSlug] = useState<string>(TWELVE_CONTRACT_SUBJECTS[0].slug);
-  const [activeTab, setActiveTab] = useState<'blueprint' | 'authoring' | 'bank' | 'bulk'>('blueprint');
+  const [activeTab, setActiveTab] = useState<'blueprint' | 'authoring' | 'bank' | 'bulk' | 'users'>('blueprint');
+
+  interface ManagedUser {
+    id: string;
+    email: string;
+    full_name: string | null;
+    phone: string | null;
+    role: string;
+    status: string;
+    last_login_at?: string | null;
+    created_at: string;
+  }
+
+  const [usersList, setUsersList] = useState<ManagedUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
+  const [isSubmittingUser, setIsSubmittingUser] = useState<boolean>(false);
+  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
+  const [newUserEmail, setNewUserEmail] = useState<string>('');
+  const [newUserPassword, setNewUserPassword] = useState<string>('');
+  const [newUserFullName, setNewUserFullName] = useState<string>('');
+  const [newUserRole, setNewUserRole] = useState<'student' | 'admin'>('student');
 
   // Bulk Import States
   const [bulkImportType, setBulkImportType] = useState<'all_json' | 'ordering'>('all_json');
@@ -666,6 +691,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
 
   const [isLoadingBank, setIsLoadingBank] = useState<boolean>(false);
   const [bankError, setBankError] = useState<string | null>(null);
+
+  const fetchUsers = async () => {
+    if (!isOwner) return;
+    setIsLoadingUsers(true);
+    try {
+      const res = await apiClient.request<ManagedUser[]>('/api/admin/users');
+      if (res?.success && Array.isArray(res.data)) {
+        setUsersList(res.data);
+      } else {
+        showNotification(res?.error?.message || 'تعذر جلب قائمة المستخدمين.', 'info');
+      }
+    } catch {
+      showNotification('تعذر الاتصال بالخادم لجلب المستخدمين.', 'info');
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isOwner) return;
+    setIsSubmittingUser(true);
+    try {
+      const res = await apiClient.request<ManagedUser>('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: newUserEmail,
+          password: newUserPassword,
+          fullName: newUserFullName,
+          role: newUserRole,
+        }),
+      });
+      if (res?.success && res.data) {
+        setUsersList((prev) => [res.data!, ...prev]);
+        setNewUserEmail('');
+        setNewUserPassword('');
+        setNewUserFullName('');
+        setNewUserRole('student');
+        showNotification('تمت إضافة المستخدم بنجاح.', 'success');
+      } else {
+        showNotification(res?.error?.message || 'تعذر إضافة المستخدم.', 'info');
+      }
+    } finally {
+      setIsSubmittingUser(false);
+    }
+  };
+
+  const handleToggleUserRole = async (targetUser: ManagedUser) => {
+    if (!isOwner) return;
+    const nextRole = targetUser.role === 'admin' ? 'student' : 'admin';
+    const res = await apiClient.request<ManagedUser>(`/api/admin/users/${targetUser.id}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role: nextRole }),
+    });
+    if (res?.success && res.data) {
+      setUsersList((prev) => prev.map((u) => (u.id === targetUser.id ? res.data! : u)));
+      showNotification(res.message || 'تم تحديث الصلاحية بنجاح.', 'success');
+    } else {
+      showNotification(res?.error?.message || 'تعذر تحديث الصلاحية.', 'info');
+    }
+  };
+
+  const handleDeleteUser = async (targetUser: ManagedUser) => {
+    if (!isOwner) return;
+    const res = await apiClient.request<{ id: string }>(`/api/admin/users/${targetUser.id}`, {
+      method: 'DELETE',
+    });
+    if (res?.success) {
+      setUsersList((prev) => prev.filter((u) => u.id !== targetUser.id));
+      setConfirmDeleteUserId(null);
+      showNotification('تم حذف المستخدم بنجاح.', 'success');
+    } else {
+      showNotification(res?.error?.message || 'تعذر حذف المستخدم.', 'info');
+    }
+  };
 
   const fetchServerQuestions = async (slug: string) => {
     setIsLoadingBank(true);
@@ -1839,6 +1939,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
           <FileCode className="w-4 h-4" />
           <span>4. استيراد جماعي (JSON)</span>
         </button>
+
+        {isOwner && (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('users');
+              fetchUsers();
+            }}
+            className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+              activeTab === 'users'
+                ? 'border-amber-600 text-amber-800'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>5. إدارة المستخدمين (المالك فقط)</span>
+          </button>
+        )}
       </div>
 
       {/* ========================================================= */}
@@ -3644,6 +3762,154 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               </div>
             )}
             </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* TAB 5: OWNER-ONLY USER MANAGEMENT                         */}
+      {/* ========================================================= */}
+      {isOwner && activeTab === 'users' && (
+        <div className="space-y-6" dir="rtl">
+          <form
+            onSubmit={handleCreateUser}
+            className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4"
+          >
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-emerald-600" />
+              <span>إضافة مستخدم جديد</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <input
+                type="email"
+                required
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="البريد الإلكتروني"
+                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
+              />
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+                placeholder="كلمة المرور (8+ أحرف)"
+                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
+              />
+              <input
+                type="text"
+                value={newUserFullName}
+                onChange={(e) => setNewUserFullName(e.target.value)}
+                placeholder="الاسم الكامل (اختياري)"
+                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
+              />
+              <select
+                value={newUserRole}
+                onChange={(e) => setNewUserRole(e.target.value as 'student' | 'admin')}
+                className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
+              >
+                <option value="student">طالب (student)</option>
+                <option value="admin">مشرف (admin)</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={isSubmittingUser}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white rounded-xl text-xs font-bold cursor-pointer transition-all"
+            >
+              {isSubmittingUser ? 'جارٍ الحفظ...' : 'حفظ وإضافة المستخدم'}
+            </button>
+          </form>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <span className="text-sm font-black text-slate-900">
+                المستخدمون المسجلون ({usersList.length})
+              </span>
+              <button
+                type="button"
+                onClick={fetchUsers}
+                className="text-xs font-bold px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
+              >
+                تحديث
+              </button>
+            </div>
+            {isLoadingUsers ? (
+              <div className="p-6 text-center text-xs font-bold text-slate-500">
+                جارٍ تحميل المستخدمين...
+              </div>
+            ) : usersList.length === 0 ? (
+              <div className="p-6 text-center text-xs font-bold text-slate-500">
+                لا يوجد مستخدمون مسجلون حالياً.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {usersList.map((u) => (
+                  <div
+                    key={u.id}
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="font-black text-slate-900">{u.full_name || 'بدون اسم'}</div>
+                      <div className="font-mono text-slate-500" dir="ltr">
+                        {u.email}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-2.5 py-1 rounded-full font-extrabold ${
+                          u.role === 'owner'
+                            ? 'bg-amber-100 text-amber-900'
+                            : u.role === 'admin'
+                            ? 'bg-purple-100 text-purple-900'
+                            : 'bg-emerald-100 text-emerald-900'
+                        }`}
+                      >
+                        {u.role}
+                      </span>
+                      {u.role !== 'owner' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleUserRole(u)}
+                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-lg font-bold cursor-pointer"
+                          >
+                            {u.role === 'admin' ? 'إرجاع إلى student' : 'ترقية إلى admin'}
+                          </button>
+                          {confirmDeleteUserId === u.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteUser(u)}
+                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold cursor-pointer"
+                              >
+                                تأكيد الحذف
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteUserId(null)}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold cursor-pointer"
+                              >
+                                إلغاء
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteUserId(u.id)}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-bold cursor-pointer"
+                            >
+                              حذف
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

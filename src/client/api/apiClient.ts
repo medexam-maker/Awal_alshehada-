@@ -64,10 +64,34 @@ class ApiClient {
     }
   }
 
+  public getSessionExpiresAtMs(): number | null {
+    try {
+      const raw = localStorage.getItem('fc_session_expires_at');
+      if (!raw) return null;
+      const ms = Date.parse(raw);
+      return Number.isFinite(ms) ? ms : null;
+    } catch {
+      return null;
+    }
+  }
+
+  public setSessionExpiresAt(iso: string | null) {
+    try {
+      if (iso) {
+        localStorage.setItem('fc_session_expires_at', iso);
+      } else {
+        localStorage.removeItem('fc_session_expires_at');
+      }
+    } catch {
+      // Storage unavailable or disabled
+    }
+  }
+
   public clearAuth() {
     this.accessToken = null;
     this.lastVerifiedUser = null;
     this.setRefreshToken(null);
+    this.setSessionExpiresAt(null);
     try {
       localStorage.removeItem('fc_user_profile');
     } catch {
@@ -79,6 +103,9 @@ class ApiClient {
     }
     if (typeof navigator !== 'undefined' && navigator.serviceWorker?.controller) {
       navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DIAGRAM_CACHE' });
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('fc:auth-cleared'));
     }
   }
 
@@ -130,31 +157,61 @@ class ApiClient {
       return null;
     }
 
+    const storedExpiryMs = this.getSessionExpiresAtMs();
+    if (storedExpiryMs !== null && Date.now() >= storedExpiryMs) {
+      this.clearAuth();
+      return null;
+    }
+
     this.isRefreshing = true;
     this.refreshPromise = (async () => {
       try {
-        const response = await fetch('/api/auth/refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: currentRefreshToken }),
-        });
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await fetch('/api/auth/refresh', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken: currentRefreshToken }),
+            });
 
-        const json: ApiResponse<{ accessToken: string; refreshToken: string; user?: UserProfile }> = await response.json();
+            if (response.status === 401 || response.status === 403) {
+              this.clearAuth();
+              return null;
+            }
 
-        if (response.ok && json.success && json.data) {
-          this.setAccessToken(json.data.accessToken);
-          this.setRefreshToken(json.data.refreshToken);
-          if (json.data.user) {
-            this.lastVerifiedUser = json.data.user;
+            if (response.status >= 500 && attempt === 0) {
+              await new Promise((r) => setTimeout(r, 400));
+              continue;
+            }
+
+            const json: ApiResponse<{
+              accessToken: string;
+              refreshToken: string;
+              sessionExpiresAt?: string;
+              user?: UserProfile;
+            }> = await response.json();
+
+            if (response.ok && json.success && json.data) {
+              this.setAccessToken(json.data.accessToken);
+              this.setRefreshToken(json.data.refreshToken);
+              if (json.data.sessionExpiresAt) {
+                this.setSessionExpiresAt(json.data.sessionExpiresAt);
+              }
+              if (json.data.user) {
+                this.lastVerifiedUser = json.data.user;
+              }
+              return json.data.accessToken;
+            }
+
+            return null;
+          } catch {
+            if (attempt === 0) {
+              await new Promise((r) => setTimeout(r, 400));
+              continue;
+            }
+            return null;
           }
-          return json.data.accessToken;
-        } else if (response.status === 401) {
-          this.clearAuth();
-          return null;
-        } else {
-          return null;
         }
-      } catch {
         return null;
       } finally {
         this.isRefreshing = false;
@@ -172,7 +229,9 @@ class ApiClient {
   public async validateSession(): Promise<UserProfile | null> {
     const token = await this.refreshToken();
     if (!token) {
-      this.clearAuth();
+      if (!this.getRefreshToken()) {
+        this.clearAuth();
+      }
       return null;
     }
 
@@ -186,7 +245,9 @@ class ApiClient {
       return meRes.data.user;
     }
 
-    this.clearAuth();
+    if (!this.getRefreshToken()) {
+      this.clearAuth();
+    }
     return null;
   }
 

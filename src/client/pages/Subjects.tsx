@@ -5,6 +5,7 @@ import { apiClient } from '../api/apiClient';
 import { TWELVE_CONTRACT_SUBJECTS, ContractSubject } from '../data/contractSubjects';
 import { curriculumStorage } from '../storage/curriculumStorage';
 import { playWaterDrop, soundEffects } from '../utils/soundEffects';
+import { isAdminOrOwnerRole } from '../../shared/constants';
 import {
   BookOpen,
   Cross,
@@ -256,7 +257,7 @@ export const Subjects: React.FC<SubjectsProps> = ({
                 )}
               </button>
 
-              {user?.role === 'admin' && onOpenAdmin && (
+              {isAdminOrOwnerRole(user?.role) && onOpenAdmin && (
                 <button
                   type="button"
                   onClick={onOpenAdmin}

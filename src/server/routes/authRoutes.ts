@@ -115,14 +115,17 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       phone: phone ? String(phone).trim() : null,
     });
 
-    // Issue tokens with initial token_version
-    const accessToken = await generateAccessToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      tokenVersion: user.tokenVersion,
-    });
-    const { rawToken: refreshToken } = await createRefreshToken(user.id);
+    // Issue tokens bound to 12-hour session ceiling
+    const { rawToken: refreshToken, expiresAt: sessionExpiresAt } = await createRefreshToken(user.id);
+    const accessToken = await generateAccessToken(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        tokenVersion: user.tokenVersion,
+      },
+      sessionExpiresAt
+    );
 
     res.status(201).json({
       success: true,
@@ -136,6 +139,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         },
         accessToken,
         refreshToken,
+        sessionExpiresAt: sessionExpiresAt.toISOString(),
       },
       message: 'User registered successfully',
       timestamp: new Date().toISOString(),
@@ -238,14 +242,17 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     // Update last_login_at via repository
     await userRepository.updateLastLogin(user.id);
 
-    // Issue tokens with authoritative token_version
-    const accessToken = await generateAccessToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      tokenVersion: user.tokenVersion,
-    });
-    const { rawToken: refreshToken } = await createRefreshToken(user.id);
+    // Issue tokens bound to 12-hour session ceiling
+    const { rawToken: refreshToken, expiresAt: sessionExpiresAt } = await createRefreshToken(user.id);
+    const accessToken = await generateAccessToken(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        tokenVersion: user.tokenVersion,
+      },
+      sessionExpiresAt
+    );
 
     res.status(200).json({
       success: true,
@@ -259,6 +266,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
         },
         accessToken,
         refreshToken,
+        sessionExpiresAt: sessionExpiresAt.toISOString(),
       },
       message: 'Login successful',
       timestamp: new Date().toISOString(),
@@ -312,19 +320,23 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Issue access token with up-to-date token_version
-    const accessToken = await generateAccessToken({
-      id: rotated.userId,
-      email: rotated.userEmail,
-      role: rotated.userRole,
-      tokenVersion: rotated.userTokenVersion,
-    });
+    // Issue access token bound to remaining 12-hour session window
+    const accessToken = await generateAccessToken(
+      {
+        id: rotated.userId,
+        email: rotated.userEmail,
+        role: rotated.userRole,
+        tokenVersion: rotated.userTokenVersion,
+      },
+      new Date(rotated.sessionExpiresAt)
+    );
 
     res.status(200).json({
       success: true,
       data: {
         accessToken,
         refreshToken: rotated.newRefreshToken,
+        sessionExpiresAt: rotated.sessionExpiresAt,
         user: {
           id: rotated.userId,
           email: rotated.userEmail,

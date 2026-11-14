@@ -2,8 +2,19 @@ export const UserRole = {
   STUDENT: 'student',
   CONTENT_PARTNER: 'content_partner',
   ADMIN: 'admin',
+  OWNER: 'owner',
 } as const;
 export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+export function isAdminOrOwnerRole(role?: string | null): boolean {
+  const normalized = typeof role === 'string' ? role.trim().toLowerCase() : '';
+  return normalized === UserRole.ADMIN || normalized === UserRole.OWNER;
+}
+
+export function isOwnerRole(role?: string | null): boolean {
+  const normalized = typeof role === 'string' ? role.trim().toLowerCase() : '';
+  return normalized === UserRole.OWNER;
+}
 
 export const UserStatus = {
   ACTIVE: 'active',

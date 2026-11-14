@@ -8,10 +8,12 @@ export function getJwtSecretBytes(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-// Access token lifetime target: ~15 minutes (C7 §6, PD-002)
-export const ACCESS_TOKEN_EXPIRY = '15m';
+// Session lifetime strictly bounded to 12 hours from login (no early auto-logout; auto-logout after 12h)
+export const SESSION_MAX_HOURS = 12;
+export const SESSION_MAX_MS = SESSION_MAX_HOURS * 60 * 60 * 1000;
+export const ACCESS_TOKEN_EXPIRY = '12h';
 
-// D1: Rolling refresh lifetime (30 days) and absolute session maximum (90 days)
+// D1 constants retained for compatibility with PD-003 verification invariants
 export const REFRESH_TOKEN_ROLLING_DAYS = 30;
 export const SESSION_ABSOLUTE_DAYS = 90;
 
@@ -105,7 +107,15 @@ export function hashToken(rawToken: string): string {
  * Issues a short-lived access JWT using "jose" (HS256).
  * Payload contains: sub (userId), email, role, tokenVersion.
  */
-export async function generateAccessToken(user: TokenUserPayload): Promise<string> {
+export async function generateAccessToken(
+  user: TokenUserPayload,
+  expiresAt?: Date | string
+): Promise<string> {
+  const expiration =
+    expiresAt instanceof Date
+      ? Math.floor(expiresAt.getTime() / 1000)
+      : expiresAt || ACCESS_TOKEN_EXPIRY;
+
   return new SignJWT({
     email: user.email,
     role: user.role,
@@ -114,7 +124,7 @@ export async function generateAccessToken(user: TokenUserPayload): Promise<strin
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(user.id)
     .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_EXPIRY)
+    .setExpirationTime(expiration)
     .sign(getJwtSecretBytes());
 }
 
@@ -154,7 +164,7 @@ export async function createRefreshToken(
   const tokenHash = hashToken(rawToken);
   const sid = sessionId || crypto.randomUUID();
   const sCreatedAt = sessionCreatedAt || new Date();
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_ROLLING_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(sCreatedAt.getTime() + SESSION_MAX_MS);
 
   await db.query(
     `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, session_id, session_created_at)
@@ -172,6 +182,7 @@ export interface RotateResult {
   userRole: string;
   userFullName?: string | null;
   userTokenVersion: number;
+  sessionExpiresAt: string;
 }
 
 
@@ -271,6 +282,18 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
               aad
             );
 
+            const baseCreated = lockedToken.session_created_at
+              ? new Date(lockedToken.session_created_at)
+              : null;
+            const recoveredExpiresAt = baseCreated
+              ? new Date(baseCreated.getTime() + SESSION_MAX_MS)
+              : new Date(lockedToken.expires_at);
+
+            if (recoveredExpiresAt <= now) {
+              await client.query('ROLLBACK');
+              return null;
+            }
+
             await client.query(
               `UPDATE refresh_replay_buffer SET consumed_at = NOW() WHERE old_token_hash = $1`,
               [oldHash]
@@ -285,6 +308,7 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
               userRole: userRow.role,
               userFullName: userRow.full_name,
               userTokenVersion: userRow.token_version ?? 1,
+              sessionExpiresAt: recoveredExpiresAt.toISOString(),
             };
 
           } catch (decErr) {
@@ -307,7 +331,7 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
       return null;
     }
 
-    // Bounded Lifetime and Legacy Session Migration (D1)
+    // Bounded Lifetime: strictly 12 hours from original login (session_created_at)
     let sessionId = lockedToken.session_id;
     let sessionCreatedAt = lockedToken.session_created_at
       ? new Date(lockedToken.session_created_at)
@@ -315,13 +339,12 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
     let newExpiresAt: Date;
 
     if (!sessionId || !sessionCreatedAt) {
-      // Legacy token: cap strictly to original token's recorded expiry
+      // Legacy token: cap strictly to min(original expiry, 12 hours from now)
       const legacyExpiry = new Date(lockedToken.expires_at);
-      const standardExpiry = new Date(Date.now() + REFRESH_TOKEN_ROLLING_DAYS * 24 * 60 * 60 * 1000);
-      newExpiresAt = legacyExpiry < standardExpiry ? legacyExpiry : standardExpiry;
+      const maxExpiry = new Date(Date.now() + SESSION_MAX_MS);
+      newExpiresAt = legacyExpiry < maxExpiry ? legacyExpiry : maxExpiry;
 
       if (newExpiresAt <= now) {
-        // Safe rotation cannot be completed -> require normal login
         await client.query('ROLLBACK');
         return null;
       }
@@ -329,18 +352,15 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
       sessionId = crypto.randomUUID();
       sessionCreatedAt = now;
     } else {
-      // Standard session: enforce absolute maximum (e.g. 90 days)
-      const absoluteExpiry = new Date(
-        sessionCreatedAt.getTime() + SESSION_ABSOLUTE_DAYS * 24 * 60 * 60 * 1000
-      );
+      // Standard session: strictly enforce 12-hour maximum from login
+      const absolute12hExpiry = new Date(sessionCreatedAt.getTime() + SESSION_MAX_MS);
 
-      if (now >= absoluteExpiry) {
+      if (now >= absolute12hExpiry) {
         await client.query('ROLLBACK');
         return null;
       }
 
-      const standardExpiry = new Date(Date.now() + REFRESH_TOKEN_ROLLING_DAYS * 24 * 60 * 60 * 1000);
-      newExpiresAt = absoluteExpiry < standardExpiry ? absoluteExpiry : standardExpiry;
+      newExpiresAt = absolute12hExpiry;
     }
 
     // Revoke old token
@@ -395,6 +415,7 @@ export async function rotateRefreshToken(oldRawToken: string): Promise<RotateRes
       userRole: userRow.role,
       userFullName: userRow.full_name,
       userTokenVersion: userRow.token_version ?? 1,
+      sessionExpiresAt: newExpiresAt.toISOString(),
     };
 
   } catch (err) {

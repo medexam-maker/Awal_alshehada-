@@ -27,8 +27,11 @@ const DEMO_STUDENT: UserProfile = {
   status: 'active',
 };
 
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [sessionExpiresAtMs, setSessionExpiresAtMs] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Restore session strictly through server validation (PD-003)
@@ -40,7 +43,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const refreshToken = apiClient.getRefreshToken();
         if (!refreshToken) {
           apiClient.clearAuth();
-          if (isMounted) setUser(null);
+          if (isMounted) {
+            setUser(null);
+            setSessionExpiresAtMs(null);
+          }
           return;
         }
 
@@ -48,19 +54,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isMounted) {
           if (verifiedUser) {
             setUser(verifiedUser);
+            setSessionExpiresAtMs(apiClient.getSessionExpiresAtMs() ?? Date.now() + TWELVE_HOURS_MS);
             try {
               localStorage.setItem('fc_user_profile', JSON.stringify(verifiedUser));
             } catch {
               // ignore
             }
           } else {
-            apiClient.clearAuth();
+            if (!apiClient.getRefreshToken()) {
+              apiClient.clearAuth();
+            }
             setUser(null);
+            setSessionExpiresAtMs(null);
           }
         }
       } catch {
-        apiClient.clearAuth();
-        if (isMounted) setUser(null);
+        if (!apiClient.getRefreshToken()) {
+          apiClient.clearAuth();
+        }
+        if (isMounted) {
+          setUser(null);
+          setSessionExpiresAtMs(null);
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -88,16 +103,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user: UserProfile;
         accessToken: string;
         refreshToken: string;
+        sessionExpiresAt?: string;
       }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: normalizedEmail, password }),
       });
 
       if (res && res.success && res.data) {
+        const expiresIso = res.data.sessionExpiresAt || new Date(Date.now() + TWELVE_HOURS_MS).toISOString();
         apiClient.setAccessToken(res.data.accessToken);
         apiClient.setRefreshToken(res.data.refreshToken);
+        apiClient.setSessionExpiresAt(expiresIso);
         apiClient.setVerifiedUser(res.data.user);
         setUser(res.data.user);
+        setSessionExpiresAtMs(Date.parse(expiresIso) || Date.now() + TWELVE_HOURS_MS);
         try {
           localStorage.setItem('fc_user_profile', JSON.stringify(res.data.user));
         } catch {
@@ -127,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           user: UserProfile;
           accessToken: string;
           refreshToken: string;
+          sessionExpiresAt?: string;
         }>('/api/auth/register', {
           method: 'POST',
           body: JSON.stringify({
@@ -136,10 +156,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (res && res.success && res.data) {
+          const expiresIso = res.data.sessionExpiresAt || new Date(Date.now() + TWELVE_HOURS_MS).toISOString();
           apiClient.setAccessToken(res.data.accessToken);
           apiClient.setRefreshToken(res.data.refreshToken);
+          apiClient.setSessionExpiresAt(expiresIso);
           apiClient.setVerifiedUser(res.data.user);
           setUser(res.data.user);
+          setSessionExpiresAtMs(Date.parse(expiresIso) || Date.now() + TWELVE_HOURS_MS);
           try {
             localStorage.setItem('fc_user_profile', JSON.stringify(res.data.user));
           } catch {
@@ -174,9 +197,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } finally {
       apiClient.clearAuth();
+      setSessionExpiresAtMs(null);
       setUser(null);
     }
   }, []);
+
+  // Automatic logout strictly after 12 hours from login (no early auto-logout)
+  useEffect(() => {
+    if (!user || !sessionExpiresAtMs) return;
+
+    const enforceSessionLimit = () => {
+      if (Date.now() >= sessionExpiresAtMs) {
+        void logout();
+      }
+    };
+
+    const remainingMs = sessionExpiresAtMs - Date.now();
+    if (remainingMs <= 0) {
+      enforceSessionLimit();
+      return;
+    }
+
+    const timerId = window.setTimeout(enforceSessionLimit, remainingMs);
+    const handleResumeCheck = () => {
+      if (document.visibilityState === 'visible') {
+        enforceSessionLimit();
+      }
+    };
+
+    const handleAuthCleared = () => {
+      setSessionExpiresAtMs(null);
+      setUser(null);
+    };
+
+    window.addEventListener('focus', enforceSessionLimit);
+    window.addEventListener('fc:auth-cleared', handleAuthCleared);
+    document.addEventListener('visibilitychange', handleResumeCheck);
+
+    return () => {
+      window.clearTimeout(timerId);
+      window.removeEventListener('focus', enforceSessionLimit);
+      window.removeEventListener('fc:auth-cleared', handleAuthCleared);
+      document.removeEventListener('visibilitychange', handleResumeCheck);
+    };
+  }, [user, sessionExpiresAtMs, logout]);
 
   const forgotPassword = useCallback(async (email: string) => {
     try {

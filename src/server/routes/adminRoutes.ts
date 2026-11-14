@@ -2,7 +2,8 @@ import { Router, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { pool } from '../db/index';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
-import { QuestionType, BankType, QuestionStatus } from '../../shared/constants';
+import { QuestionType, BankType, QuestionStatus, UserRole, isAdminOrOwnerRole, isOwnerRole } from '../../shared/constants';
+import { hashPassword } from '../lib/password';
 import {
   validateQuestionContent,
   validateQuestionAnswer,
@@ -25,14 +26,31 @@ const router = Router();
 // Middleware: Require Authenticated User
 router.use(requireAuth);
 
-// Middleware: Require Admin Role
+// Middleware: Require Admin or Owner Role
 export function requireAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
-  if (req.user?.role !== 'admin') {
+  if (!isAdminOrOwnerRole(req.user?.role)) {
     res.status(403).json({
       success: false,
       error: {
         code: 'FORBIDDEN',
         message: 'Admin authorization required for central question management',
+        details: { currentRole: req.user?.role || 'anonymous' },
+      },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+  next();
+}
+
+// Middleware: Require Owner Role ONLY (User Management)
+export function requireOwner(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+  if (!isOwnerRole(req.user?.role)) {
+    res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Owner authorization required for user management',
         details: { currentRole: req.user?.role || 'anonymous' },
       },
       timestamp: new Date().toISOString(),
@@ -2040,6 +2058,251 @@ router.patch('/media/diagrams/:id', async (req: AuthenticatedRequest, res: Respo
       error: { code: 'DATABASE_ERROR', message: 'Failed to update diagram asset', details: {} },
       timestamp: new Date().toISOString(),
     });
+  }
+});
+
+// ============================================================================
+// OWNER-ONLY USER MANAGEMENT ROUTES (/api/admin/users)
+// ============================================================================
+
+/**
+ * GET /api/admin/users
+ * List all users (Owner only).
+ */
+router.get('/users', requireOwner, async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const result = await pool.query(
+      `SELECT id, email, full_name, phone, role, status, last_login_at, created_at
+       FROM users
+       ORDER BY created_at DESC`
+    );
+    res.status(200).json({
+      success: true,
+      data: result.rows,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/users:GET] Error listing users:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'فشل جلب قائمة المستخدمين', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * POST /api/admin/users
+ * Create a new user as student or admin (Owner only).
+ */
+router.post('/users', requireOwner, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { email, password, fullName, phone, role } = req.body || {};
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const targetRole = role === UserRole.ADMIN ? UserRole.ADMIN : UserRole.STUDENT;
+
+    if (!normalizedEmail || !normalizedEmail.includes('@') || typeof password !== 'string' || password.length < 8) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'يرجى إدخال بريد إلكتروني صحيح وكلمة مرور من 8 أحرف على الأقل.',
+          details: {},
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+    const newId = crypto.randomUUID();
+
+    const insertRes = await pool.query(
+      `INSERT INTO users (id, email, password_hash, full_name, phone, role, status, token_version)
+       VALUES ($1, $2, $3, $4, $5, $6, 'active', 1)
+       RETURNING id, email, full_name, phone, role, status, last_login_at, created_at`,
+      [
+        newId,
+        normalizedEmail,
+        passwordHash,
+        typeof fullName === 'string' && fullName.trim() ? fullName.trim() : null,
+        typeof phone === 'string' && phone.trim() ? phone.trim() : null,
+        targetRole,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: insertRes.rows[0],
+      message: 'تم إنشاء المستخدم بنجاح',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    if (error?.code === '23505') {
+      res.status(409).json({
+        success: false,
+        error: { code: 'CONFLICT', message: 'البريد الإلكتروني مسجل مسبقاً', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    console.error('[admin/users:POST] Error creating user:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'فشل إنشاء المستخدم', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * PATCH /api/admin/users/:id/role
+ * Promote student -> admin or demote admin -> student (Owner only).
+ */
+router.patch('/users/:id/role', requireOwner, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { role } = req.body || {};
+
+    if (role !== UserRole.STUDENT && role !== UserRole.ADMIN) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'الدور المسموح به هو student أو admin فقط', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (id === req.user?.id) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'لا يمكنك تغيير دور حسابك الشخصي كمالك', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const existing = await pool.query(`SELECT id, role FROM users WHERE id = $1`, [id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'المستخدم غير موجود', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (existing.rows[0].role === UserRole.OWNER) {
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'لا يمكن تعديل صلاحيات حساب مالك', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET role = $1,
+           token_version = COALESCE(token_version, 1) + 1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, email, full_name, phone, role, status, last_login_at, created_at`,
+      [role, id]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: updated.rows[0],
+      message: role === UserRole.ADMIN ? 'تمت ترقية المستخدم إلى مشرف (admin)' : 'تمت إعادة المستخدم إلى طالب (student)',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[admin/users/:id/role:PATCH] Error updating role:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'فشل تحديث صلاحيات المستخدم', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+/**
+ * DELETE /api/admin/users/:id
+ * Delete a user account (Owner only; cannot delete self or another owner).
+ */
+router.delete('/users/:id', requireOwner, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (id === req.user?.id) {
+    res.status(400).json({
+      success: false,
+      error: { code: 'VALIDATION_ERROR', message: 'لا يمكنك حذف حساب المالك النشط حالياً', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query(`SELECT id, role FROM users WHERE id = $1`, [id]);
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'المستخدم غير موجود', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (existing.rows[0].role === UserRole.OWNER) {
+      await client.query('ROLLBACK');
+      res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'لا يمكن حذف حساب مالك', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Clear creator/owner references when present in active schema (PostgreSQL / local PGlite)
+    const refCols = await client.query<{ table_name: string; column_name: string }>(
+      `SELECT table_name, column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND ((table_name = 'question_bank' AND column_name = 'created_by')
+           OR (table_name = 'training_exam_sets' AND column_name = 'created_by')
+           OR (table_name = 'media_assets' AND column_name = 'owner_id'))`
+    );
+    for (const ref of refCols.rows) {
+      await client.query(
+        `UPDATE ${ref.table_name} SET ${ref.column_name} = NULL WHERE ${ref.column_name} = $1`,
+        [id]
+      );
+    }
+    await client.query(`DELETE FROM audit_logs WHERE actor_user_id = $1`, [id]);
+
+    await client.query(`DELETE FROM users WHERE id = $1`, [id]);
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      data: { id },
+      message: 'تم حذف المستخدم بنجاح',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[admin/users/:id:DELETE] Error deleting user:', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'DATABASE_ERROR', message: 'فشل حذف المستخدم', details: {} },
+      timestamp: new Date().toISOString(),
+    });
+  } finally {
+    client.release();
   }
 });
 
