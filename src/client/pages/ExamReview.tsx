@@ -90,6 +90,29 @@ export const ExamReview: React.FC<ExamReviewProps> = ({
       });
       return parts.join(' | ');
     }
+    // Odd One Out (with optional stage-2 reasoning & weekly self-evaluation)
+    if (typeof answer === 'object' && answer !== null && Array.isArray(answer.selectedItemIds)) {
+      const parts: string[] = [];
+      if (answer.selectedItemIds.length > 0) {
+        parts.push(`العنصر المختار: (${answer.selectedItemIds.join('، ')})`);
+      }
+      if (typeof answer.reasonText === 'string' && answer.reasonText.trim()) {
+        parts.push(`التعليل: «${answer.reasonText.trim()}»`);
+      } else if (typeof answer.reasonChoiceId === 'string' && answer.reasonChoiceId) {
+        parts.push(`خيار التعليل: (${answer.reasonChoiceId})`);
+      }
+      if (answer.reasonConfirmed === true && typeof answer.reasonSelfEval === 'boolean') {
+        parts.push(answer.reasonSelfEval ? '(تقييمك: صحيحة ✓)' : '(تقييمك: غير صحيحة ✗)');
+      }
+      if (answer.reasoning && typeof answer.reasoning === 'object') {
+        if (typeof answer.reasoning.referenceReason === 'string' && answer.reasoning.referenceReason.trim()) {
+          parts.push(`السبب الصحيح: «${answer.reasoning.referenceReason.trim()}»`);
+        } else if (typeof answer.reasoning.correctChoiceId === 'string' && answer.reasoning.correctChoiceId) {
+          parts.push(`خيار التعليل الصحيح: (${answer.reasoning.correctChoiceId})`);
+        }
+      }
+      return parts.join(' | ') || 'لم تتم الإجابة (متروك فارغاً)';
+    }
     if (typeof answer === 'object') {
       return JSON.stringify(answer);
     }
@@ -258,7 +281,16 @@ export const ExamReview: React.FC<ExamReviewProps> = ({
                       >
                         {obtainedMarks} / {maxMarks} درجة
                       </span>
-                      {Boolean(item.selfEvaluated || item.isSelfAssessed || item.studentAnswer?.selfEvaluations || (item.selfEvaluations && Object.keys(item.selfEvaluations).length > 0)) && (
+                      {Boolean(
+                        item.selfEvaluated ||
+                          item.isSelfAssessed ||
+                          item.studentAnswer?.selfEvaluations ||
+                          (item.selfEvaluations && Object.keys(item.selfEvaluations).length > 0) ||
+                          (item.studentAnswer?.reasonConfirmed === true &&
+                            typeof item.studentAnswer?.reasonSelfEval === 'boolean' &&
+                            item.gradingStatus !== 'mixed' &&
+                            item.gradingStatus !== 'pending_review')
+                      ) && (
                         <span className="text-[10px] bg-purple-100 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold">
                           تقييم ذاتي
                         </span>

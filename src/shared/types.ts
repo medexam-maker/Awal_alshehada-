@@ -197,9 +197,12 @@ export interface OddOneOutReasoningContent {
   prompt: string;
   marksFraction?: number;
   trainingChoices?: OddOneOutReasoningChoice[];
+  referenceReason?: string;
+  selfAssessmentAllowed?: boolean;
 }
 export interface OddOneOutReasoningCorrectAnswer {
   correctChoiceId?: string;
+  referenceReason?: string;
   keywordGroups?: string[][];
   minGroups?: number;
 }
@@ -213,6 +216,8 @@ export interface OddOneOutAnswer {
   selectedItemIds: string[];
   reasonChoiceId?: string;
   reasonText?: string;
+  reasonConfirmed?: boolean;
+  reasonSelfEval?: boolean;
 }
 export interface OddOneOutCorrectAnswer {
   selectedItemIds: string[];

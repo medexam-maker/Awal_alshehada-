@@ -551,9 +551,21 @@ export function createClientSnapshot(
             snap.explanationAr = row.explanation ?? null;
         } else {
             // SIMULATOR: prompt and marksFraction always present, strip trainingChoices, keywordGroups, correctChoiceId, correctAnswer, explanation
+            // Only expose referenceReason in Weekly Simulation
+            const rawCa = (row.correct_answer && typeof row.correct_answer === 'object') ? (row.correct_answer as Record<string, unknown>) : {};
+            const caReasoning = (rawCa.reasoning && typeof rawCa.reasoning === 'object') ? (rawCa.reasoning as Record<string, unknown>) : undefined;
+            const refReason = isWeeklySimulation
+                ? (typeof caReasoning?.referenceReason === 'string' && caReasoning.referenceReason.trim()
+                    ? caReasoning.referenceReason
+                    : typeof (rawContentObj.reasoning as any)?.referenceReason === 'string' && (rawContentObj.reasoning as any).referenceReason.trim()
+                    ? (rawContentObj.reasoning as any).referenceReason
+                    : undefined)
+                : undefined;
+
             const cleanReasoning = rawContentObj.reasoning ? {
                 prompt: (rawContentObj.reasoning as any).prompt,
                 marksFraction: (rawContentObj.reasoning as any).marksFraction,
+                ...(refReason !== undefined ? { referenceReason: refReason } : {}),
             } : undefined;
 
             snap.content = {
@@ -901,7 +913,7 @@ export function createSnapshotPair(
         };
     } else if (row.question_type === 'odd_one_out') {
         const rawReasoning = rawContentObj.reasoning as Record<string, unknown> | undefined;
-        let finalReasoning = rawReasoning;
+        let finalReasoning = rawReasoning ? { ...rawReasoning } : undefined;
         if (rawReasoning && Array.isArray(rawReasoning.trainingChoices) && rawReasoning.trainingChoices.length > 0) {
             const shuffledChoices = [...rawReasoning.trainingChoices];
             for (let i = shuffledChoices.length - 1; i > 0; i--) {
@@ -909,8 +921,14 @@ export function createSnapshotPair(
                 [shuffledChoices[i], shuffledChoices[j]] = [shuffledChoices[j], shuffledChoices[i]];
             }
             finalReasoning = {
-                ...rawReasoning,
+                ...finalReasoning,
                 trainingChoices: shuffledChoices,
+            };
+        }
+        if (finalReasoning && examMode === ExamMode.SIMULATOR && isWeeklySimulation) {
+            finalReasoning = {
+                ...finalReasoning,
+                selfAssessmentAllowed: true,
             };
         }
 

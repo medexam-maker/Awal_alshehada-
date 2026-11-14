@@ -194,6 +194,8 @@ export const AnswerSchemas = {
       },
       reasonChoiceId: { type: 'string' },
       reasonText: { type: 'string' },
+      reasonConfirmed: { type: 'boolean' },
+      reasonSelfEval: { type: 'boolean' },
     },
   },
   diagram_labeling: { type: 'object' },
@@ -593,6 +595,70 @@ export function validateDiagramLabelingKey(content: unknown, key: unknown): Vali
       const allowedOptionIds = Array.isArray(sub.options) ? sub.options.map((o: any) => o.id) : [];
       if (typeof kAns.optionId !== 'string' || !allowedOptionIds.includes(kAns.optionId)) {
         return { valid: false, errors: [`Sub-question '${subId}' (function) optionId '${String(kAns.optionId)}' does not match any valid option`] };
+      }
+    }
+  }
+
+  return { valid: true, errors: [] };
+}
+
+/**
+ * Validates odd_one_out answer key:
+ * When content has a reasoning block, key.reasoning must supply at least one of
+ * correctChoiceId, non-empty keywordGroups, or non-empty referenceReason.
+ */
+export function validateOddOneOutKey(content: unknown, key: unknown): ValidationResult {
+  if (!key || typeof key !== 'object') {
+    return { valid: false, errors: ['مفتاح الإجابة غير صالح: يجب أن يكون كائناً'] };
+  }
+  const rawKey = key as Record<string, any>;
+  if (!Array.isArray(rawKey.selectedItemIds) || rawKey.selectedItemIds.length === 0) {
+    return { valid: false, errors: ['يجب تحديد الكلمة الشاذة المعتمدة (selectedItemIds)'] };
+  }
+
+  const rawContent = (content && typeof content === 'object') ? (content as Record<string, any>) : undefined;
+  if (rawContent && Array.isArray(rawContent.items)) {
+    const validItemIds = new Set(rawContent.items.map((it: any) => String(it?.id ?? '')));
+    for (const id of rawKey.selectedItemIds) {
+      if (!validItemIds.has(String(id))) {
+        return { valid: false, errors: [`المعرف الشاذ '${String(id)}' غير موجود ضمن قائمة العناصر`] };
+      }
+    }
+  }
+
+  if (rawContent?.reasoning) {
+    const kReasoning = (rawKey.reasoning && typeof rawKey.reasoning === 'object') ? rawKey.reasoning : undefined;
+    if (!kReasoning) {
+      return {
+        valid: false,
+        errors: ['عند تفعيل مرحلة التعليل، يجب إدخال السبب الصحيح أو الخيار الصحيح أو مجموعات الكلمات المفتاحية.'],
+      };
+    }
+
+    const hasCorrectChoiceId =
+      typeof kReasoning.correctChoiceId === 'string' && kReasoning.correctChoiceId.trim().length > 0;
+    const hasKeywordGroups =
+      Array.isArray(kReasoning.keywordGroups) &&
+      kReasoning.keywordGroups.some(
+        (grp: unknown) => Array.isArray(grp) && grp.some((kw) => typeof kw === 'string' && kw.trim().length > 0)
+      );
+    const hasReferenceReason =
+      typeof kReasoning.referenceReason === 'string' && kReasoning.referenceReason.trim().length > 0;
+
+    if (!hasCorrectChoiceId && !hasKeywordGroups && !hasReferenceReason) {
+      return {
+        valid: false,
+        errors: ['عند تفعيل مرحلة التعليل، يجب إدخال السبب الصحيح أو تحديد الخيار الصحيح أو مجموعات الكلمات المفتاحية.'],
+      };
+    }
+
+    if (hasCorrectChoiceId && Array.isArray(rawContent.reasoning.trainingChoices)) {
+      const choiceIds = new Set(rawContent.reasoning.trainingChoices.map((ch: any) => String(ch?.id ?? '')));
+      if (!choiceIds.has(String(kReasoning.correctChoiceId))) {
+        return {
+          valid: false,
+          errors: [`معرف الخيار الصحيح '${String(kReasoning.correctChoiceId)}' غير موجود في خيارات التدريب`],
+        };
       }
     }
   }

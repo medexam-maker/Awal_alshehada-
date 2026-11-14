@@ -162,6 +162,8 @@ export const QuestionDispatcher: React.FC<QuestionDispatcherProps> = ({
           isReadonly={isReadonly}
           correctAnswer={question.correctAnswer}
           examMode={examMode}
+          trainingSubMode={trainingSubMode}
+          isWeeklySimulation={isWeeklySimulation}
         />
       );
 

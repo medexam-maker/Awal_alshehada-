@@ -11,6 +11,7 @@ import {
   validateMultiStepCalculationContent,
   validateMultiStepCalculationCorrectAnswer,
   validateDiagramLabelingKey,
+  validateOddOneOutKey,
   ContentSchemas,
   AnswerSchemas,
 } from '../../shared/validation/schemas';
@@ -205,6 +206,23 @@ router.post('/questions', async (req: AuthenticatedRequest, res: Response): Prom
           code: 'VALIDATION_ERROR',
           message: `Invalid ${questionType} answer`,
           details: ansValidation.errors,
+        },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+  }
+
+  // Odd-one-out key validation
+  if (questionType === QuestionType.ODD_ONE_OUT) {
+    const oddKeyVal = validateOddOneOutKey(fullContent, normalizedCorrectAnswer);
+    if (!oddKeyVal.valid) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: String(oddKeyVal.errors[0] || 'مفتاح سؤال استخراج الشاذ غير مكتمل'),
+          details: oddKeyVal.errors,
         },
         timestamp: new Date().toISOString(),
       });
@@ -509,6 +527,29 @@ router.put('/questions/:id', async (req: AuthenticatedRequest, res: Response): P
             return;
           }
         }
+      }
+    } else if (currentQ.question_type === 'odd_one_out') {
+      const parsedNewContent = typeof newContent === 'string' ? JSON.parse(newContent) : newContent;
+      const parsedNewCorrectAnswer = typeof newCorrectAnswer === 'string' ? JSON.parse(newCorrectAnswer) : newCorrectAnswer;
+      const cVal = validateQuestionContent('odd_one_out', parsedNewContent);
+      if (!cVal.valid) {
+        await client.query('ROLLBACK');
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid odd_one_out content', details: cVal.errors },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+      const kVal = validateOddOneOutKey(parsedNewContent, parsedNewCorrectAnswer);
+      if (!kVal.valid) {
+        await client.query('ROLLBACK');
+        res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: String(kVal.errors[0] || 'مفتاح سؤال استخراج الشاذ غير مكتمل'), details: kVal.errors },
+          timestamp: new Date().toISOString(),
+        });
+        return;
       }
     }
 

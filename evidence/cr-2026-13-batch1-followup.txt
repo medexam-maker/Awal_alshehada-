@@ -1,0 +1,17 @@
+--- F1. Whole-word keyword matching ---
+✅ [PASS] F1.a "الماء والضوء" (ال prefix) matches keywords ماء + ضوء => full
+✅ [PASS] F1.b "السماء والضوء": سماء is NOT ماء => one group only => 2
+✅ [PASS] F1.c "استماع وضوء": substring inside another word must not match => 2
+✅ [PASS] F1.d multi-word keyword needs all its words as words => full
+✅ [PASS] F1.e multi-word keyword split by unrelated substring does not match => 2
+✅ [PASS] F1.f exact word with tashkeel still matches => full
+--- F2. Reason choices shuffled, persisted, resume-stable ---
+✅ [PASS] F2.a TRAINING client order differs from authored order in most builds (not always r1 first)
+✅ [PASS] F2.b same 3 choices are kept (no loss, no duplicates)
+✅ [PASS] F2.c the shuffled order is persisted in the DB snapshot (equal to what the student saw)
+✅ [PASS] F2.d rebuilding the client snapshot from the stored DB snapshot keeps the order (resume)
+✅ [PASS] F2.e grading by choice id is unaffected by the shuffle
+✅ [PASS] F2.f SIMULATOR snapshot still has no trainingChoices
+
+12 passed, 0 failed
+EXIT:0

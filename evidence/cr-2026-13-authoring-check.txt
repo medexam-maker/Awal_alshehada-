@@ -1,0 +1,2 @@
+oddOneOutAuthoring helper: 5 assertions passed
+EXIT:0

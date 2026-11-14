@@ -1,0 +1,51 @@
+--- ODD ONE OUT (two-stage) ---
+✅ [PASS] O1.a content with valid reasoning block passes schema
+✅ [PASS] O1.b reasoning with != 3 trainingChoices is rejected
+✅ [PASS] O1.c marksFraction outside 0..1 is rejected
+✅ [PASS] O1.d legacy content (no reasoning) still valid
+✅ [PASS] O1.e answer with reasonChoiceId / reasonText accepted; non-string reasonText rejected
+✅ [PASS] O2.a SIMULATOR snapshot: no answer key, no keyword groups, no training choices
+✅ [PASS] O2.b SIMULATOR snapshot: reasoning prompt is ALWAYS present (no reveal of stage-1 result)
+✅ [PASS] O2.c TRAINING snapshot: 3 training choices present, no keywordGroups inside content
+✅ [PASS] O3.a stage 1 + choice correct => full marks
+✅ [PASS] O3.b stage 1 correct, wrong choice => stage-1 share only (2)
+✅ [PASS] O3.c wrong odd item, right reason => 0
+✅ [PASS] O3.d stage 1 only (no reason given) => 2
+✅ [PASS] O3.e marksFraction 0.25: stage-1 only => 3, full => 4
+✅ [PASS] O3.f never negative, never above max
+--- ODD ONE OUT: simulator free-text reasoning (keyword groups, Pattern-8 normalization) ---
+✅ [PASS] O4.a text matching 2 groups (with tashkeel) => full
+✅ [PASS] O4.b synonym inside a group counts once (اداة + جهاز = ONE group) => not enough => 2
+✅ [PASS] O4.c only one group matched => 2
+✅ [PASS] O4.d unrelated text => 2 (stage 1 only)
+✅ [PASS] O4.e wrong odd item => 0 even with perfect text
+✅ [PASS] O4.f hamza/alef/taa-marbuta variants still match
+✅ [PASS] O4.g letters و/ف/ب/ل are NOT stripped from inside words (old proposal bug)
+✅ [PASS] O4.h legacy question without reasoning: right => full, wrong => 0
+--- COMPARISON TABLE (3-option dropdown per cell) ---
+✅ [PASS] C1.a valid 3-option content passes schema
+✅ [PASS] C1.b cell with 2 options is rejected
+✅ [PASS] C1.c duplicate option ids in a cell are rejected
+✅ [PASS] C1.d legacy content (string options + correctValue) still valid
+✅ [PASS] C2.a SIMULATOR snapshot: options are {id,text}, no answer keys
+✅ [PASS] C2.b TRAINING snapshot keeps correctAnswer for instant feedback
+✅ [PASS] C3.a option order shown to student is persisted in the DB snapshot
+✅ [PASS] C3.b rebuilding the client snapshot from the stored DB snapshot gives the same order (resume)
+✅ [PASS] C4.a all cells correct => full
+✅ [PASS] C4.b two of four correct => half
+✅ [PASS] C4.c unknown option id / option of another cell => that cell wrong
+✅ [PASS] C4.d empty / missing answer => 0
+✅ [PASS] C4.e extra cell ids in the answer are ignored
+✅ [PASS] C4.f prefilled (non-interactive) cells are not graded
+✅ [PASS] C5 end-to-end: answer built ONLY from option ids the student saw scores full
+✅ [PASS] C6 legacy cells (correctValue text) still graded by normalized text
+--- DEMO QUESTIONS (one per pattern, suitable subject) ---
+✅ [PASS] D1 src/shared/batch1DemoQuestions.ts exports DEMO_ODD_ONE_OUT and DEMO_COMPARISON_TABLE
+✅ [PASS] D2.a odd-one-out demo belongs to physics and passes schema
+✅ [PASS] D2.b odd-one-out demo: perfect training answer and perfect simulator text both score full
+✅ [PASS] D3.a comparison-table demo belongs to geography and passes schema
+✅ [PASS] D3.b comparison-table demo: perfect answer scores full
+✅ [PASS] D4 client default curriculum contains the physics odd_one_out and the geography comparison_table demos
+
+44 passed, 0 failed
+EXIT:0

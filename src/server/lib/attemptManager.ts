@@ -358,11 +358,25 @@ export async function finishExam(
             ansPlaceholders.push(`($${ansOffset + 1}, $${ansOffset + 2}, $${ansOffset + 3}, $${ansOffset + 4}, $${ansOffset + 5}, $${ansOffset + 6})`);
 
             const maxMarks = Number(aq.marks);
+            const ansObj = validatedAnswer && typeof validatedAnswer === 'object' ? (validatedAnswer as Record<string, any>) : null;
+            const isSelfEvaluatedFill =
+                dbSnapshot.question_type === QuestionType.FILL_BLANK &&
+                status === GradingStatus.AUTO_GRADED &&
+                Boolean(ansObj?.selfEvaluations && typeof ansObj.selfEvaluations === 'object' && Object.keys(ansObj.selfEvaluations).length > 0);
+            const isSelfEvaluatedOddOneOut =
+                dbSnapshot.question_type === QuestionType.ODD_ONE_OUT &&
+                status === GradingStatus.AUTO_GRADED &&
+                dbSnapshot.content?.reasoning?.selfAssessmentAllowed === true &&
+                ansObj?.reasonConfirmed === true &&
+                typeof ansObj?.reasonSelfEval === 'boolean';
+            const selfEvaluated = isSelfEvaluatedFill || isSelfEvaluatedOddOneOut;
             details.push({
                 questionId: aq.question_id,
                 isCorrect: obtainedMarks === maxMarks,
                 obtainedMarks,
                 maxMarks,
+                gradingStatus: status,
+                ...(selfEvaluated ? { selfEvaluated: true } : {}),
                 ...(gradeResultComponents ? { components: gradeResultComponents } : {})
             });
         }
@@ -426,7 +440,7 @@ export async function getExamResult(userId: string, attemptId: string) {
         }
 
         const aqRes = await client.query(
-            `SELECT eq.question_id, ea.obtained_marks, eq.marks, ea.grading_status 
+            `SELECT eq.question_id, eq.question_snapshot, ea.obtained_marks, eq.marks, ea.grading_status, ea.answer 
              FROM exam_attempt_questions eq
              LEFT JOIN exam_answers ea ON ea.attempt_question_id = eq.id
              WHERE eq.attempt_id = $1`,
@@ -440,11 +454,26 @@ export async function getExamResult(userId: string, attemptId: string) {
             if (row.grading_status === 'pending_review' || row.grading_status === 'mixed') {
                 finalStatus = 'pending_review';
             }
+            const snap = row.question_snapshot || {};
+            const ansObj = row.answer && typeof row.answer === 'object' ? row.answer : null;
+            const isSelfEvaluatedFill =
+                snap.question_type === QuestionType.FILL_BLANK &&
+                row.grading_status === GradingStatus.AUTO_GRADED &&
+                Boolean(ansObj?.selfEvaluations && typeof ansObj.selfEvaluations === 'object' && Object.keys(ansObj.selfEvaluations).length > 0);
+            const isSelfEvaluatedOddOneOut =
+                snap.question_type === QuestionType.ODD_ONE_OUT &&
+                row.grading_status === GradingStatus.AUTO_GRADED &&
+                snap.content?.reasoning?.selfAssessmentAllowed === true &&
+                ansObj?.reasonConfirmed === true &&
+                typeof ansObj?.reasonSelfEval === 'boolean';
+            const selfEvaluated = isSelfEvaluatedFill || isSelfEvaluatedOddOneOut;
             return {
                 questionId: row.question_id,
                 isCorrect: obtainedMarks === maxMarks,
                 obtainedMarks,
-                maxMarks
+                maxMarks,
+                ...(row.grading_status ? { gradingStatus: row.grading_status } : {}),
+                ...(selfEvaluated ? { selfEvaluated: true } : {}),
             };
         });
 

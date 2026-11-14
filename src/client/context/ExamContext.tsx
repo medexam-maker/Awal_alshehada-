@@ -441,6 +441,7 @@ export const ExamProvider: React.FC<{ children: React.ReactNode }> = ({ children
               awardedPoints: d.obtainedMarks ?? (d.isCorrect ? (d.maxMarks || 5) : 0),
               maxPoints: d.maxMarks ?? originalQ?.marks ?? 5,
               gradingStatus: d.gradingStatus ?? sData.gradingStatus ?? 'auto_complete',
+              selfEvaluated: Boolean(d.selfEvaluated),
               explanationAr: isPending ? undefined : (originalQ?.explanationAr ?? d.explanationAr),
             };
           });

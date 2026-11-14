@@ -354,6 +354,7 @@ export const ExamView: React.FC<ExamViewProps> = ({ onFinishExam, onExitExam }) 
                 isReadonly={false}
                 examMode={activeAttempt.examMode as any}
                 trainingSubMode={activeAttempt.trainingSubMode}
+                isWeeklySimulation={Boolean(activeAttempt.isWeeklySimulation || activeAttempt.trainingSubMode === 'weekly')}
                 attemptId={activeAttempt.attemptId || (activeAttempt as any).id}
               />
             </div>

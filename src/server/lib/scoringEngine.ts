@@ -500,46 +500,70 @@ export function autoGrade(
         const marksFraction = typeof c.reasoning?.marksFraction === 'number'
           ? c.reasoning.marksFraction
           : 0.5;
-        const stage1Marks = maxMarks * (1 - marksFraction);
+        const stage1Marks = Math.max(0, Math.min(maxMarks, maxMarks * (1 - marksFraction)));
+
+        const rawKeywordGroups: string[][] = Array.isArray(ca.reasoning?.keywordGroups)
+          ? ca.reasoning.keywordGroups
+          : [];
+        const nonEmptyGroups = rawKeywordGroups.filter(
+          (g) => Array.isArray(g) && g.some((kw) => typeof kw === 'string' && kw.trim().length > 0)
+        );
 
         let reasonCorrect = false;
+        let oddGradingStatus: GradingStatus = GradingStatus.AUTO_GRADED;
+
         if (sa?.reasonChoiceId) {
+          // 1. Training choices (by id)
           const correctChoiceId = ca.reasoning?.correctChoiceId;
           if (correctChoiceId && sa.reasonChoiceId === correctChoiceId) {
             reasonCorrect = true;
           }
-        } else if (typeof sa?.reasonText === 'string' && sa.reasonText.trim().length > 0) {
-          const keywordGroups: string[][] = Array.isArray(ca.reasoning?.keywordGroups)
-            ? ca.reasoning.keywordGroups
-            : [];
-          const minGroups = typeof ca.reasoning?.minGroups === 'number'
-            ? ca.reasoning.minGroups
-            : Math.min(2, keywordGroups.length);
+        } else if (nonEmptyGroups.length > 0) {
+          // 2. Keyword groups ONLY when the key really has non-empty groups (fixes F1)
+          if (typeof sa?.reasonText === 'string' && sa.reasonText.trim().length > 0) {
+            const minGroups = typeof ca.reasoning?.minGroups === 'number'
+              ? Math.max(1, ca.reasoning.minGroups)
+              : Math.min(2, nonEmptyGroups.length);
 
-          let matchedGroupsCount = 0;
-          const normUserText = normalizeArabicText(sa.reasonText);
-          const userTokens = normUserText.split(/\s+/).filter(Boolean);
+            let matchedGroupsCount = 0;
+            const normUserText = normalizeArabicText(sa.reasonText);
+            const userTokens = normUserText.split(/\s+/).filter(Boolean);
 
-          for (const group of keywordGroups) {
-            if (!Array.isArray(group) || group.length === 0) continue;
-            const groupMatched = group.some((kw) => {
-              if (typeof kw !== 'string' || !kw.trim()) return false;
-              const normKw = normalizeArabicText(kw);
-              if (!normKw) return false;
-              const kwWords = normKw.split(/\s+/).filter(Boolean);
-              if (kwWords.length === 0) return false;
-              return kwWords.every((kwWord) =>
-                userTokens.some((uToken) => tokenMatchesWord(uToken, kwWord))
-              );
-            });
-            if (groupMatched) {
-              matchedGroupsCount++;
+            for (const group of nonEmptyGroups) {
+              const groupMatched = group.some((kw) => {
+                if (typeof kw !== 'string' || !kw.trim()) return false;
+                const normKw = normalizeArabicText(kw);
+                if (!normKw) return false;
+                const kwWords = normKw.split(/\s+/).filter(Boolean);
+                if (kwWords.length === 0) return false;
+                return kwWords.every((kwWord) =>
+                  userTokens.some((uToken) => tokenMatchesWord(uToken, kwWord))
+                );
+              });
+              if (groupMatched) {
+                matchedGroupsCount++;
+              }
+            }
+
+            if (matchedGroupsCount >= minGroups) {
+              reasonCorrect = true;
             }
           }
-
-          if (matchedGroupsCount >= minGroups) {
-            reasonCorrect = true;
+        } else if (c.reasoning?.selfAssessmentAllowed === true) {
+          // 3. Weekly Simulation self-assessment
+          if (sa?.reasonConfirmed === true && typeof sa?.reasonSelfEval === 'boolean') {
+            reasonCorrect = sa.reasonSelfEval === true;
+          } else {
+            reasonCorrect = false;
           }
+        } else {
+          // Key without keyword groups in standard simulator: return stage-1 marks with MIXED status
+          const hasWrittenReason = typeof sa?.reasonText === 'string' && sa.reasonText.trim().length > 0;
+          const hasRefReason = typeof ca.reasoning?.referenceReason === 'string' && ca.reasoning.referenceReason.trim().length > 0;
+          if (hasWrittenReason || hasRefReason) {
+            oddGradingStatus = GradingStatus.MIXED;
+          }
+          reasonCorrect = false;
         }
 
         if (reasonCorrect) {
@@ -550,6 +574,12 @@ export function autoGrade(
           isCorrect = false;
         }
         obtainedMarks = Math.max(0, Math.min(maxMarks, obtainedMarks));
+        if (oddGradingStatus !== GradingStatus.AUTO_GRADED) {
+          return {
+            obtainedMarks,
+            gradingStatus: oddGradingStatus,
+          };
+        }
       }
     }
   } else if (questionType === QuestionType.CALCULATION) {

@@ -1,0 +1,20 @@
+--- V. Validation ---
+✅ [PASS] V1 a reasoning block WITHOUT training choices is valid (simulator-only question)
+✅ [PASS] V2 answer: reasonConfirmed and reasonSelfEval must be booleans
+--- N. Snapshots: the true reason exists only in Weekly Simulation ---
+✅ [PASS] N1 WEEKLY simulator snapshot carries the true reason and no keys
+✅ [PASS] N2 STANDARD simulator snapshot never carries the true reason
+✅ [PASS] N3 resume: rebuilding from the stored DB snapshot keeps the weekly/standard difference
+✅ [PASS] N4 a simulator-only question (no distractors) still shows prompt and true reason in weekly mode
+--- G. Grading ---
+✅ [PASS] G1 weekly: stage 1 right + self-evaluation yes => full marks (auto graded); no => stage-1 share only
+✅ [PASS] G2 a self-evaluation counts only when the reason was confirmed and the flag is a real boolean
+✅ [PASS] G3 wrong odd item => 0 even if the student says the reason was right
+✅ [PASS] G4 marksFraction is respected (0.25: yes => 4, no => 3)
+✅ [PASS] G5 SECURITY: a forged self-evaluation in a STANDARD simulator earns nothing and is not auto graded as complete
+✅ [PASS] G6 questions authored with keyword groups keep grading by keywords; self-evaluation cannot override them
+✅ [PASS] G7 training choices still grade by id in every mode
+✅ [PASS] G8 no reasoning block: behaviour unchanged (right => full, wrong => 0)
+
+14 passed, 0 failed
+EXIT:0

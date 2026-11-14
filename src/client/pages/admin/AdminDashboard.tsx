@@ -11,6 +11,12 @@ import { Pattern8AuthoringForm, Pattern8FormFields } from '../../components/admi
 import { Pattern11AuthoringForm, Pattern11FormData } from '../../components/admin/Pattern11AuthoringForm';
 import { Pattern14AuthoringForm } from '../../components/admin/Pattern14AuthoringForm';
 import { DiagramAuthoringForm } from '../../components/admin/DiagramAuthoringForm';
+import { OddOneOutAuthoringForm } from '../../components/admin/OddOneOutAuthoringForm';
+import {
+  BuildOddOneOutResult,
+  buildOddOneOutQuestion,
+  emptyOddOneOutForm,
+} from '../../lib/oddOneOutAuthoring';
 import {
   Settings,
   PlusCircle,
@@ -342,12 +348,7 @@ const PATTERN_TEMPLATES: Record<string, string> = {
           selectedItemIds: ['i1'],
           reasoning: {
             correctChoiceId: 'r1',
-            keywordGroups: [
-              ['جهاز', 'اداة'],
-              ['مركب', 'مركبة', 'عدة'],
-              ['بصرية']
-            ],
-            minGroups: 2
+            referenceReason: 'لأنه جهاز بصري مركب من عدة أجزاء بينما البقية عناصر بصرية منفردة'
           }
         },
         allocatedMarks: 4,
@@ -1167,8 +1168,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
 
   const [grammarWord, setGrammarWord] = useState<string>('');
   const [grammarAnswer, setGrammarAnswer] = useState<string>('');
-  const [oddWords, setOddWords] = useState<string>('كلمة 1، كلمة 2، كلمة 3، كلمة شاذة');
-  const [oddAnswer, setOddAnswer] = useState<string>('كلمة شاذة');
+  const [oddOneOutData, setOddOneOutData] = useState<BuildOddOneOutResult | null>(null);
+  const [editingOddOneOutQuestion, setEditingOddOneOutQuestion] = useState<AuthoredQuestion | null>(null);
   const [calcExpression, setCalcExpression] = useState<string>('');
   const [calcAnswer, setCalcAnswer] = useState<string>('');
   const [calcMode, setCalcMode] = useState<'multi_step_mcq' | 'numeric_with_work'>('multi_step_mcq');
@@ -1295,6 +1296,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       }
     }
 
+    if (q.questionType === QuestionType.ODD_ONE_OUT) {
+      setEditingOddOneOutQuestion(q);
+    }
+
     setActiveTab('authoring');
     showNotification(`تم فتح السؤال (رقم ${q.questionNumber} ${q.partLabel}) للتعديل.`, 'info');
   };
@@ -1305,6 +1310,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
     setPattern14Data(null);
     setDiagramData(null);
     setIsLegacyDiagram(false);
+    setEditingOddOneOutQuestion(null);
+    setOddOneOutData(null);
     setQuestionPrompt('');
     setExplanationAr('');
     showNotification('تم إلغاء وضع التعديل.', 'info');
@@ -1432,8 +1439,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
         correctAnswer = grammarAnswer;
       }
     } else if (questionType === QuestionType.ODD_ONE_OUT) {
-      content = { words: oddWords.split('،').map((w) => w.trim()) };
-      correctAnswer = oddAnswer.trim();
+      const built = oddOneOutData || buildOddOneOutQuestion(emptyOddOneOutForm(questionPrompt));
+      if (!built.ok || !built.content || !built.correctAnswer) {
+        showNotification(built.errors[0] || 'يرجى استكمال حقول سؤال استخراج الكلمة الشاذة قبل الحفظ.', 'info');
+        return;
+      }
+      content = built.content;
+      correctAnswer = built.correctAnswer;
     } else if (questionType === QuestionType.CALCULATION) {
       if (calcMode === 'multi_step_mcq' && pattern7Data) {
         content = {
@@ -1651,6 +1663,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
     setBlankAnswer('');
     setGrammarAnswer('');
     setPattern11Data(null);
+    setEditingOddOneOutQuestion(null);
+    setOddOneOutData(null);
   };
 
   const handleDeleteQuestion = async (qId: string) => {
@@ -2442,26 +2456,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               )}
 
               {questionType === QuestionType.ODD_ONE_OUT && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 block">الكلمات مفصولة بفاصلة (،):</label>
-                    <input
-                      type="text"
-                      value={oddWords}
-                      onChange={(e) => setOddWords(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 block">الكلمة الشاذة المعتمدة:</label>
-                    <input
-                      type="text"
-                      value={oddAnswer}
-                      onChange={(e) => setOddAnswer(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold"
-                    />
-                  </div>
-                </div>
+                <OddOneOutAuthoringForm
+                  prompt={questionPrompt}
+                  initialQuestion={editingOddOneOutQuestion}
+                  onChange={setOddOneOutData}
+                />
               )}
 
               {questionType === QuestionType.CALCULATION && (

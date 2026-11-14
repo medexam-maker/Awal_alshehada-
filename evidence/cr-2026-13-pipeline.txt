@@ -1,0 +1,33 @@
+--- A. SIMULATOR snapshot must not expose any answer key ---
+✅ [PASS] A.true_false: no answer keys in simulator client snapshot
+✅ [PASS] A.multiple_choice: no answer keys in simulator client snapshot
+✅ [PASS] A.fill_blank: no answer keys in simulator client snapshot
+✅ [PASS] A.matching: no answer keys in simulator client snapshot
+✅ [PASS] A.ordering: no answer keys in simulator client snapshot
+✅ [PASS] A.explain: no answer keys in simulator client snapshot
+✅ [PASS] A.long_essay: no answer keys in simulator client snapshot
+--- B. A perfect student answer must score full marks on the server (and a wrong one 0) ---
+✅ [PASS] B.true_false
+✅ [PASS] B.multiple_choice
+✅ [PASS] B.fill_blank (free text)
+✅ [PASS] B.ordering
+✅ [PASS] B.matching: answer built ONLY from card ids the student saw
+✅ [PASS] B.explain word-block: chunks the student saw, in correct order
+✅ [PASS] B.long_essay: manual pending
+--- C. Weekly Simulation fill_blank keeps referenceAnswers only ---
+✅ [PASS] C.1 weekly: referenceAnswers present, top-level correctAnswer absent
+✅ [PASS] C.2 non-weekly simulator: no referenceAnswers
+--- D. Resume determinism (matching) ---
+✅ [PASS] D.1 rebuilding the client snapshot from the stored DB snapshot yields the same card ids
+--- E. TRAINING mode keeps keys for instant feedback ---
+✅ [PASS] E.1 training snapshot still carries correctAnswer
+--- F. Simulator coverage for Patterns 7, 8, 11 ---
+✅ [PASS] F.1.a calculation: no answer keys in simulator client snapshot
+✅ [PASS] F.1.b calculation: perfect answer scores full marks, wrong scores 0
+✅ [PASS] F.2.a short_essay: no answer keys in simulator client snapshot
+✅ [PASS] F.2.b short_essay: perfect answer scores full marks, wrong scores 0
+✅ [PASS] F.3.a contour_map: no answer keys in simulator client snapshot
+✅ [PASS] F.3.b contour_map: perfect answer scores full marks, wrong scores 0
+
+24 passed
+EXIT:0
