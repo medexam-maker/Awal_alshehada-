@@ -49,6 +49,7 @@ import {
   X,
   Users,
   UserPlus,
+  ChevronLeft,
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -638,7 +639,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
   const { user: currentUser } = useAuth();
   const isOwner = isOwnerRole(currentUser?.role);
   const [selectedSubjectSlug, setSelectedSubjectSlug] = useState<string>(TWELVE_CONTRACT_SUBJECTS[0].slug);
-  const [activeTab, setActiveTab] = useState<'blueprint' | 'authoring' | 'bank' | 'bulk' | 'users'>('blueprint');
+  const [activeTab, setActiveTab] = useState<'menu' | 'blueprint' | 'authoring' | 'bank' | 'bulk' | 'users'>('menu');
 
   interface ManagedUser {
     id: string;
@@ -1851,116 +1852,408 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
         </div>
       )}
 
-      {/* Subject Selector Bar */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <label className="text-xs font-black text-slate-700 block">
-            المادة المراد إدارتها وضبط هيكلها وإدخال أسئلتها:
-          </label>
-          <select
-            value={selectedSubjectSlug}
-            onChange={(e) => handleSubjectChange(e.target.value)}
-            className="w-full md:w-80 bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-2.5 text-sm font-extrabold text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
-          >
-            {TWELVE_CONTRACT_SUBJECTS.map((sub) => (
-              <option key={sub.slug} value={sub.slug}>
-                {sub.name_ar} ({sub.name_en})
-              </option>
-            ))}
-          </select>
+      {/* ========================================================= */}
+      {/* 1. ADMIN HUB / MAIN SECTIONS OVERVIEW (MENU VIEW)         */}
+      {/* ========================================================= */}
+      {activeTab === 'menu' && (
+        <div className="space-y-6">
+          {/* Subject Selector Bar */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-black text-slate-700 block">
+                المادة المراد إدارتها وضبط هيكلها وإدخال أسئلتها:
+              </label>
+              <select
+                value={selectedSubjectSlug}
+                onChange={(e) => handleSubjectChange(e.target.value)}
+                className="w-full md:w-80 bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-2.5 text-sm font-extrabold text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
+              >
+                {TWELVE_CONTRACT_SUBJECTS.map((sub) => (
+                  <option key={sub.slug} value={sub.slug}>
+                    {sub.name_ar} ({sub.name_en})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+              <div className="px-3.5 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 font-bold">
+                <span className="text-slate-400 ml-1">إجمالي الأسئلة والفروع:</span>
+                <span className="text-emerald-700">{blueprint.patterns.length}</span>
+              </div>
+              <div className="px-3.5 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 font-bold">
+                <span className="text-slate-400 ml-1">الدرجة الكلية للورقة:</span>
+                <span className="text-emerald-700">{blueprint.totalMarks} درجة</span>
+              </div>
+              <div className="px-3.5 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 font-bold">
+                <span className="text-slate-400 ml-1">الزمن المعتمد:</span>
+                <span className="text-emerald-700">{blueprint.defaultDurationMinutes} دقيقة</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section Heading */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+            <div>
+              <h2 className="text-base font-black text-slate-950 flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-emerald-600" />
+                <span>أقسام لوحة الإدارة والتحكم</span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium">
+                اضغط على أي قسم لفتحه في صفحة مستقلة مع إمكانية التبديل أو الرجوع:
+              </p>
+            </div>
+            <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 self-start sm:self-auto">
+              المادة المحددة: {blueprint.name_ar}
+            </span>
+          </div>
+
+          {/* Responsive Cards Grid (2 rows on mobile, completely flexible) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+            {/* Card 1: Blueprint */}
+            <div
+              onClick={() => {
+                setActiveTab('blueprint');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="group bg-white hover:bg-emerald-50/40 p-5 rounded-3xl border border-slate-200 hover:border-emerald-300 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                    {blueprint.patterns.length} نمط وفرع
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 group-hover:text-emerald-950">
+                    1. ضبط هيكل الورقة (Blueprint)
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                    ترتيب ظهور الأسئلة والفروع ونمط كل سؤال وتوزيع الدرجات المعتمدة وتعميمها على المادة.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-emerald-700">
+                <span>فتح هيكل الورقة</span>
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              </div>
+            </div>
+
+            {/* Card 2: Authoring */}
+            <div
+              onClick={() => {
+                setActiveTab('authoring');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="group bg-white hover:bg-blue-50/40 p-5 rounded-3xl border border-slate-200 hover:border-blue-300 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-11 h-11 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <PlusCircle className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-extrabold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+                    الأنماط الـ 15
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 group-hover:text-blue-950">
+                    2. محرك إدخال وتأليف الأسئلة
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                    إدخال الأسئلة وتوليدها للأنماط الـ 15 مع محاكاة فورية لتجربة الطالب قبل الحفظ والاعتماد.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-blue-700">
+                <span>فتح محرك التأليف</span>
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              </div>
+            </div>
+
+            {/* Card 3: Bank */}
+            <div
+              onClick={() => {
+                setActiveTab('bank');
+                fetchServerQuestions(selectedSubjectSlug);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="group bg-white hover:bg-indigo-50/40 p-5 rounded-3xl border border-slate-200 hover:border-indigo-300 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
+                    {questionsList.length} سؤال معتمد
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 group-hover:text-indigo-950">
+                    3. بنك الأسئلة المعتمد
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                    استعراض وتصفية الأسئلة بالنمط، وتعديلها، ومطابقة التوقيع والاعتماد المركزي في الخادم.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-indigo-700">
+                <span>استعراض بنك الأسئلة</span>
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              </div>
+            </div>
+
+            {/* Card 4: Bulk JSON */}
+            <div
+              onClick={() => {
+                setActiveTab('bulk');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="group bg-white hover:bg-teal-50/40 p-5 rounded-3xl border border-slate-200 hover:border-teal-300 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="w-11 h-11 rounded-2xl bg-teal-100 text-teal-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                    <FileCode className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full">
+                    استيراد سريع
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 group-hover:text-teal-950">
+                    4. استيراد جماعي (JSON)
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                    لصق أو رفع ملف أسئلة بصيغة JSON مع فحص الحقول والتحقق التلقائي من التكرار والأنماط.
+                  </p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-teal-700">
+                <span>فتح الاستيراد الجماعي</span>
+                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              </div>
+            </div>
+
+            {/* Card 5: Users (Owner Only) */}
+            {isOwner && (
+              <div
+                onClick={() => {
+                  setActiveTab('users');
+                  fetchUsers();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="group bg-white hover:bg-amber-50/40 p-5 rounded-3xl border border-slate-200 hover:border-amber-300 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center group-hover:scale-105 transition-transform">
+                      <Users className="w-5 h-5" />
+                    </div>
+                    <span className="text-[10px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                      صلاحية المالك فقط
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 group-hover:text-amber-950">
+                      5. إدارة المستخدمين والصلاحيات
+                    </h3>
+                    <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                      إضافة مستخدمين جدد، ترقية الطلاب إلى مشرفين (admin)، وتجريد الصلاحيات وحذف الحسابات.
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-amber-800">
+                  <span>إدارة المستخدمين</span>
+                  <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+      )}
 
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="px-3.5 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 font-bold">
-            <span className="text-slate-400 ml-1">إجمالي الأسئلة والفروع:</span>
-            <span className="text-emerald-700">{blueprint.patterns.length}</span>
+      {/* ========================================================= */}
+      {/* 2. DEDICATED SECTION HEADER (WITH PROMINENT BACK BUTTON)   */}
+      {/* ========================================================= */}
+      {activeTab !== 'menu' && (
+        <div className="bg-white rounded-3xl border border-slate-200 p-4 md:p-5 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('menu');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-emerald-50 text-slate-800 hover:text-emerald-900 border border-slate-200 hover:border-emerald-300 rounded-2xl text-xs font-black transition-all cursor-pointer shadow-xs shrink-0"
+                title="الرجوع لقائمة أقسام لوحة الأدمن الرئيسية"
+              >
+                <ArrowRight className="w-4 h-4 text-emerald-600" />
+                <span>الرجوع لأقسام الإدارة</span>
+              </button>
+
+              <div>
+                <h1 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2">
+                  <span>
+                    {activeTab === 'blueprint' && '1. ضبط هيكل ورقة الامتحان للمادة (Blueprint)'}
+                    {activeTab === 'authoring' && '2. محرك إدخال وتأليف الأسئلة للأنماط الـ 15'}
+                    {activeTab === 'bank' && `3. بنك الأسئلة المعتمد (${questionsList.length} سؤال)`}
+                    {activeTab === 'bulk' && '4. استيراد جماعي للأسئلة عبر JSON'}
+                    {activeTab === 'users' && '5. إدارة المستخدمين والصلاحيات (المالك فقط)'}
+                  </span>
+                </h1>
+                <p className="text-[11px] text-slate-500 font-medium">
+                  {activeTab === 'blueprint' && 'ترتيب الأسئلة والأنماط وتوزيع الدرجات المعتمدة للورقة'}
+                  {activeTab === 'authoring' && 'إدخال ومحاكاة واعتماد الأسئلة في قاعدة البيانات المركزية'}
+                  {activeTab === 'bank' && 'تصفية الأسئلة بالنمط ومراجعتها وتعديلها واعتمادها'}
+                  {activeTab === 'bulk' && 'رفع أو لصق الأسئلة دفعة واحدة مع التحقق التلقائي'}
+                  {activeTab === 'users' && 'إدارة حسابات المنصة وترقية المشرفين وحذف الحسابات'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onBackToStudentView}
+              className="self-end sm:self-auto text-xs font-bold text-slate-500 hover:text-emerald-700 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <span>واجهة الطالب</span>
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <div className="px-3.5 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 font-bold">
-            <span className="text-slate-400 ml-1">الدرجة الكلية للورقة:</span>
-            <span className="text-emerald-700">{blueprint.totalMarks} درجة</span>
-          </div>
-          <div className="px-3.5 py-2 bg-slate-50 rounded-xl border border-slate-200 text-slate-700 font-bold">
-            <span className="text-slate-400 ml-1">الزمن المعتمد:</span>
-            <span className="text-emerald-700">{blueprint.defaultDurationMinutes} دقيقة</span>
+
+          {/* Flexible Multi-row / 2-Row Switcher on Mobile (Never overflows!) */}
+          <div className="pt-3 border-t border-slate-100">
+            <div className="text-[11px] font-bold text-slate-400 mb-2 flex items-center justify-between">
+              <span>التبديل السريع بين الأقسام:</span>
+              <span className="text-[10px] text-slate-400 font-normal">صفين متناسقين للموبايل</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('blueprint');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`p-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 justify-center sm:justify-start cursor-pointer ${
+                  activeTab === 'blueprint'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <Layers className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'blueprint' ? 'text-white' : 'text-emerald-600'}`} />
+                <span className="truncate">1. هيكل الامتحان</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('authoring');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`p-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 justify-center sm:justify-start cursor-pointer ${
+                  activeTab === 'authoring'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <PlusCircle className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'authoring' ? 'text-white' : 'text-blue-600'}`} />
+                <span className="truncate">2. إدخال الأسئلة</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('bank');
+                  fetchServerQuestions(selectedSubjectSlug);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`p-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 justify-center sm:justify-start cursor-pointer ${
+                  activeTab === 'bank'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <BookOpen className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'bank' ? 'text-white' : 'text-indigo-600'}`} />
+                <span className="truncate">3. بنك الأسئلة ({questionsList.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('bulk');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`p-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 justify-center sm:justify-start cursor-pointer ${
+                  activeTab === 'bulk'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                }`}
+              >
+                <FileCode className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'bulk' ? 'text-white' : 'text-teal-600'}`} />
+                <span className="truncate">4. استيراد JSON</span>
+              </button>
+
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('users');
+                    fetchUsers();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className={`p-2 sm:px-3 sm:py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 justify-center sm:justify-start cursor-pointer col-span-2 sm:col-span-1 ${
+                    activeTab === 'users'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <Users className={`w-3.5 h-3.5 shrink-0 ${activeTab === 'users' ? 'text-white' : 'text-amber-600'}`} />
+                  <span className="truncate">5. إدارة المستخدمين</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Admin Tabs */}
-      <div className="flex border-b border-slate-200 gap-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('blueprint')}
-          className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-            activeTab === 'blueprint'
-              ? 'border-emerald-600 text-emerald-800'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>1. ضبط هيكل ورقة الامتحان للمادة (Blueprint)</span>
-        </button>
+      {/* Subject Context Selector Bar (Shown in dedicated tabs except users) */}
+      {activeTab !== 'menu' && activeTab !== 'users' && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <label className="font-extrabold text-slate-700">المادة الحالية:</label>
+            <select
+              value={selectedSubjectSlug}
+              onChange={(e) => handleSubjectChange(e.target.value)}
+              className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 font-black text-slate-900 focus:outline-none focus:border-emerald-600 cursor-pointer"
+            >
+              {TWELVE_CONTRACT_SUBJECTS.map((sub) => (
+                <option key={sub.slug} value={sub.slug}>
+                  {sub.name_ar} ({sub.name_en})
+                </option>
+              ))}
+            </select>
+          </div>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('authoring')}
-          className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-            activeTab === 'authoring'
-              ? 'border-emerald-600 text-emerald-800'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>2. محرك إدخال الأسئلة للأنماط الـ 15</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('bank');
-            fetchServerQuestions(selectedSubjectSlug);
-          }}
-          className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-            activeTab === 'bank'
-              ? 'border-emerald-600 text-emerald-800'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>3. بنك الأسئلة المعتمد ({questionsList.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('bulk')}
-          className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-            activeTab === 'bulk'
-              ? 'border-emerald-600 text-emerald-800'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <FileCode className="w-4 h-4" />
-          <span>4. استيراد جماعي (JSON)</span>
-        </button>
-
-        {isOwner && (
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('users');
-              fetchUsers();
-            }}
-            className={`pb-3 px-4 text-sm font-black transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-              activeTab === 'users'
-                ? 'border-amber-600 text-amber-800'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>5. إدارة المستخدمين (المالك فقط)</span>
-          </button>
-        )}
-      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-slate-700 font-bold">
+              الأسئلة والفروع: <strong className="text-emerald-700">{blueprint.patterns.length}</strong>
+            </span>
+            <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-slate-700 font-bold">
+              الدرجة الكلية: <strong className="text-emerald-700">{blueprint.totalMarks}</strong>
+            </span>
+            <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-slate-700 font-bold">
+              الزمن: <strong className="text-emerald-700">{blueprint.defaultDurationMinutes} د</strong>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================= */}
       {/* TAB 1: BLUEPRINT / STRUCTURE SETUP                       */}
@@ -3915,6 +4208,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab !== 'menu' && (
+        <div className="pt-6 pb-2 border-t border-slate-200 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('menu');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 border border-slate-200 hover:border-emerald-300 rounded-2xl text-xs font-black transition-all cursor-pointer shadow-xs"
+          >
+            <ArrowRight className="w-4 h-4 text-emerald-600" />
+            <span>الرجوع لأقسام لوحة الأدمن الرئيسية</span>
+          </button>
         </div>
       )}
     </div>

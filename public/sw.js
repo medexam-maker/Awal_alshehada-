@@ -1,7 +1,7 @@
 // Service Worker for Awal Shehada PWA
 // Optimized for Sudan's network conditions: Fast offline caching & app shell resilience
 
-const CACHE_NAME = 'awal-shehada-v3';
+const CACHE_NAME = 'awal-shehada-v4';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
