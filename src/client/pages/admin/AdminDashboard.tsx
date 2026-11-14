@@ -696,7 +696,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
     if (!isOwner) return;
     setIsLoadingUsers(true);
     try {
-      const res = await apiClient.request<ManagedUser[]>('/api/admin/users');
+      const res = await apiClient.request<ManagedUser[]>(`/api/admin/users?_ts=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (res?.success && Array.isArray(res.data)) {
         setUsersList(res.data);
       } else {
@@ -762,6 +764,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStudentV
       setUsersList((prev) => prev.filter((u) => u.id !== targetUser.id));
       setConfirmDeleteUserId(null);
       showNotification('تم حذف المستخدم بنجاح.', 'success');
+      await fetchUsers();
     } else {
       showNotification(res?.error?.message || 'تعذر حذف المستخدم.', 'info');
     }

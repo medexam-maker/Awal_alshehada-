@@ -23,6 +23,16 @@ import { mediaStorage } from '../lib/mediaStorage';
 
 const router = Router();
 
+// Prevent browser/CDN caching of admin mutations and live listings
+router.use((_req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+  next();
+});
+
 // Middleware: Require Authenticated User
 router.use(requireAuth);
 
@@ -2246,7 +2256,7 @@ router.delete('/users/:id', requireOwner, async (req: AuthenticatedRequest, res:
   try {
     await client.query('BEGIN');
 
-    const existing = await client.query(`SELECT id, role FROM users WHERE id = $1`, [id]);
+    const existing = await client.query(`SELECT id, role FROM users WHERE id = $1 FOR UPDATE`, [id]);
     if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
       res.status(404).json({
@@ -2257,7 +2267,7 @@ router.delete('/users/:id', requireOwner, async (req: AuthenticatedRequest, res:
       return;
     }
 
-    if (existing.rows[0].role === UserRole.OWNER) {
+    if (isOwnerRole(existing.rows[0].role)) {
       await client.query('ROLLBACK');
       res.status(403).json({
         success: false,
@@ -2267,7 +2277,7 @@ router.delete('/users/:id', requireOwner, async (req: AuthenticatedRequest, res:
       return;
     }
 
-    // Clear creator/owner references when present in active schema (PostgreSQL / local PGlite)
+    // Clear creator/owner/grader references when present in active schema (PostgreSQL / local PGlite)
     const refCols = await client.query<{ table_name: string; column_name: string }>(
       `SELECT table_name, column_name
        FROM information_schema.columns
@@ -2284,7 +2294,16 @@ router.delete('/users/:id', requireOwner, async (req: AuthenticatedRequest, res:
     }
     await client.query(`DELETE FROM audit_logs WHERE actor_user_id = $1`, [id]);
 
-    await client.query(`DELETE FROM users WHERE id = $1`, [id]);
+    const delRes = await client.query(`DELETE FROM users WHERE id = $1 RETURNING id`, [id]);
+    if (delRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'المستخدم غير موجود أو تم حذفه مسبقاً', details: {} },
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
     await client.query('COMMIT');
 
     res.status(200).json({

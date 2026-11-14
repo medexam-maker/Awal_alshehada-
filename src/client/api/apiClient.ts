@@ -272,6 +272,7 @@ class ApiClient {
     let response: Response;
     try {
       response = await fetch(endpoint, {
+        cache: 'no-store',
         ...options,
         headers,
       });
@@ -293,6 +294,7 @@ class ApiClient {
         headers['Authorization'] = `Bearer ${newAccessToken}`;
         try {
           response = await fetch(endpoint, {
+            cache: 'no-store',
             ...options,
             headers,
           });
@@ -314,13 +316,14 @@ class ApiClient {
       return json;
     } catch {
       return {
-        success: response.ok,
-        error: response.ok
-          ? undefined
-          : {
-              code: `HTTP_${response.status}`,
-              message: 'استجابة غير متوقعة من الخادم.',
-            },
+        success: response.status === 204,
+        error:
+          response.status === 204
+            ? undefined
+            : {
+                code: `HTTP_${response.status}`,
+                message: 'استجابة غير متوقعة من الخادم.',
+              },
         timestamp: new Date().toISOString(),
       };
     }
